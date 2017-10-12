@@ -336,8 +336,8 @@
             {
               'action_name': 'mkssldef',
               'inputs': [
-                'deps/openssl/openssl/util/libeay.num',
-                'deps/openssl/openssl/util/ssleay.num',
+                'deps/openssl/openssl/util/libcrypto.num',
+                'deps/openssl/openssl/util/libssl.num',
               ],
               'outputs': ['<(SHARED_INTERMEDIATE_DIR)/openssl.def'],
               'action': [
@@ -728,6 +728,9 @@
             'deps/v8/src/v8.gyp:v8_libplatform',
           ],
         }],
+        [ 'openssl_no_asm==1', {
+           'defines': ['OPENSSL_NO_ASM'],
+         }],
         [ 'node_use_dtrace=="true" and OS!="mac" and OS!="linux"', {
           'copies': [{
             'destination': '<(OBJ_DIR)/cctest/src',
