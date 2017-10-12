@@ -21,7 +21,7 @@ const server = net.createServer(function(c) {
       assert.ok(e instanceof Error,
                 'Instance of Error should be passed to error handler');
       assert.ok(
-        /SSL routines:SSL23_GET_CLIENT_HELLO:unknown protocol/.test(e.message),
+        /wrong version number/.test(e.message),
         'Expecting SSL unknown protocol');
     }));
 

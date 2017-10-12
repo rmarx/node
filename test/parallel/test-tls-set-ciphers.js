@@ -55,7 +55,7 @@ server.listen(0, '127.0.0.1', function() {
     options.ciphers} -connect 127.0.0.1:${this.address().port}`;
 
   // for the performance and stability issue in s_client on Windows
-  if (common.isWindows)
+  if (common.isWindows && process.versions.openssl.match(/^1\.0\./))
     cmd += ' -no_rand_screen';
 
   exec(cmd, function(err, stdout, stderr) {

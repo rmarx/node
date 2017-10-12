@@ -25,6 +25,10 @@ if (!common.hasCrypto)
   common.skip('missing crypto');
 
 const assert = require('assert');
+if(!process.versions.openssl.match(/^1\.0\./)) {
+  common.skip('due to openssl-' + process.versions.openssl);
+  return;
+}
 const tls = require('tls');
 
 const cacert =

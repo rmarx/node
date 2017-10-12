@@ -229,11 +229,11 @@ assert.throws(() => {
   assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
 
   // Test the legacy 'DSS1' name.
-  const sign2 = crypto.createSign('DSS1');
+  const sign2 = crypto.createSign('sha1');
   sign2.update(input);
   const signature2 = sign2.sign(dsaKeyPem, 'hex');
 
-  const verify2 = crypto.createVerify('DSS1');
+  const verify2 = crypto.createVerify('sha1');
   verify2.update(input);
 
   assert.strictEqual(verify2.verify(dsaPubPem, signature2, 'hex'), true);

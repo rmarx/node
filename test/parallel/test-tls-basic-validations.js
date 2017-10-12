@@ -37,7 +37,7 @@ assert.throws(() => tls.createServer({ ticketKeys: 'abcd' }),
               /TypeError: Ticket keys must be a buffer/);
 
 assert.throws(() => tls.createServer({ ticketKeys: Buffer.alloc(0) }),
-              /TypeError: Ticket keys length must be 48 bytes/);
+              /TypeError: Ticket keys length incorrect/);
 
 assert.throws(() => tls.createSecurePair({}),
               /Error: First argument must be a tls module SecureContext/);

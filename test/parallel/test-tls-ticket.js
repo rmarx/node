@@ -54,7 +54,7 @@ function createServer() {
     // Rotate ticket keys
     if (counter === 1) {
       previousKey = server.getTicketKeys();
-      server.setTicketKeys(crypto.randomBytes(48));
+      server.setTicketKeys(crypto.randomBytes(80));
     } else if (counter === 2) {
       server.setTicketKeys(previousKey);
     } else if (counter === 3) {

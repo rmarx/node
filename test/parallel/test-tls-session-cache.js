@@ -109,7 +109,7 @@ function doTest(testOptions, callback) {
     ].concat(testOptions.tickets ? [] : '-no_ticket');
 
     // for the performance and stability issue in s_client on Windows
-    if (common.isWindows)
+    if (common.isWindows && process.versions.openssl.match(/^1\.0\./))
       args.push('-no_rand_screen');
 
     function spawnClient() {

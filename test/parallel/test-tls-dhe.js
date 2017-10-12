@@ -72,7 +72,7 @@ function test(keylen, expectedCipher, cb) {
                   '-cipher', ciphers];
 
     // for the performance and stability issue in s_client on Windows
-    if (common.isWindows)
+    if (common.isWindows && !!process.versions.openssl.match(/^1\.0\./))
       args.push('-no_rand_screen');
 
     const client = spawn(common.opensslCli, args);

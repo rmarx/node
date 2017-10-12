@@ -135,7 +135,7 @@ validateList(tlsCiphers);
 // Assert that we have sha and sha1 but not SHA and SHA1.
 assert.notStrictEqual(0, crypto.getHashes().length);
 assert(crypto.getHashes().includes('sha1'));
-assert(crypto.getHashes().includes('sha'));
+//assert(crypto.getHashes().includes('sha'));
 assert(!crypto.getHashes().includes('SHA1'));
 assert(!crypto.getHashes().includes('SHA'));
 assert(crypto.getHashes().includes('RSA-SHA1'));
@@ -260,7 +260,7 @@ assert.throws(function() {
   // Throws crypto error, so there is an opensslErrorStack property.
   // The openSSL stack should have content.
   if ((err instanceof Error) &&
-      /asn1 encoding routines:ASN1_CHECK_TLEN:wrong tag/.test(err) &&
+      /asn1 encoding routines:asn1_check_tlen:wrong tag/.test(err) &&
       err.opensslErrorStack !== undefined &&
       Array.isArray(err.opensslErrorStack) &&
       err.opensslErrorStack.length > 0) {
