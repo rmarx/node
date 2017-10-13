@@ -53,8 +53,6 @@
 #include <openssl/rand.h>
 #include <openssl/pkcs12.h>
 
-#define EVP_F_EVP_DECRYPTFINAL 101
-
 #if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
 # define NODE__HAVE_TLSEXT_STATUS_CB
 #endif  // !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
@@ -419,8 +417,6 @@ class Connection : public AsyncWrap, public SSLWrap<Connection> {
 class CipherBase : public BaseObject {
  public:
   ~CipherBase() override {
-    if (!initialised_)
-      return;
     EVP_CIPHER_CTX_free(ctx_);
   }
 
@@ -460,7 +456,7 @@ class CipherBase : public BaseObject {
              v8::Local<v8::Object> wrap,
              CipherKind kind)
       : BaseObject(env, wrap),
-        initialised_(false),
+        ctx_(nullptr),
         kind_(kind),
         auth_tag_len_(0) {
     MakeWeak<CipherBase>(this);
@@ -468,8 +464,7 @@ class CipherBase : public BaseObject {
   }
 
  private:
-  EVP_CIPHER_CTX* ctx_; /* coverity[member_decl] */
-  bool initialised_;
+  EVP_CIPHER_CTX *ctx_;  /* coverity[member_decl] */
   const CipherKind kind_;
   unsigned int auth_tag_len_;
   char auth_tag_[EVP_GCM_TLS_TAG_LEN];
@@ -477,15 +472,7 @@ class CipherBase : public BaseObject {
 
 class Hmac : public BaseObject {
  public:
-  ~Hmac() override {
-    if (!initialised_)
-      return;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    free(ctx_);
-#else
-    HMAC_CTX_free(ctx_);
-#endif
-  }
+  ~Hmac() override;
 
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
@@ -500,32 +487,17 @@ class Hmac : public BaseObject {
 
   Hmac(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
-        initialised_(false) {
-    MakeWeak<Hmac>(this);
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    ctx_ = reinterpret_cast<HMAC_CTX *>(malloc(sizeof(HMAC_CTX)));
-  #else
-    ctx_ = HMAC_CTX_new();
-  #endif
+        ctx_(nullptr) {
+        MakeWeak<Hmac>(this);
   }
 
  private:
   HMAC_CTX *ctx_; /* coverity[member_decl] */
-  bool initialised_;
 };
 
 class Hash : public BaseObject {
  public:
-  ~Hash() override {
-    if (!initialised_)
-      return;
-    EVP_MD_CTX_destroy(mdctx_);
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    free(mdctx_);
-  #else
-    EVP_MD_CTX_free(mdctx_);
-  #endif
-  }
+  ~Hash() override;
 
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
@@ -539,14 +511,14 @@ class Hash : public BaseObject {
 
   Hash(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
-        initialised_(false) {
+        mdctx_(nullptr),
+        finalized_(false) {
     MakeWeak<Hash>(this);
     mdctx_ = EVP_MD_CTX_new();
   }
 
  private:
   EVP_MD_CTX *mdctx_; /* coverity[member_decl] */
-  bool initialised_;
   bool finalized_;
 };
 

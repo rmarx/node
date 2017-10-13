@@ -128,8 +128,25 @@ static void SSL_SESSION_get0_ticket(const SSL_SESSION *s,
 #define SSL_get_tlsext_status_type(ssl) (ssl->tlsext_status_type)
 
 // It doesn't do exactly the same, but works.
-#define HMAC_CTX_reset(ctx) HMAC_CTX_init(ctx)
 #define EVP_MD_CTX_reset(mdctx) EVP_MD_CTX_init(mdctx)
+
+MAC_CTX* HMAC_CTX_new() {
+  HMAC_CTX* ctx = Malloc<HMAC_CTX>(1);
+  HMAC_CTX_init(ctx);
+  return ctx;
+}
+
+void HMAC_CTX_free(HMAC_CTX* ctx) {
+  if (ctx == nullptr) {
+    return;
+  }
+  HMAC_CTX_cleanup(ctx);
+  free(ctx);
+}
+
+#define EVP_MD_CTX_new EVP_MD_CTX_create
+#define EVP_MD_CTX_free EVP_MD_CTX_destroy
+
 #endif
 
 #define THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(val, prefix)                  \
@@ -225,8 +242,6 @@ static X509_NAME *cnnic_ev_name =
     d2i_X509_NAME(nullptr, &cnnic_ev_p,
                   sizeof(CNNIC_EV_ROOT_CA_SUBJECT_DATA)-1);
 
-static Mutex* mutexes;
-
 static const char* const root_certs[] = {
 #include "node_root_certs.h"  // NOLINT(build/include_order)
 };
@@ -294,19 +309,18 @@ template int SSLWrap<TLSWrap>::SelectALPNCallback(
 #endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+static Mutex* mutexes;
+
 static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
   static_assert(sizeof(uv_thread_t) <= sizeof(void*),
                 "uv_thread_t does not fit in a pointer");
   CRYPTO_THREADID_set_pointer(tid, reinterpret_cast<void*>(uv_thread_self()));
 }
-#endif
-
 
 static void crypto_lock_init(void) {
   mutexes = new Mutex[CRYPTO_num_locks()];
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void crypto_lock_cb(int mode, int n, const char* file, int line) {
   CHECK(!(mode & CRYPTO_LOCK) ^ !(mode & CRYPTO_UNLOCK));
   CHECK(!(mode & CRYPTO_READ) ^ !(mode & CRYPTO_WRITE));
@@ -947,7 +961,6 @@ static int X509_up_ref(X509* cert) {
   return 1;
 }
 #endif  // OPENSSL_VERSION_NUMBER < 0x10100000L && !OPENSSL_IS_BORINGSSL
-
 
 static X509_STORE* NewRootCertStore() {
   static std::vector<X509*> root_certs_vector;
@@ -3545,7 +3558,7 @@ void CipherBase::Init(const char* cipher_type,
   }
 #endif  // NODE_FIPS_MODE
 
-  CHECK_EQ(initialised_, false);
+  CHECK_EQ(ctx_, nullptr);
   const EVP_CIPHER* const cipher = EVP_get_cipherbyname(cipher_type);
   if (cipher == nullptr) {
     return env()->ThrowError("Unknown cipher");
@@ -3563,7 +3576,7 @@ void CipherBase::Init(const char* cipher_type,
                                key,
                                iv);
 
-  EVP_CIPHER_CTX_init(ctx_);
+  ctx_ = EVP_CIPHER_CTX_new();
   const bool encrypt = (kind_ == kCipher);
 
   EVP_CipherInit_ex(ctx_, cipher, nullptr, nullptr, nullptr, encrypt);
@@ -3629,7 +3642,7 @@ void CipherBase::InitIv(const char* cipher_type,
     return env()->ThrowError("Invalid IV length");
   }
 
-  EVP_CIPHER_CTX_init(ctx_);
+  ctx_ = EVP_CIPHER_CTX_new();
 
   if (mode == EVP_CIPH_WRAP_MODE)
     EVP_CIPHER_CTX_set_flags(ctx_, EVP_CIPHER_CTX_FLAG_WRAP_ALLOW);
@@ -3639,12 +3652,15 @@ void CipherBase::InitIv(const char* cipher_type,
 
   if (is_gcm_mode &&
       !EVP_CIPHER_CTX_ctrl(ctx_, EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr)) {
-    EVP_CIPHER_CTX_cleanup(ctx_);
+    
+    EVP_CIPHER_CTX_free(ctx_);
+    ctx_ = nullptr;
     return env()->ThrowError("Invalid IV length");
   }
 
   if (!EVP_CIPHER_CTX_set_key_length(ctx_, key_len)) {
-    EVP_CIPHER_CTX_cleanup(ctx_);
+    EVP_CIPHER_CTX_free(ctx_);
+    ctx_ = nullptr;
     return env()->ThrowError("Invalid key length");
   }
 
@@ -3654,7 +3670,6 @@ void CipherBase::InitIv(const char* cipher_type,
                     reinterpret_cast<const unsigned char*>(key),
                     reinterpret_cast<const unsigned char*>(iv),
                     kind_ == kCipher);
-  initialised_ = true;
 }
 
 
@@ -3682,7 +3697,7 @@ void CipherBase::InitIv(const FunctionCallbackInfo<Value>& args) {
 
 bool CipherBase::IsAuthenticatedMode() const {
   // Check if this cipher operates in an AEAD mode that we support.
-  CHECK_EQ(initialised_, true);
+  CHECK_EQ(ctx_, nullptr);
   const EVP_CIPHER* const cipher = EVP_CIPHER_CTX_cipher(ctx_);
   int mode = EVP_CIPHER_mode(cipher);
   return mode == EVP_CIPH_GCM_MODE;
@@ -3695,7 +3710,7 @@ void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   // Only callable after Final and if encrypting.
-  if (cipher->initialised_ ||
+  if (cipher->ctx_ ||
       cipher->kind_ != kCipher ||
       cipher->auth_tag_len_ == 0) {
     return env->ThrowError("Attempting to get auth tag in unsupported state");
@@ -3716,7 +3731,7 @@ void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value>& args) {
   CipherBase* cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
-  if (!cipher->initialised_ ||
+  if (!cipher->ctx_ ||
       !cipher->IsAuthenticatedMode() ||
       cipher->kind_ != kDecipher) {
     return env->ThrowError("Attempting to set auth tag in unsupported state");
@@ -3734,7 +3749,7 @@ void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value>& args) {
 
 
 bool CipherBase::SetAAD(const char* data, unsigned int len) {
-  if (!initialised_ || !IsAuthenticatedMode())
+  if (!ctx_ || !IsAuthenticatedMode())
     return false;
   int outlen;
   if (!EVP_CipherUpdate(ctx_,
@@ -3765,7 +3780,7 @@ bool CipherBase::Update(const char* data,
                         int len,
                         unsigned char** out,
                         int* out_len) {
-  if (!initialised_)
+  if (!ctx_)
     return 0;
 
   // on first update:
@@ -3827,7 +3842,7 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
 
 
 bool CipherBase::SetAutoPadding(bool auto_padding) {
-  if (!initialised_)
+  if (!ctx_)
     return false;
   return EVP_CIPHER_CTX_set_padding(ctx_, auto_padding);
 }
@@ -3845,7 +3860,7 @@ void CipherBase::SetAutoPadding(const FunctionCallbackInfo<Value>& args) {
 
 
 bool CipherBase::Final(unsigned char** out, int *out_len) {
-  if (!initialised_)
+  if (!ctx_)
     return false;
 
   *out = Malloc<unsigned char>(
@@ -3859,8 +3874,8 @@ bool CipherBase::Final(unsigned char** out, int *out_len) {
     CHECK_EQ(r, 1);
   }
 
-  EVP_CIPHER_CTX_cleanup(ctx_);
-  initialised_ = false;
+  EVP_CIPHER_CTX_free(ctx_);
+  ctx_ = nullptr;
 
   return r == 1;
 }
@@ -3871,7 +3886,7 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
 
   CipherBase* cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
-  if (!cipher->initialised_) return env->ThrowError("Unsupported state");
+  if (!cipher->ctx_) return env->ThrowError("Unsupported state");
 
   unsigned char* out_value = nullptr;
   int out_len = -1;
@@ -3902,6 +3917,9 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(buf);
 }
 
+Hmac::~Hmac() {
+  HMAC_CTX_free(ctx_);
+}
 
 void Hmac::Initialize(Environment* env, v8::Local<v8::Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
@@ -3929,14 +3947,15 @@ void Hmac::HmacInit(const char* hash_type, const char* key, int key_len) {
   if (md == nullptr) {
     return env()->ThrowError("Unknown message digest");
   }
-  HMAC_CTX_reset(ctx_);
   if (key_len == 0) {
     key = "";
   }
-  if (!HMAC_Init_ex(ctx_, key, key_len, md, nullptr)) {
+  ctx_ = HMAC_CTX_new();
+  if (ctx_ == nullptr || !HMAC_Init_ex(ctx_, key, key_len, md, nullptr)) {
+    HMAC_CTX_free(ctx_);
+    ctx_ = nullptr;
     return ThrowCryptoError(env(), ERR_get_error());
   }
-  initialised_ = true;
 }
 
 
@@ -3953,7 +3972,7 @@ void Hmac::HmacInit(const FunctionCallbackInfo<Value>& args) {
 
 
 bool Hmac::HmacUpdate(const char* data, int len) {
-  if (!initialised_)
+  if (!ctx_)
     return false;
   int r = HMAC_Update(ctx_, reinterpret_cast<const unsigned char*>(data), len);
   return r == 1;
@@ -4000,10 +4019,10 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
   unsigned char md_value[EVP_MAX_MD_SIZE];
   unsigned int md_len = 0;
 
-  if (hmac->initialised_) {
+  if (hmac->ctx_) {
     HMAC_Final(hmac->ctx_, md_value, &md_len);
-    HMAC_CTX_reset(hmac->ctx_);
-    hmac->initialised_ = false;
+    HMAC_CTX_free(hmac->ctx_);
+    hmac->ctx_ = nullptr;
   }
 
   Local<Value> error;
@@ -4019,6 +4038,10 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
     return;
   }
   args.GetReturnValue().Set(rc.ToLocalChecked());
+}
+
+Hash::~Hash() {
+  EVP_MD_CTX_free(mdctx_);
 }
 
 
@@ -4051,18 +4074,19 @@ bool Hash::HashInit(const char* hash_type) {
   const EVP_MD* md = EVP_get_digestbyname(hash_type);
   if (md == nullptr)
     return false;
-  EVP_MD_CTX_init(mdctx_);
-  if (EVP_DigestInit_ex(mdctx_, md, nullptr) <= 0) {
+  mdctx_ = EVP_MD_CTX_new();
+  if (mdctx_ == nullptr || EVP_DigestInit_ex(mdctx_, md, nullptr) <= 0) {
+    EVP_MD_CTX_free(mdctx_);
+    mdctx_ = nullptr;
     return false;
   }
-  initialised_ = true;
   finalized_ = false;
   return true;
 }
 
 
 bool Hash::HashUpdate(const char* data, int len) {
-  if (!initialised_)
+  if (!mdctx_)
     return false;
   EVP_DigestUpdate(mdctx_, data, len);
   return true;
@@ -4109,7 +4133,6 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   unsigned int md_len;
 
   EVP_DigestFinal_ex(hash->mdctx_, md_value, &md_len);
-  EVP_MD_CTX_reset(hash->mdctx_);
   hash->finalized_ = true;
 
   Local<Value> error;
@@ -4359,7 +4382,7 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
   if (bp != nullptr)
     BIO_free_all(bp);
 
-  EVP_MD_CTX_reset(mdctx_);
+  EVP_MD_CTX_free(mdctx_);
 
   if (fatal)
     return kSignPrivateKey;
@@ -4585,7 +4608,7 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
   if (x509 != nullptr)
     X509_free(x509);
 
-  EVP_MD_CTX_reset(mdctx_);
+  EVP_MD_CTX_free(mdctx_);
   initialised_ = false;
 
   if (fatal)
@@ -6216,9 +6239,9 @@ void InitCryptoOnce() {
   SSL_library_init();
   OpenSSL_add_all_algorithms();
 
-  crypto_lock_init();
-  CRYPTO_set_locking_callback(crypto_lock_cb);
   #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    crypto_lock_init();
+    CRYPTO_set_locking_callback(crypto_lock_cb);
     CRYPTO_THREADID_set_callback(crypto_threadid_cb);
   #endif
 
