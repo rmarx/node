@@ -93,6 +93,6 @@ function forth(server) {
       assert(!req.socket.isSessionReused());
       server.close();
     });
-    req.on('error', common.fail);
+    req.on('error', common.mustNotCall());
     req.end();
   }

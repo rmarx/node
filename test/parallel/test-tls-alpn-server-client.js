@@ -93,7 +93,7 @@ function Test1() {
     NPNProtocols: ['first-priority-unsupported', 'x', 'y']
   }];
 
-  runTest(clientsOptions, serverOptions, function(result, errors) {
+  runTest(clientsOptions, serverOptions, function(results, errors) {
     // 'a' is selected by ALPN
     checkResults(results[0],
                  { server: { ALPN: 'a', NPN: false },
