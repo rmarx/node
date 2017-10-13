@@ -3693,7 +3693,7 @@ void CipherBase::InitIv(const FunctionCallbackInfo<Value>& args) {
 bool CipherBase::IsAuthenticatedMode() const {
   // Check if this cipher operates in an AEAD mode that we support.
   CHECK_EQ(initialised_, true);
-  const EVP_CIPHER* cipher = EVP_CIPHER_CTX_cipher(ctx_);
+  const EVP_CIPHER* const cipher = EVP_CIPHER_CTX_cipher(ctx_);
   int mode = EVP_CIPHER_mode(cipher);
   return mode == EVP_CIPH_GCM_MODE;
 }
@@ -4968,22 +4968,19 @@ void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(Buffer::New(env, data, size).ToLocalChecked());
 }
 
-void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM* num) {
+void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM** num) {
   DiffieHellman* diffieHellman;
-  Environment* env = Environment::GetCurrent(args);
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
   if(field == FieldType::PRIME) {
-    DH_get0_pqg(diffieHellman->dh, &num, NULL, NULL);
-    env->ThrowError("Got Prime");
+    DH_get0_pqg(diffieHellman->dh, num, NULL, NULL);
   }else if(field == FieldType::GENERATOR) {
-    DH_get0_pqg(diffieHellman->dh, NULL, NULL, &num);
+    DH_get0_pqg(diffieHellman->dh, NULL, NULL, num);
   }else if(field == FieldType::PUBLIC_KEY) {
-    DH_get0_key(diffieHellman->dh, &num, NULL);
+    DH_get0_key(diffieHellman->dh, num, NULL);
   }else if(field == FieldType::PRIVATE_KEY) {
-    DH_get0_key(diffieHellman->dh, NULL, &num);
+    DH_get0_key(diffieHellman->dh, NULL, num);
   }
-  
 }
 
 void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args, FieldType field, const char* err_if_null) {
@@ -4994,7 +4991,7 @@ void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args, FieldType 
   if (!diffieHellman->initialised_) return env->ThrowError("Not initialized");
 
   const BIGNUM* num;
-  GetFieldValue(args, field, num);
+  GetFieldValue(args, field, &num);
   if (num == nullptr) return env->ThrowError(err_if_null);
 
   size_t size = BN_num_bytes(num);
@@ -5098,7 +5095,7 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what) {
+/*void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what) {
   Environment* env = Environment::GetCurrent(args);
 
   DiffieHellman* dh;
@@ -5106,7 +5103,7 @@ void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, Fiel
   if (!dh->initialised_) return env->ThrowError("Not initialized");
 
   BIGNUM** num;
-  GetFieldValue(args, field, *num);
+  GetFieldValue(args, field, num);
   char errmsg[64];
 
   if (args.Length() == 0) {
@@ -5123,16 +5120,49 @@ void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, Fiel
                    Buffer::Length(args[0]), *num);
   DH_set0_key(dh->dh, *num, NULL);
   CHECK_NE(*num, nullptr);
-}
+}*/
 
 
 void DiffieHellman::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
-  SetKey(args, FieldType::PUBLIC_KEY, "Public key");
+  DiffieHellman* diffieHellman;
+  ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
+  Environment* env = diffieHellman->env();
+
+  if (!diffieHellman->initialised_) {
+    return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
+  }
+
+  if (args.Length() == 0) {
+    return env->ThrowError("Public key argument is mandatory");
+  } else {
+    THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Public key");
+    BIGNUM *pub_key = BN_bin2bn(
+        reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
+        Buffer::Length(args[0]), 0);
+    DH_set0_key(diffieHellman->dh, pub_key, NULL);
+  }
 }
 
 
 void DiffieHellman::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
-  SetKey(args, FieldType::PRIVATE_KEY, "Private key");
+  DiffieHellman* diffieHellman;
+  ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
+  Environment* env = diffieHellman->env();
+
+  if (!diffieHellman->initialised_) {
+    return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
+  }
+
+  if (args.Length() == 0) {
+    return env->ThrowError("Private key argument is mandatory");
+  } else {
+    THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Private key");
+    BIGNUM *priv_key = BN_bin2bn(
+        reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
+        Buffer::Length(args[0]),
+        0);
+    DH_set0_key(diffieHellman->dh, NULL, priv_key);
+  }
 }
 
 
