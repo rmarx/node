@@ -4970,10 +4970,12 @@ void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
 
 void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM* num) {
   DiffieHellman* diffieHellman;
+  Environment* env = Environment::GetCurrent(args);
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
   if(field == FieldType::PRIME) {
     DH_get0_pqg(diffieHellman->dh, &num, NULL, NULL);
+    env->ThrowError("Got Prime");
   }else if(field == FieldType::GENERATOR) {
     DH_get0_pqg(diffieHellman->dh, NULL, NULL, &num);
   }else if(field == FieldType::PUBLIC_KEY) {
@@ -4981,6 +4983,7 @@ void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& arg
   }else if(field == FieldType::PRIVATE_KEY) {
     DH_get0_key(diffieHellman->dh, NULL, &num);
   }
+  
 }
 
 void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args, FieldType field, const char* err_if_null) {

@@ -700,7 +700,7 @@ class DiffieHellman : public BaseObject {
   }
 
  private:
-  enum FieldType
+  enum class FieldType
   {
       PRIME,
       GENERATOR,
