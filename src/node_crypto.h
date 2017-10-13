@@ -708,8 +708,9 @@ class DiffieHellman : public BaseObject {
       PUBLIC_KEY
   };
   static void GetField(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* err_if_null);
-  //static void SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what);
+  static void SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what);
   static void GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM** num);
+  static void SetKeyValue(Diffiehellman* dh, FieldType field, BIGNUM* num)
   bool VerifyContext();
 
   bool initialised_;
