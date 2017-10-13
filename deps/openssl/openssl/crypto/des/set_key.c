@@ -67,7 +67,7 @@ int DES_check_key_parity(const_DES_cblock *key)
         if ((*key)[i] != odd_parity[(*key)[i]])
             return (0);
     }
-    return (1);
+    return 1;
 }
 
 /*-
@@ -114,7 +114,7 @@ int DES_is_weak_key(const_DES_cblock *key)
          * 97/03/18
          */
         if (memcmp(weak_keys[i], key, sizeof(DES_cblock)) == 0)
-            return (1);
+            return 1;
     return (0);
 }
 
@@ -379,11 +379,3 @@ int DES_key_sched(const_DES_cblock *key, DES_key_schedule *schedule)
 {
     return (DES_set_key(key, schedule));
 }
-
-/*-
-#undef des_fixup_key_parity
-void des_fixup_key_parity(des_cblock *key)
-        {
-        des_set_odd_parity(key);
-        }
-*/

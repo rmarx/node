@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,7 +12,6 @@
 #include <errno.h>
 
 #include "internal/cryptlib.h"
-#include <openssl/lhash.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 #include <openssl/asn1.h>
@@ -169,6 +168,12 @@ const char *X509_verify_cert_error_string(long n)
         return ("Certificate Transparency required, but no valid SCTs found");
     case X509_V_ERR_PROXY_SUBJECT_NAME_VIOLATION:
         return ("proxy subject name violation");
+    case X509_V_ERR_OCSP_VERIFY_NEEDED:
+        return("OCSP verification needed");
+    case X509_V_ERR_OCSP_VERIFY_FAILED:
+        return("OCSP verification failed");
+    case X509_V_ERR_OCSP_CERT_UNKNOWN:
+        return("OCSP unknown cert");
 
     default:
         /* Printing an error number into a static buffer is not thread-safe */

@@ -59,7 +59,11 @@ int BIO_fd_should_retry(int s);
 
 static const BIO_METHOD methods_fdp = {
     BIO_TYPE_FD, "file descriptor",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     fd_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     fd_read,
     fd_puts,
     fd_gets,
@@ -90,7 +94,7 @@ static int fd_new(BIO *bi)
     bi->num = -1;
     bi->ptr = NULL;
     bi->flags = BIO_FLAGS_UPLINK; /* essentially redundant */
-    return (1);
+    return 1;
 }
 
 static int fd_free(BIO *a)
@@ -104,7 +108,7 @@ static int fd_free(BIO *a)
         a->init = 0;
         a->flags = BIO_FLAGS_UPLINK;
     }
-    return (1);
+    return 1;
 }
 
 static int fd_read(BIO *b, char *out, int outl)
@@ -144,6 +148,7 @@ static long fd_ctrl(BIO *b, int cmd, long num, void *ptr)
     switch (cmd) {
     case BIO_CTRL_RESET:
         num = 0;
+        /* fall thru */
     case BIO_C_FILE_SEEK:
         ret = (long)UP_lseek(b->num, num, 0);
         break;
@@ -202,8 +207,10 @@ static int fd_gets(BIO *bp, char *buf, int size)
     char *ptr = buf;
     char *end = buf + size - 1;
 
-    while ((ptr < end) && (fd_read(bp, ptr, 1) > 0) && (ptr[0] != '\n'))
-        ptr++;
+    while (ptr < end && fd_read(bp, ptr, 1) > 0) {
+        if (*ptr++ == '\n')
+           break;
+    }
 
     ptr[0] = '\0';
 
@@ -263,8 +270,7 @@ int BIO_fd_non_fatal_error(int err)
 # ifdef EALREADY
     case EALREADY:
 # endif
-        return (1);
-        /* break; */
+        return 1;
     default:
         break;
     }

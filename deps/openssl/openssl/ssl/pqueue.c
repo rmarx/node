@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2005-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -127,7 +127,7 @@ pitem *pqueue_iterator(pqueue *pq)
     return pqueue_peek(pq);
 }
 
-pitem *pqueue_next(pitem **item)
+pitem *pqueue_next(piterator *item)
 {
     pitem *ret;
 
@@ -141,10 +141,10 @@ pitem *pqueue_next(pitem **item)
     return ret;
 }
 
-int pqueue_size(pqueue *pq)
+size_t pqueue_size(pqueue *pq)
 {
     pitem *item = pq->items;
-    int count = 0;
+    size_t count = 0;
 
     while (item != NULL) {
         count++;

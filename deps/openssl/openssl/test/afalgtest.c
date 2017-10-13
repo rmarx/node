@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,6 +9,20 @@
 
 #include <stdio.h>
 #include <openssl/opensslconf.h>
+
+#include <string.h>
+#include <openssl/engine.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include "testutil.h"
+
+/* Use a buffer size which is not aligned to block size */
+#define BUFFER_SIZE     (8 * 1024) - 13
+
+#ifndef OPENSSL_NO_ENGINE
+static ENGINE *e;
+#endif
+
 
 #ifndef OPENSSL_NO_AFALGENG
 # include <linux/version.h>
@@ -27,15 +41,7 @@
 #endif
 
 #ifndef OPENSSL_NO_AFALGENG
-#include <string.h>
-#include <openssl/engine.h>
-#include <openssl/evp.h>
-#include <openssl/rand.h>
-
-/* Use a buffer size which is not aligned to block size */
-#define BUFFER_SIZE     (8 * 1024) - 13
-
-static int test_afalg_aes_128_cbc(ENGINE *e)
+static int test_afalg_aes_128_cbc(void)
 {
     EVP_CIPHER_CTX *ctx;
     const EVP_CIPHER *cipher = EVP_aes_128_cbc();
@@ -48,86 +54,67 @@ static int test_afalg_aes_128_cbc(ENGINE *e)
     unsigned char ebuf[BUFFER_SIZE + 32];
     unsigned char dbuf[BUFFER_SIZE + 32];
     int encl, encf, decl, decf;
-    unsigned int status = 0;
+    int ret = 0;
 
-    ctx = EVP_CIPHER_CTX_new();
-    if (ctx == NULL) {
-        fprintf(stderr, "%s() failed to allocate ctx\n", __func__);
-        return 0;
-    }
+    if (!TEST_ptr(ctx = EVP_CIPHER_CTX_new()))
+            return 0;
     RAND_bytes(in, BUFFER_SIZE);
 
-    if (       !EVP_CipherInit_ex(ctx, cipher, e, key, iv, 1)
-            || !EVP_CipherUpdate(ctx, ebuf, &encl, in, BUFFER_SIZE)
-            || !EVP_CipherFinal_ex(ctx, ebuf+encl, &encf)) {
-        fprintf(stderr, "%s() failed encryption\n", __func__);
+    if (!TEST_true(EVP_CipherInit_ex(ctx, cipher, e, key, iv, 1))
+            || !TEST_true(EVP_CipherUpdate(ctx, ebuf, &encl, in, BUFFER_SIZE))
+            || !TEST_true(EVP_CipherFinal_ex(ctx, ebuf+encl, &encf)))
         goto end;
-    }
     encl += encf;
 
-    if (       !EVP_CIPHER_CTX_reset(ctx)
-            || !EVP_CipherInit_ex(ctx, cipher, e, key, iv, 0)
-            || !EVP_CipherUpdate(ctx, dbuf, &decl, ebuf, encl)
-            || !EVP_CipherFinal_ex(ctx, dbuf+decl, &decf)) {
-        fprintf(stderr, "%s() failed decryption\n", __func__);
+    if (!TEST_true(EVP_CIPHER_CTX_reset(ctx))
+            || !TEST_true(EVP_CipherInit_ex(ctx, cipher, e, key, iv, 0))
+            || !TEST_true(EVP_CipherUpdate(ctx, dbuf, &decl, ebuf, encl))
+            || !TEST_true(EVP_CipherFinal_ex(ctx, dbuf+decl, &decf)))
         goto end;
-    }
     decl += decf;
 
-    if (       decl != BUFFER_SIZE
-            || memcmp(dbuf, in, BUFFER_SIZE)) {
-        fprintf(stderr, "%s() failed Dec(Enc(P)) != P\n", __func__);
+    if (!TEST_int_eq(decl, BUFFER_SIZE)
+            || !TEST_mem_eq(dbuf, BUFFER_SIZE, in, BUFFER_SIZE))
         goto end;
-    }
 
-    status = 1;
+    ret = 1;
 
  end:
     EVP_CIPHER_CTX_free(ctx);
-    return status;
+    return ret;
 }
+#endif
 
-int main(int argc, char **argv)
+#ifndef OPENSSL_NO_ENGINE
+int global_init(void)
 {
-    ENGINE *e;
-
-    CRYPTO_set_mem_debug(1);
-    CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
-
     ENGINE_load_builtin_engines();
-
 # ifndef OPENSSL_NO_STATIC_ENGINE
     OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_AFALG, NULL);
 # endif
-
-    e = ENGINE_by_id("afalg");
-    if (e == NULL) {
-        /*
-         * A failure to load is probably a platform environment problem so we
-         * don't treat this as an OpenSSL test failure, i.e. we return 0
-         */
-        fprintf(stderr,
-                "AFALG Test: Failed to load AFALG Engine - skipping test\n");
-        return 0;
-    }
-
-    if (test_afalg_aes_128_cbc(e) == 0) {
-        ENGINE_free(e);
-        return 1;
-    }
-
-    ENGINE_free(e);
-    printf("PASS\n");
-    return 0;
+    return 1;
 }
+#endif
 
-#else  /* OPENSSL_NO_AFALGENG */
-
-int main(int argc, char **argv)
+int setup_tests(void)
 {
-    fprintf(stderr, "AFALG not supported - skipping AFALG tests\n");
-    printf("PASS\n");
-    return 0;
+#ifndef OPENSSL_NO_ENGINE
+    if ((e = ENGINE_by_id("afalg")) == NULL) {
+        /* Probably a platform env issue, not a test failure. */
+        TEST_info("Can't load AFALG engine");
+    } else {
+# ifndef OPENSSL_NO_AFALGENG
+        ADD_TEST(test_afalg_aes_128_cbc);
+# endif
+    }
+#endif
+
+    return 1;
 }
 
+#ifndef OPENSSL_NO_ENGINE
+void cleanup_tests(void)
+{
+    ENGINE_free(e);
+}
 #endif

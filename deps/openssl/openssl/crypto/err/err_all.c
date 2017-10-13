@@ -31,21 +31,16 @@
 #include <openssl/ui.h>
 #include <openssl/ocsp.h>
 #include <openssl/err.h>
-#ifdef OPENSSL_FIPS
-# include <openssl/fips.h>
-#endif
 #include <openssl/ts.h>
 #include <openssl/cms.h>
 #include <openssl/ct.h>
 #include <openssl/async.h>
 #include <openssl/kdf.h>
+#include <openssl/store.h>
 
 int err_load_crypto_strings_int(void)
 {
     if (
-#ifdef OPENSSL_FIPS
-        FIPS_set_error_callbacks(ERR_put_error, ERR_add_error_vdata) == 0 ||
-#endif
 #ifndef OPENSSL_NO_ERR
         ERR_load_ERR_strings() == 0 ||    /* include error strings for SYSerr */
         ERR_load_BN_strings() == 0 ||
@@ -88,12 +83,7 @@ int err_load_crypto_strings_int(void)
 # ifndef OPENSSL_NO_OCSP
         ERR_load_OCSP_strings() == 0 ||
 # endif
-#ifndef OPENSSL_NO_UI
         ERR_load_UI_strings() == 0 ||
-#endif
-# ifdef OPENSSL_FIPS
-        ERR_load_FIPS_strings() == 0 ||
-# endif
 # ifndef OPENSSL_NO_CMS
         ERR_load_CMS_strings() == 0 ||
 # endif
@@ -102,7 +92,8 @@ int err_load_crypto_strings_int(void)
 # endif
         ERR_load_ASYNC_strings() == 0 ||
 #endif
-        ERR_load_KDF_strings() == 0)
+        ERR_load_KDF_strings() == 0 ||
+        ERR_load_OSSL_STORE_strings() == 0)
         return 0;
 
     return 1;

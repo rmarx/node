@@ -56,9 +56,21 @@ static DH_METHOD dh_ossl = {
     NULL
 };
 
+static const DH_METHOD *default_DH_method = &dh_ossl;
+
 const DH_METHOD *DH_OpenSSL(void)
 {
     return &dh_ossl;
+}
+
+void DH_set_default_method(const DH_METHOD *meth)
+{
+    default_DH_method = meth;
+}
+
+const DH_METHOD *DH_get_default_method(void)
+{
+    return default_DH_method;
 }
 
 static int generate_key(DH *dh)
@@ -99,14 +111,14 @@ static int generate_key(DH *dh)
     if (generate_new_key) {
         if (dh->q) {
             do {
-                if (!BN_rand_range(priv_key, dh->q))
+                if (!BN_priv_rand_range(priv_key, dh->q))
                     goto err;
             }
             while (BN_is_zero(priv_key) || BN_is_one(priv_key));
         } else {
             /* secret exponent length */
             l = dh->length ? dh->length : BN_num_bits(dh->p) - 1;
-            if (!BN_rand(priv_key, l, BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY))
+            if (!BN_priv_rand(priv_key, l, BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY))
                 goto err;
         }
     }
@@ -205,11 +217,11 @@ static int dh_bn_mod_exp(const DH *dh, BIGNUM *r,
 static int dh_init(DH *dh)
 {
     dh->flags |= DH_FLAG_CACHE_MONT_P;
-    return (1);
+    return 1;
 }
 
 static int dh_finish(DH *dh)
 {
     BN_MONT_CTX_free(dh->method_mont_p);
-    return (1);
+    return 1;
 }

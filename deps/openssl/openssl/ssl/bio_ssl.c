@@ -16,8 +16,8 @@
 #include <openssl/err.h>
 #include "ssl_locl.h"
 
-static int ssl_write(BIO *h, const char *buf, int num);
-static int ssl_read(BIO *h, char *buf, int size);
+static int ssl_write(BIO *h, const char *buf, size_t size, size_t *written);
+static int ssl_read(BIO *b, char *buf, size_t size, size_t *readbytes);
 static int ssl_puts(BIO *h, const char *str);
 static long ssl_ctrl(BIO *h, int cmd, long arg1, void *arg2);
 static int ssl_new(BIO *h);
@@ -28,7 +28,7 @@ typedef struct bio_ssl_st {
     /* re-negotiate every time the total number of bytes is this size */
     int num_renegotiates;
     unsigned long renegotiate_count;
-    unsigned long byte_count;
+    size_t byte_count;
     unsigned long renegotiate_timeout;
     unsigned long last_time;
 } BIO_SSL;
@@ -36,7 +36,9 @@ typedef struct bio_ssl_st {
 static const BIO_METHOD methods_sslp = {
     BIO_TYPE_SSL, "ssl",
     ssl_write,
+    NULL,
     ssl_read,
+    NULL,
     ssl_puts,
     NULL,                       /* ssl_gets, */
     ssl_ctrl,
@@ -86,7 +88,7 @@ static int ssl_free(BIO *a)
     return 1;
 }
 
-static int ssl_read(BIO *b, char *out, int outl)
+static int ssl_read(BIO *b, char *buf, size_t size, size_t *readbytes)
 {
     int ret = 1;
     BIO_SSL *sb;
@@ -94,21 +96,19 @@ static int ssl_read(BIO *b, char *out, int outl)
     int retry_reason = 0;
     int r = 0;
 
-    if (out == NULL)
-        return (0);
+    if (buf == NULL)
+        return 0;
     sb = BIO_get_data(b);
     ssl = sb->ssl;
 
     BIO_clear_retry_flags(b);
 
-    ret = SSL_read(ssl, out, outl);
+    ret = ssl_read_internal(ssl, buf, size, readbytes);
 
     switch (SSL_get_error(ssl, ret)) {
     case SSL_ERROR_NONE:
-        if (ret <= 0)
-            break;
         if (sb->renegotiate_count > 0) {
-            sb->byte_count += ret;
+            sb->byte_count += *readbytes;
             if (sb->byte_count > sb->renegotiate_count) {
                 sb->byte_count = 0;
                 sb->num_renegotiates++;
@@ -154,34 +154,30 @@ static int ssl_read(BIO *b, char *out, int outl)
     }
 
     BIO_set_retry_reason(b, retry_reason);
-    return (ret);
+
+    return ret;
 }
 
-static int ssl_write(BIO *b, const char *out, int outl)
+static int ssl_write(BIO *b, const char *buf, size_t size, size_t *written)
 {
     int ret, r = 0;
     int retry_reason = 0;
     SSL *ssl;
     BIO_SSL *bs;
 
-    if (out == NULL)
-        return (0);
+    if (buf == NULL)
+        return 0;
     bs = BIO_get_data(b);
     ssl = bs->ssl;
 
     BIO_clear_retry_flags(b);
 
-    /*
-     * ret=SSL_do_handshake(ssl); if (ret > 0)
-     */
-    ret = SSL_write(ssl, out, outl);
+    ret = ssl_write_internal(ssl, buf, size, written);
 
     switch (SSL_get_error(ssl, ret)) {
     case SSL_ERROR_NONE:
-        if (ret <= 0)
-            break;
         if (bs->renegotiate_count > 0) {
-            bs->byte_count += ret;
+            bs->byte_count += *written;
             if (bs->byte_count > bs->renegotiate_count) {
                 bs->byte_count = 0;
                 bs->num_renegotiates++;
@@ -220,6 +216,7 @@ static int ssl_write(BIO *b, const char *out, int outl)
     }
 
     BIO_set_retry_reason(b, retry_reason);
+
     return ret;
 }
 
@@ -383,15 +380,7 @@ static long ssl_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = BIO_ctrl(ssl->rbio, cmd, num, ptr);
         break;
     case BIO_CTRL_SET_CALLBACK:
-        {
-#if 0                           /* FIXME: Should this be used? -- Richard
-                                 * Levitte */
-            SSLerr(SSL_F_SSL_CTRL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-            ret = -1;
-#else
-            ret = 0;
-#endif
-        }
+        ret = 0; /* use callback ctrl */
         break;
     case BIO_CTRL_GET_CALLBACK:
         {
@@ -512,17 +501,18 @@ int BIO_ssl_copy_session_id(BIO *t, BIO *f)
         return (0);
     if (!SSL_copy_session_id(tdata->ssl, (fdata->ssl)))
         return 0;
-    return (1);
+    return 1;
 }
 
 void BIO_ssl_shutdown(BIO *b)
 {
-    SSL *s;
+    BIO_SSL *bdata;
 
-    b = BIO_find_type(b, BIO_TYPE_SSL);
-    if (b == NULL)
-        return;
-
-    s = BIO_get_data(b);
-    SSL_shutdown(s);
+    for (; b != NULL; b = BIO_next(b)) {
+        if (BIO_method_type(b) != BIO_TYPE_SSL)
+            continue;
+        bdata = BIO_get_data(b);
+        if (bdata != NULL && bdata->ssl != NULL)
+            SSL_shutdown(bdata->ssl);
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,9 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef NO_SYS_TYPES_H
-# include <sys/types.h>
-#endif
+#include <sys/types.h>
 #ifndef OPENSSL_NO_POSIX_IO
 # include <sys/stat.h>
 # include <fcntl.h>
@@ -56,9 +54,8 @@ typedef struct {
     unsigned long mask;
 } NAME_EX_TBL;
 
-#if !defined(OPENSSL_NO_UI) || !defined(OPENSSL_NO_ENGINE)
 static UI_METHOD *ui_method = NULL;
-#endif
+static const UI_METHOD *ui_fallback_method = NULL;
 
 static int set_table_opts(unsigned long *flags, const char *arg,
                           const NAME_EX_TBL * in_tbl);
@@ -112,13 +109,13 @@ int chopup_args(ARGS *arg, char *buf)
         }
     }
     arg->argv[arg->argc] = NULL;
-    return (1);
+    return 1;
 }
 
 #ifndef APP_INIT
 int app_init(long mesgwin)
 {
-    return (1);
+    return 1;
 }
 #endif
 
@@ -140,41 +137,55 @@ int ctx_set_verify_locations(SSL_CTX *ctx, const char *CAfile,
 
 int ctx_set_ctlog_list_file(SSL_CTX *ctx, const char *path)
 {
-    if (path == NULL) {
+    if (path == NULL)
         return SSL_CTX_set_default_ctlog_list_file(ctx);
-    }
 
     return SSL_CTX_set_ctlog_list_file(ctx, path);
 }
 
 #endif
 
+static unsigned long nmflag = 0;
+static char nmflag_set = 0;
+
+int set_nameopt(const char *arg)
+{
+    int ret = set_name_ex(&nmflag, arg);
+
+    if (ret)
+        nmflag_set = 1;
+
+    return ret;
+}
+
+unsigned long get_nameopt(void)
+{
+    return (nmflag_set) ? nmflag : XN_FLAG_ONELINE;
+}
+
 int dump_cert_text(BIO *out, X509 *x)
 {
-    char *p;
-
-    p = X509_NAME_oneline(X509_get_subject_name(x), NULL, 0);
-    BIO_puts(out, "subject=");
-    BIO_puts(out, p);
-    OPENSSL_free(p);
-
-    p = X509_NAME_oneline(X509_get_issuer_name(x), NULL, 0);
-    BIO_puts(out, "\nissuer=");
-    BIO_puts(out, p);
+    print_name(out, "subject=", X509_get_subject_name(x), get_nameopt());
     BIO_puts(out, "\n");
-    OPENSSL_free(p);
+    print_name(out, "issuer=", X509_get_issuer_name(x), get_nameopt());
+    BIO_puts(out, "\n");
 
     return 0;
 }
 
-#ifndef OPENSSL_NO_UI
 static int ui_open(UI *ui)
 {
-    return UI_method_get_opener(UI_OpenSSL())(ui);
+    int (*opener)(UI *ui) = UI_method_get_opener(ui_fallback_method);
+
+    if (opener)
+        return opener(ui);
+    return 1;
 }
 
 static int ui_read(UI *ui, UI_STRING *uis)
 {
+    int (*reader)(UI *ui, UI_STRING *uis) = NULL;
+
     if (UI_get_input_flags(uis) & UI_INPUT_FLAG_DEFAULT_PWD
         && UI_get0_user_data(ui)) {
         switch (UI_get_string_type(uis)) {
@@ -188,15 +199,25 @@ static int ui_read(UI *ui, UI_STRING *uis)
                     return 1;
                 }
             }
-        default:
+            break;
+        case UIT_NONE:
+        case UIT_BOOLEAN:
+        case UIT_INFO:
+        case UIT_ERROR:
             break;
         }
     }
-    return UI_method_get_reader(UI_OpenSSL())(ui, uis);
+
+    reader = UI_method_get_reader(ui_fallback_method);
+    if (reader)
+        return reader(ui, uis);
+    return 1;
 }
 
 static int ui_write(UI *ui, UI_STRING *uis)
 {
+    int (*writer)(UI *ui, UI_STRING *uis) = NULL;
+
     if (UI_get_input_flags(uis) & UI_INPUT_FLAG_DEFAULT_PWD
         && UI_get0_user_data(ui)) {
         switch (UI_get_string_type(uis)) {
@@ -208,20 +229,36 @@ static int ui_write(UI *ui, UI_STRING *uis)
                 if (password && password[0] != '\0')
                     return 1;
             }
-        default:
+            break;
+        case UIT_NONE:
+        case UIT_BOOLEAN:
+        case UIT_INFO:
+        case UIT_ERROR:
             break;
         }
     }
-    return UI_method_get_writer(UI_OpenSSL())(ui, uis);
+
+    writer = UI_method_get_writer(ui_fallback_method);
+    if (writer)
+        return writer(ui, uis);
+    return 1;
 }
 
 static int ui_close(UI *ui)
 {
-    return UI_method_get_closer(UI_OpenSSL())(ui);
+    int (*closer)(UI *ui) = UI_method_get_closer(ui_fallback_method);
+
+    if (closer)
+        return closer(ui);
+    return 1;
 }
 
 int setup_ui_method(void)
 {
+    ui_fallback_method = UI_null();
+#ifndef OPENSSL_NO_UI_CONSOLE
+    ui_fallback_method = UI_OpenSSL();
+#endif
     ui_method = UI_create_method("OpenSSL application user interface");
     UI_method_set_opener(ui_method, ui_open);
     UI_method_set_reader(ui_method, ui_read);
@@ -237,24 +274,18 @@ void destroy_ui_method(void)
         ui_method = NULL;
     }
 }
-#endif
+
+const UI_METHOD *get_ui_method(void)
+{
+    return ui_method;
+}
 
 int password_callback(char *buf, int bufsiz, int verify, PW_CB_DATA *cb_tmp)
 {
     int res = 0;
-#ifndef OPENSSL_NO_UI
     UI *ui = NULL;
-#endif
     PW_CB_DATA *cb_data = (PW_CB_DATA *)cb_tmp;
 
-#ifdef OPENSSL_NO_UI
-    if (cb_data != NULL && cb_data->password != NULL) {
-        res = strlen(cb_data->password);
-        if (res > bufsiz)
-            res = bufsiz;
-        memcpy(buf, cb_data->password, res);
-    }
-#else
     ui = UI_new_method(ui_method);
     if (ui) {
         int ok = 0;
@@ -278,9 +309,9 @@ int password_callback(char *buf, int bufsiz, int verify, PW_CB_DATA *cb_tmp)
         /* We know that there is no previous user data to return to us */
         (void)UI_add_user_data(ui, cb_data);
 
-        if (ok >= 0)
-            ok = UI_add_input_string(ui, prompt, ui_flags, buf,
-                                     PW_MIN_LENGTH, bufsiz - 1);
+        ok = UI_add_input_string(ui, prompt, ui_flags, buf,
+                                 PW_MIN_LENGTH, bufsiz - 1);
+
         if (ok >= 0 && verify) {
             buff = app_malloc(bufsiz, "password buffer");
             ok = UI_add_verify_string(ui, prompt, ui_flags, buff,
@@ -289,8 +320,7 @@ int password_callback(char *buf, int bufsiz, int verify, PW_CB_DATA *cb_tmp)
         if (ok >= 0)
             do {
                 ok = UI_process(ui);
-            }
-            while (ok < 0 && UI_ctrl(ui, UI_CTRL_IS_REDOABLE, 0, 0, 0));
+            } while (ok < 0 && UI_ctrl(ui, UI_CTRL_IS_REDOABLE, 0, 0, 0));
 
         OPENSSL_clear_free(buff, (unsigned int)bufsiz);
 
@@ -310,7 +340,6 @@ int password_callback(char *buf, int bufsiz, int verify, PW_CB_DATA *cb_tmp)
         UI_free(ui);
         OPENSSL_free(prompt);
     }
-#endif
     return res;
 }
 
@@ -319,22 +348,24 @@ static char *app_get_pass(const char *arg, int keepbio);
 int app_passwd(const char *arg1, const char *arg2, char **pass1, char **pass2)
 {
     int same;
-    if (!arg2 || !arg1 || strcmp(arg1, arg2))
+    if (arg2 == NULL || arg1 == NULL || strcmp(arg1, arg2))
         same = 0;
     else
         same = 1;
-    if (arg1) {
+    if (arg1 != NULL) {
         *pass1 = app_get_pass(arg1, same);
-        if (!*pass1)
+        if (*pass1 == NULL)
             return 0;
-    } else if (pass1)
+    } else if (pass1 != NULL) {
         *pass1 = NULL;
-    if (arg2) {
+    }
+    if (arg2 != NULL) {
         *pass2 = app_get_pass(arg2, same ? 2 : 0);
-        if (!*pass2)
+        if (*pass2 == NULL)
             return 0;
-    } else if (pass2)
+    } else if (pass2 != NULL) {
         *pass2 = NULL;
+    }
     return 1;
 }
 
@@ -348,16 +379,16 @@ static char *app_get_pass(const char *arg, int keepbio)
         return OPENSSL_strdup(arg + 5);
     if (strncmp(arg, "env:", 4) == 0) {
         tmp = getenv(arg + 4);
-        if (!tmp) {
+        if (tmp == NULL) {
             BIO_printf(bio_err, "Can't read environment variable %s\n", arg + 4);
             return NULL;
         }
         return OPENSSL_strdup(tmp);
     }
-    if (!keepbio || !pwdbio) {
+    if (!keepbio || pwdbio == NULL) {
         if (strncmp(arg, "file:", 5) == 0) {
             pwdbio = BIO_new_file(arg + 5, "r");
-            if (!pwdbio) {
+            if (pwdbio == NULL) {
                 BIO_printf(bio_err, "Can't open file %s\n", arg + 5);
                 return NULL;
             }
@@ -406,7 +437,7 @@ static char *app_get_pass(const char *arg, int keepbio)
         return NULL;
     }
     tmp = strchr(tpass, '\n');
-    if (tmp)
+    if (tmp != NULL)
         *tmp = 0;
     return OPENSSL_strdup(tpass);
 }
@@ -431,6 +462,7 @@ static CONF *app_load_config_(BIO *in, const char *filename)
     NCONF_free(conf);
     return NULL;
 }
+
 CONF *app_load_config(const char *filename)
 {
     BIO *in;
@@ -444,6 +476,7 @@ CONF *app_load_config(const char *filename)
     BIO_free(in);
     return conf;
 }
+
 CONF *app_load_config_quiet(const char *filename)
 {
     BIO *in;
@@ -517,9 +550,9 @@ static int load_pkcs12(BIO *in, const char *desc,
         goto die;
     }
     /* See if an empty password will do */
-    if (PKCS12_verify_mac(p12, "", 0) || PKCS12_verify_mac(p12, NULL, 0))
+    if (PKCS12_verify_mac(p12, "", 0) || PKCS12_verify_mac(p12, NULL, 0)) {
         pass = "";
-    else {
+    } else {
         if (!pem_cb)
             pem_cb = (pem_password_cb *)password_callback;
         len = pem_cb(tpass, PEM_BUFSIZE, 0, cb_data);
@@ -580,8 +613,7 @@ static int load_cert_crl_http(const char *url, X509 **pcert, X509_CRL **pcrl)
     OPENSSL_free(host);
     OPENSSL_free(path);
     OPENSSL_free(port);
-    if (bio)
-        BIO_free_all(bio);
+    BIO_free_all(bio);
     OCSP_REQ_CTX_free(rctx);
     if (rv != 1) {
         BIO_printf(bio_err, "Error loading %s from %s\n",
@@ -607,17 +639,18 @@ X509 *load_cert(const char *file, int format, const char *cert_descrip)
     if (file == NULL) {
         unbuffer(stdin);
         cert = dup_bio_in(format);
-    } else
+    } else {
         cert = bio_open_default(file, 'r', format);
+    }
     if (cert == NULL)
         goto end;
 
-    if (format == FORMAT_ASN1)
+    if (format == FORMAT_ASN1) {
         x = d2i_X509_bio(cert, NULL);
-    else if (format == FORMAT_PEM)
+    } else if (format == FORMAT_PEM) {
         x = PEM_read_bio_X509_AUX(cert, NULL,
                                   (pem_password_cb *)password_callback, NULL);
-    else if (format == FORMAT_PKCS12) {
+    } else if (format == FORMAT_PKCS12) {
         if (!load_pkcs12(cert, cert_descrip, NULL, NULL, NULL, &x, NULL))
             goto end;
     } else {
@@ -648,11 +681,11 @@ X509_CRL *load_crl(const char *infile, int format)
     in = bio_open_default(infile, 'r', format);
     if (in == NULL)
         goto end;
-    if (format == FORMAT_ASN1)
+    if (format == FORMAT_ASN1) {
         x = d2i_X509_CRL_bio(in, NULL);
-    else if (format == FORMAT_PEM)
+    } else if (format == FORMAT_PEM) {
         x = PEM_read_bio_X509_CRL(in, NULL, NULL, NULL);
-    else {
+    } else {
         BIO_printf(bio_err, "bad input format specified for input crl\n");
         goto end;
     }
@@ -682,9 +715,9 @@ EVP_PKEY *load_key(const char *file, int format, int maybe_stdin,
         goto end;
     }
     if (format == FORMAT_ENGINE) {
-        if (e == NULL)
+        if (e == NULL) {
             BIO_printf(bio_err, "no engine specified\n");
-        else {
+        } else {
 #ifndef OPENSSL_NO_ENGINE
             if (ENGINE_init(e)) {
                 pkey = ENGINE_load_private_key(e, file, ui_method, &cb_data);
@@ -703,8 +736,9 @@ EVP_PKEY *load_key(const char *file, int format, int maybe_stdin,
     if (file == NULL && maybe_stdin) {
         unbuffer(stdin);
         key = dup_bio_in(format);
-    } else
+    } else {
         key = bio_open_default(file, 'r', format);
+    }
     if (key == NULL)
         goto end;
     if (format == FORMAT_ASN1) {
@@ -713,21 +747,19 @@ EVP_PKEY *load_key(const char *file, int format, int maybe_stdin,
         pkey = PEM_read_bio_PrivateKey(key, NULL,
                                        (pem_password_cb *)password_callback,
                                        &cb_data);
-    }
-    else if (format == FORMAT_PKCS12) {
+    } else if (format == FORMAT_PKCS12) {
         if (!load_pkcs12(key, key_descrip,
                          (pem_password_cb *)password_callback, &cb_data,
                          &pkey, NULL, NULL))
             goto end;
-    }
 #if !defined(OPENSSL_NO_RSA) && !defined(OPENSSL_NO_DSA) && !defined (OPENSSL_NO_RC4)
-    else if (format == FORMAT_MSBLOB)
+    } else if (format == FORMAT_MSBLOB) {
         pkey = b2i_PrivateKey_bio(key);
-    else if (format == FORMAT_PVK)
+    } else if (format == FORMAT_PVK) {
         pkey = b2i_PVK_bio(key, (pem_password_cb *)password_callback,
                            &cb_data);
 #endif
-    else {
+    } else {
         BIO_printf(bio_err, "bad input format specified for key file\n");
         goto end;
     }
@@ -755,9 +787,9 @@ EVP_PKEY *load_pubkey(const char *file, int format, int maybe_stdin,
         goto end;
     }
     if (format == FORMAT_ENGINE) {
-        if (e == NULL)
+        if (e == NULL) {
             BIO_printf(bio_err, "no engine specified\n");
-        else {
+        } else {
 #ifndef OPENSSL_NO_ENGINE
             pkey = ENGINE_load_public_key(e, file, ui_method, &cb_data);
             if (pkey == NULL) {
@@ -773,14 +805,14 @@ EVP_PKEY *load_pubkey(const char *file, int format, int maybe_stdin,
     if (file == NULL && maybe_stdin) {
         unbuffer(stdin);
         key = dup_bio_in(format);
-    } else
+    } else {
         key = bio_open_default(file, 'r', format);
+    }
     if (key == NULL)
         goto end;
     if (format == FORMAT_ASN1) {
         pkey = d2i_PUBKEY_bio(key, NULL);
-    }
-    else if (format == FORMAT_ASN1RSA) {
+    } else if (format == FORMAT_ASN1RSA) {
 #ifndef OPENSSL_NO_RSA
         RSA *rsa;
         rsa = d2i_RSAPublicKey_bio(key, NULL);
@@ -810,16 +842,15 @@ EVP_PKEY *load_pubkey(const char *file, int format, int maybe_stdin,
         BIO_printf(bio_err, "RSA keys not supported\n");
 #endif
             pkey = NULL;
-    }
-    else if (format == FORMAT_PEM) {
+    } else if (format == FORMAT_PEM) {
         pkey = PEM_read_bio_PUBKEY(key, NULL,
                                    (pem_password_cb *)password_callback,
                                    &cb_data);
-    }
 #if !defined(OPENSSL_NO_RSA) && !defined(OPENSSL_NO_DSA)
-    else if (format == FORMAT_MSBLOB)
+    } else if (format == FORMAT_MSBLOB) {
         pkey = b2i_PublicKey_bio(key);
 #endif
+    }
  end:
     BIO_free(key);
     if (pkey == NULL)
@@ -857,36 +888,36 @@ static int load_certs_crls(const char *file, int format,
 
     BIO_free(bio);
 
-    if (pcerts && *pcerts == NULL) {
+    if (pcerts != NULL && *pcerts == NULL) {
         *pcerts = sk_X509_new_null();
-        if (!*pcerts)
+        if (*pcerts == NULL)
             goto end;
     }
 
-    if (pcrls && *pcrls == NULL) {
+    if (pcrls != NULL && *pcrls == NULL) {
         *pcrls = sk_X509_CRL_new_null();
-        if (!*pcrls)
+        if (*pcrls == NULL)
             goto end;
     }
 
     for (i = 0; i < sk_X509_INFO_num(xis); i++) {
         xi = sk_X509_INFO_value(xis, i);
-        if (xi->x509 && pcerts) {
+        if (xi->x509 != NULL && pcerts != NULL) {
             if (!sk_X509_push(*pcerts, xi->x509))
                 goto end;
             xi->x509 = NULL;
         }
-        if (xi->crl && pcrls) {
+        if (xi->crl != NULL && pcrls != NULL) {
             if (!sk_X509_CRL_push(*pcrls, xi->crl))
                 goto end;
             xi->crl = NULL;
         }
     }
 
-    if (pcerts && sk_X509_num(*pcerts) > 0)
+    if (pcerts != NULL && sk_X509_num(*pcerts) > 0)
         rv = 1;
 
-    if (pcrls && sk_X509_CRL_num(*pcrls) > 0)
+    if (pcrls != NULL && sk_X509_CRL_num(*pcrls) > 0)
         rv = 1;
 
  end:
@@ -894,11 +925,11 @@ static int load_certs_crls(const char *file, int format,
     sk_X509_INFO_pop_free(xis, X509_INFO_free);
 
     if (rv == 0) {
-        if (pcerts) {
+        if (pcerts != NULL) {
             sk_X509_pop_free(*pcerts, X509_free);
             *pcerts = NULL;
         }
-        if (pcrls) {
+        if (pcrls != NULL) {
             sk_X509_CRL_pop_free(*pcrls, X509_CRL_free);
             *pcrls = NULL;
         }
@@ -1103,8 +1134,9 @@ static int set_table_opts(unsigned long *flags, const char *arg,
     } else if (c == '+') {
         c = 1;
         arg++;
-    } else
+    } else {
         c = 1;
+    }
 
     for (ptbl = in_tbl; ptbl->name; ptbl++) {
         if (strcasecmp(arg, ptbl->name) == 0) {
@@ -1149,9 +1181,9 @@ void print_bignum_var(BIO *out, const BIGNUM *in, const char *var,
                       int len, unsigned char *buffer)
 {
     BIO_printf(out, "    static unsigned char %s_%d[] = {", var, len);
-    if (BN_is_zero(in))
+    if (BN_is_zero(in)) {
         BIO_printf(out, "\n\t0x00");
-    else {
+    } else {
         int i, l;
 
         l = BN_bn2bin(in, buffer);
@@ -1166,6 +1198,7 @@ void print_bignum_var(BIO *out, const BIGNUM *in, const char *var,
     }
     BIO_printf(out, "\n    };\n");
 }
+
 void print_array(BIO *out, const char* title, int len, const unsigned char* d)
 {
     int i;
@@ -1199,8 +1232,9 @@ X509_STORE *setup_verify(const char *CAfile, const char *CApath, int noCAfile, i
                 BIO_printf(bio_err, "Error loading file %s\n", CAfile);
                 goto end;
             }
-        } else
+        } else {
             X509_LOOKUP_load_file(lookup, NULL, X509_FILETYPE_DEFAULT);
+        }
     }
 
     if (CApath != NULL || !noCApath) {
@@ -1212,8 +1246,9 @@ X509_STORE *setup_verify(const char *CAfile, const char *CApath, int noCAfile, i
                 BIO_printf(bio_err, "Error loading directory %s\n", CApath);
                 goto end;
             }
-        } else
+        } else {
             X509_LOOKUP_add_dir(lookup, NULL, X509_FILETYPE_DEFAULT);
+        }
     }
 
     ERR_clear_error();
@@ -1244,7 +1279,7 @@ ENGINE *setup_engine(const char *engine, int debug)
     ENGINE *e = NULL;
 
 #ifndef OPENSSL_NO_ENGINE
-    if (engine) {
+    if (engine != NULL) {
         if (strcmp(engine, "auto") == 0) {
             BIO_printf(bio_err, "enabling auto ENGINE support\n");
             ENGINE_register_all_complete();
@@ -1466,15 +1501,11 @@ int rand_serial(BIGNUM *b, ASN1_INTEGER *ai)
     BIGNUM *btmp;
     int ret = 0;
 
-    if (b)
-        btmp = b;
-    else
-        btmp = BN_new();
-
+    btmp = b == NULL ? BN_new() : b;
     if (btmp == NULL)
         return 0;
 
-    if (!BN_pseudo_rand(btmp, SERIAL_RAND_BITS, 0, 0))
+    if (!BN_rand(btmp, SERIAL_RAND_BITS, BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY))
         goto error;
     if (ai && !BN_to_ASN1_INTEGER(btmp, ai))
         goto error;
@@ -1850,8 +1881,9 @@ static void nodes_print(const char *name, STACK_OF(X509_POLICY_NODE) *nodes)
             node = sk_X509_POLICY_NODE_value(nodes, i);
             X509_POLICY_NODE_print(bio_err, node, 2);
         }
-    } else
+    } else {
         BIO_puts(bio_err, " <empty>\n");
+    }
 }
 
 void policies_print(X509_STORE_CTX *ctx)
@@ -1896,8 +1928,9 @@ unsigned char *next_protos_parse(size_t *outlen, const char *in)
             }
             out[start] = i - start;
             start = i + 1;
-        } else
+        } else {
             out[i + 1] = in[i];
+        }
     }
 
     *outlen = len + 1;
@@ -2206,9 +2239,9 @@ double app_tminterval(int stop, int usertime)
     if (usertime)
         now = rus.tms_utime;
 
-    if (stop == TM_START)
+    if (stop == TM_START) {
         tmstart = now;
-    else {
+    } else {
         long int tck = sysconf(_SC_CLK_TCK);
         ret = (now - tmstart) / (double)tck;
     }
@@ -2255,29 +2288,27 @@ int app_access(const char* name, int flag)
 #ifdef _WIN32
 int app_isdir(const char *name)
 {
-    HANDLE hList;
-    WIN32_FIND_DATA FileData;
+    DWORD attr;
 # if defined(UNICODE) || defined(_UNICODE)
     size_t i, len_0 = strlen(name) + 1;
+    WCHAR tempname[MAX_PATH];
 
-    if (len_0 > OSSL_NELEM(FileData.cFileName))
+    if (len_0 > MAX_PATH)
         return -1;
 
 #  if !defined(_WIN32_WCE) || _WIN32_WCE>=101
-    if (!MultiByteToWideChar
-        (CP_ACP, 0, name, len_0, FileData.cFileName, len_0))
+    if (!MultiByteToWideChar(CP_ACP, 0, name, len_0, tempname, MAX_PATH))
 #  endif
         for (i = 0; i < len_0; i++)
-            FileData.cFileName[i] = (WCHAR)name[i];
+            tempname[i] = (WCHAR)name[i];
 
-    hList = FindFirstFile(FileData.cFileName, &FileData);
+    attr = GetFileAttributes(tempname);
 # else
-    hList = FindFirstFile(name, &FileData);
+    attr = GetFileAttributes(name);
 # endif
-    if (hList == INVALID_HANDLE_VALUE)
+    if (attr == INVALID_FILE_ATTRIBUTES)
         return -1;
-    FindClose(hList);
-    return ((FileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
+    return ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0);
 }
 #else
 # include <sys/stat.h>
@@ -2345,7 +2376,7 @@ int raw_read_stdin(void *buf, int siz)
         return (-1);
 }
 #elif defined(__VMS)
-#include <sys/socket.h>
+# include <sys/socket.h>
 
 int raw_read_stdin(void *buf, int siz)
 {
@@ -2575,6 +2606,7 @@ void wait_for_async(SSL *s)
     fd_set asyncfds;
     OSSL_ASYNC_FD *fds;
     size_t numfds;
+    size_t i;
 
     if (!SSL_get_all_async_fds(s, NULL, &numfds))
         return;
@@ -2583,17 +2615,17 @@ void wait_for_async(SSL *s)
     fds = app_malloc(sizeof(OSSL_ASYNC_FD) * numfds, "allocate async fds");
     if (!SSL_get_all_async_fds(s, fds, &numfds)) {
         OPENSSL_free(fds);
+        return;
     }
 
     FD_ZERO(&asyncfds);
-    while (numfds > 0) {
-        if (width <= (int)*fds)
-            width = (int)*fds + 1;
-        openssl_fdset((int)*fds, &asyncfds);
-        numfds--;
-        fds++;
+    for (i = 0; i < numfds; i++) {
+        if (width <= (int)fds[i])
+            width = (int)fds[i] + 1;
+        openssl_fdset((int)fds[i], &asyncfds);
     }
     select(width, (void *)&asyncfds, NULL, NULL, NULL);
+    OPENSSL_free(fds);
 #endif
 }
 
@@ -2639,15 +2671,23 @@ int set_cert_times(X509 *x, const char *startdate, const char *enddate,
         if (X509_gmtime_adj(X509_getm_notBefore(x), 0) == NULL)
             return 0;
     } else {
-        if (!ASN1_TIME_set_string(X509_getm_notBefore(x), startdate))
+        if (!ASN1_TIME_set_string_X509(X509_getm_notBefore(x), startdate))
             return 0;
     }
     if (enddate == NULL) {
         if (X509_time_adj_ex(X509_getm_notAfter(x), days, 0, NULL)
             == NULL)
             return 0;
-    } else if (!ASN1_TIME_set_string(X509_getm_notAfter(x), enddate)) {
+    } else if (!ASN1_TIME_set_string_X509(X509_getm_notAfter(x), enddate)) {
         return 0;
     }
     return 1;
+}
+
+void make_uppercase(char *string)
+{
+    int i;
+
+    for (i = 0; string[i] != '\0'; i++)
+        string[i] = toupper((unsigned char)string[i]);
 }

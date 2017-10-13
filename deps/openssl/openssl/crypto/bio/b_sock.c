@@ -43,14 +43,13 @@ int BIO_get_host_ip(const char *str, unsigned char *ip)
         if (BIO_ADDRINFO_family(res) != AF_INET) {
             BIOerr(BIO_F_BIO_GET_HOST_IP,
                    BIO_R_GETHOSTBYNAME_ADDR_IS_NOT_AF_INET);
-        } else {
-            BIO_ADDR_rawaddress(BIO_ADDRINFO_address(res), NULL, &l);
-            /* Because only AF_INET addresses will reach this far,
-               we can assert that l should be 4 */
-            OPENSSL_assert(l == 4);
-
-            BIO_ADDR_rawaddress(BIO_ADDRINFO_address(res), ip, &l);
-            ret = 1;
+        } else if (BIO_ADDR_rawaddress(BIO_ADDRINFO_address(res), NULL, &l)) {
+            /*
+             * Because only AF_INET addresses will reach this far, we can assert
+             * that l should be 4
+             */
+            if (ossl_assert(l == 4))
+                ret = BIO_ADDR_rawaddress(BIO_ADDRINFO_address(res), ip, &l);
         }
         BIO_ADDRINFO_free(res);
     } else {
@@ -154,7 +153,7 @@ int BIO_sock_init(void)
         return (-1);
 # endif
 
-    return (1);
+    return 1;
 }
 
 void bio_sock_cleanup_int(void)
@@ -166,8 +165,6 @@ void bio_sock_cleanup_int(void)
     }
 # endif
 }
-
-# if !defined(OPENSSL_SYS_VMS) || __VMS_VER >= 70000000
 
 int BIO_socket_ioctl(int fd, long type, void *arg)
 {
@@ -206,7 +203,6 @@ int BIO_socket_ioctl(int fd, long type, void *arg)
         SYSerr(SYS_F_IOCTLSOCKET, get_last_socket_error());
     return (i);
 }
-# endif                         /* __VMS_VER */
 
 # if OPENSSL_API_COMPAT < 0x10100000L
 int BIO_get_accept_socket(char *host, int bind_mode)

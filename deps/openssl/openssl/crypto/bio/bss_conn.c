@@ -58,7 +58,11 @@ void BIO_CONNECT_free(BIO_CONNECT *a);
 static const BIO_METHOD methods_connectp = {
     BIO_TYPE_CONNECT,
     "socket connect",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     conn_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     conn_read,
     conn_puts,
     NULL,                       /* connect_gets, */
@@ -250,7 +254,7 @@ static int conn_new(BIO *bi)
     if ((bi->ptr = (char *)BIO_CONNECT_new()) == NULL)
         return (0);
     else
-        return (1);
+        return 1;
 }
 
 static void conn_close_socket(BIO *bio)
@@ -282,7 +286,7 @@ static int conn_free(BIO *a)
         a->flags = 0;
         a->init = 0;
     }
-    return (1);
+    return 1;
 }
 
 static int conn_read(BIO *b, char *out, int outl)
@@ -474,15 +478,7 @@ static long conn_ctrl(BIO *b, int cmd, long num, void *ptr)
         }
         break;
     case BIO_CTRL_SET_CALLBACK:
-        {
-# if 0                          /* FIXME: Should this be used? -- Richard
-                                 * Levitte */
-            BIOerr(BIO_F_CONN_CTRL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-            ret = -1;
-# else
-            ret = 0;
-# endif
-        }
+        ret = 0; /* use callback ctrl */
         break;
     case BIO_CTRL_GET_CALLBACK:
         {

@@ -25,7 +25,11 @@ static long buffer_callback_ctrl(BIO *h, int cmd, bio_info_cb *fp);
 static const BIO_METHOD methods_buffer = {
     BIO_TYPE_BUFFER,
     "buffer",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     buffer_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     buffer_read,
     buffer_puts,
     buffer_gets,
@@ -63,7 +67,7 @@ static int buffer_new(BIO *bi)
     bi->init = 1;
     bi->ptr = (char *)ctx;
     bi->flags = 0;
-    return (1);
+    return 1;
 }
 
 static int buffer_free(BIO *a)
@@ -79,7 +83,7 @@ static int buffer_free(BIO *a)
     a->ptr = NULL;
     a->init = 0;
     a->flags = 0;
-    return (1);
+    return 1;
 }
 
 static int buffer_read(BIO *b, char *out, int outl)
@@ -251,6 +255,11 @@ static long buffer_ctrl(BIO *b, int cmd, long num, void *ptr)
             return (0);
         ret = BIO_ctrl(b->next_bio, cmd, num, ptr);
         break;
+    case BIO_CTRL_EOF:
+        if (ctx->ibuf_len > 0)
+            return 0;
+        ret = BIO_ctrl(b->next_bio, cmd, num, ptr);
+        break;
     case BIO_CTRL_INFO:
         ret = (long)ctx->obuf_len;
         break;
@@ -375,6 +384,17 @@ static long buffer_ctrl(BIO *b, int cmd, long num, void *ptr)
         if (!BIO_set_read_buffer_size(dbio, ctx->ibuf_size) ||
             !BIO_set_write_buffer_size(dbio, ctx->obuf_size))
             ret = 0;
+        break;
+    case BIO_CTRL_PEEK:
+        /* Ensure there's stuff in the input buffer */
+        {
+            char fake_buf[1];
+            (void)buffer_read(b, fake_buf, 0);
+        }
+        if (num > ctx->ibuf_len)
+            num = ctx->ibuf_len;
+        memcpy(ptr, &(ctx->ibuf[ctx->ibuf_off]), num);
+        ret = num;
         break;
     default:
         if (b->next_bio == NULL)

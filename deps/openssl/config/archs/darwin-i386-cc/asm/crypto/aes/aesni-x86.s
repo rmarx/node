@@ -1,4 +1,3 @@
-.file	"crypto/aes/asm/aesni-x86.s"
 .text
 .globl	_aesni_encrypt
 .align	4

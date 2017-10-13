@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,13 +12,18 @@
 #include <stdio.h>
 #include <string.h>
 #include "internal/cryptlib.h"
-#include <openssl/stack.h>
 #include <openssl/lhash.h>
 #include <openssl/conf.h>
 #include <openssl/conf_api.h>
 #include "conf_def.h"
 #include <openssl/buffer.h>
 #include <openssl/err.h>
+
+/*
+ * The maximum length we can grow a value to after variable expansion. 64k
+ * should be more than enough for all reasonable uses.
+ */
+#define MAX_CONF_VALUE_LENGTH       65536
 
 static char *eat_ws(CONF *conf, char *p);
 static char *eat_alpha_numeric(CONF *conf, char *p);
@@ -311,13 +316,12 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
             }
             if (psection == NULL)
                 psection = section;
-            v->name = OPENSSL_malloc(strlen(pname) + 1);
+            v->name = OPENSSL_strdup(pname);
             v->value = NULL;
             if (v->name == NULL) {
                 CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
-            OPENSSL_strlcpy(v->name, pname, strlen(pname) + 1);
             if (!str_copy(conf, psection, &(v->value), start))
                 goto err;
 
@@ -341,13 +345,13 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
     }
     BUF_MEM_free(buff);
     OPENSSL_free(section);
-    return (1);
+    return 1;
  err:
     BUF_MEM_free(buff);
     OPENSSL_free(section);
     if (line != NULL)
         *line = eline;
-    BIO_snprintf(btmp, sizeof btmp, "%ld", eline);
+    BIO_snprintf(btmp, sizeof(btmp), "%ld", eline);
     ERR_add_error_data(2, "line ", btmp);
     if (h != conf->data) {
         CONF_free(conf->data);
@@ -358,7 +362,7 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
         OPENSSL_free(v->value);
         OPENSSL_free(v);
     }
-    return (0);
+    return 0;
 }
 
 static void clear_comments(CONF *conf, char *p)
@@ -405,7 +409,7 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
     BUF_MEM *buf;
 
     if ((buf = BUF_MEM_new()) == NULL)
-        return (0);
+        return 0;
 
     len = strlen(from) + 1;
     if (!BUF_MEM_grow(buf, len))
@@ -457,6 +461,8 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
         } else if (IS_EOF(conf, *from))
             break;
         else if (*from == '$') {
+            size_t newsize;
+
             /* try to expand it */
             rrp = NULL;
             s = &(from[1]);
@@ -511,8 +517,12 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
                 CONFerr(CONF_F_STR_COPY, CONF_R_VARIABLE_HAS_NO_VALUE);
                 goto err;
             }
-            if (!BUF_MEM_grow_clean(buf,
-                        (strlen(p) + buf->length - (e - from)))) {
+            newsize = strlen(p) + buf->length - (e - from);
+            if (newsize > MAX_CONF_VALUE_LENGTH) {
+                CONFerr(CONF_F_STR_COPY, CONF_R_VARIABLE_EXPANSION_TOO_LONG);
+                goto err;
+            }
+            if (!BUF_MEM_grow_clean(buf, newsize)) {
                 CONFerr(CONF_F_STR_COPY, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
@@ -539,17 +549,17 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
     OPENSSL_free(*pto);
     *pto = buf->data;
     OPENSSL_free(buf);
-    return (1);
+    return 1;
  err:
     BUF_MEM_free(buf);
-    return (0);
+    return 0;
 }
 
 static char *eat_ws(CONF *conf, char *p)
 {
     while (IS_WS(conf, *p) && (!IS_EOF(conf, *p)))
         p++;
-    return (p);
+    return p;
 }
 
 static char *eat_alpha_numeric(CONF *conf, char *p)
@@ -560,7 +570,7 @@ static char *eat_alpha_numeric(CONF *conf, char *p)
             continue;
         }
         if (!IS_ALPHA_NUMERIC_PUNCT(conf, *p))
-            return (p);
+            return p;
         p++;
     }
 }
@@ -574,13 +584,13 @@ static char *scan_quote(CONF *conf, char *p)
         if (IS_ESC(conf, *p)) {
             p++;
             if (IS_EOF(conf, *p))
-                return (p);
+                return p;
         }
         p++;
     }
     if (*p == q)
         p++;
-    return (p);
+    return p;
 }
 
 static char *scan_dquote(CONF *conf, char *p)
@@ -600,7 +610,7 @@ static char *scan_dquote(CONF *conf, char *p)
     }
     if (*p == q)
         p++;
-    return (p);
+    return p;
 }
 
 static void dump_value_doall_arg(const CONF_VALUE *a, BIO *out)

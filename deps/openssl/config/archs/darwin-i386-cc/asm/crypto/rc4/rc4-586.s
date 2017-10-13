@@ -1,4 +1,3 @@
-.file	"rc4-586.s"
 .text
 .globl	_RC4
 .align	4

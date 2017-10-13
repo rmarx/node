@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -26,7 +26,7 @@ typedef enum OPTION_choice {
     OPT_ALGORITHM, OPT_PKEYOPT, OPT_GENPARAM, OPT_TEXT, OPT_CIPHER
 } OPTION_CHOICE;
 
-OPTIONS genpkey_options[] = {
+const OPTIONS genpkey_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"out", OPT_OUT, '>', "Output file"},
     {"outform", OPT_OUTFORM, 'F', "output format (DER or PEM)"},
@@ -156,9 +156,9 @@ int genpkey_main(int argc, char **argv)
         }
     }
 
-    if (do_param)
+    if (do_param) {
         rv = PEM_write_bio_Parameters(out, pkey);
-    else if (outformat == FORMAT_PEM) {
+    } else if (outformat == FORMAT_PEM) {
         assert(private);
         rv = PEM_write_bio_PrivateKey(out, pkey, cipher, NULL, 0, NULL, pass);
     } else if (outformat == FORMAT_ASN1) {

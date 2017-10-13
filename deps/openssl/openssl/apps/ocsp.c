@@ -1,5 +1,5 @@
 /*
- * Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2001-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -16,8 +16,6 @@ NON_EMPTY_TRANSLATION_UNIT
 #  define _XOPEN_SOURCE_EXTENDED/* So fd_set and friends get properly defined
                                  * on OpenVMS */
 # endif
-
-# define USE_SOCKETS
 
 # include <stdio.h>
 # include <stdlib.h>
@@ -64,7 +62,7 @@ static void print_ocsp_summary(BIO *out, OCSP_BASICRESP *bs, OCSP_REQUEST *req,
                               STACK_OF(OCSP_CERTID) *ids, long nsec,
                               long maxage);
 static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
-                              CA_DB *db, X509 *ca, X509 *rcert,
+                              CA_DB *db, STACK_OF(X509) *ca, X509 *rcert,
                               EVP_PKEY *rkey, const EVP_MD *md,
                               STACK_OF(X509) *rother, unsigned long flags,
                               int nmin, int ndays, int badsig);
@@ -99,7 +97,7 @@ typedef enum OPTION_choice {
     OPT_MD
 } OPTION_CHOICE;
 
-OPTIONS ocsp_options[] = {
+const OPTIONS ocsp_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"out", OPT_OUTFILE, '>', "Output filename"},
     {"timeout", OPT_TIMEOUT, 'p',
@@ -108,7 +106,7 @@ OPTIONS ocsp_options[] = {
     {"host", OPT_HOST, 's', "TCP/IP hostname:port to connect to"},
     {"port", OPT_PORT, 'p', "Port to run responder on"},
     {"ignore_err", OPT_IGNORE_ERR, '-',
-     "Ignore Error response from OCSP responder, and retry "},
+     "Ignore error on OCSP request or response and continue running"},
     {"noverify", OPT_NOVERIFY, '-', "Don't verify response at all"},
     {"nonce", OPT_NONCE, '-', "Add OCSP nonce to request"},
     {"no_nonce", OPT_NO_NONCE, '-', "Don't add OCSP nonce to request"},
@@ -192,7 +190,8 @@ int ocsp_main(int argc, char **argv)
     STACK_OF(OPENSSL_STRING) *reqnames = NULL;
     STACK_OF(X509) *sign_other = NULL, *verify_other = NULL, *rother = NULL;
     STACK_OF(X509) *issuers = NULL;
-    X509 *issuer = NULL, *cert = NULL, *rca_cert = NULL;
+    X509 *issuer = NULL, *cert = NULL;
+    STACK_OF(X509) *rca_cert = NULL;
     X509 *signer = NULL, *rsigner = NULL;
     X509_STORE *store = NULL;
     X509_VERIFY_PARAM *vpm = NULL;
@@ -218,10 +217,10 @@ int ocsp_main(int argc, char **argv)
     char *prog;
 
     reqnames = sk_OPENSSL_STRING_new_null();
-    if (!reqnames)
+    if (reqnames == NULL)
         goto end;
     ids = sk_OCSP_CERTID_new_null();
-    if (!ids)
+    if (ids == NULL)
         goto end;
     if ((vpm = X509_VERIFY_PARAM_new()) == NULL)
         return 1;
@@ -470,62 +469,65 @@ int ocsp_main(int argc, char **argv)
         goto opthelp;
 
     /* Have we anything to do? */
-    if (!req && !reqin && !respin && !(port && ridx_filename))
+    if (req == NULL&& reqin == NULL
+        && respin == NULL && !(port != NULL && ridx_filename != NULL))
         goto opthelp;
 
     out = bio_open_default(outfile, 'w', FORMAT_TEXT);
     if (out == NULL)
         goto end;
 
-    if (!req && (add_nonce != 2))
+    if (req == NULL && (add_nonce != 2))
         add_nonce = 0;
 
-    if (!req && reqin) {
+    if (req == NULL && reqin != NULL) {
         derbio = bio_open_default(reqin, 'r', FORMAT_ASN1);
         if (derbio == NULL)
             goto end;
         req = d2i_OCSP_REQUEST_bio(derbio, NULL);
         BIO_free(derbio);
-        if (!req) {
+        if (req == NULL) {
             BIO_printf(bio_err, "Error reading OCSP request\n");
             goto end;
         }
     }
 
-    if (!req && port) {
+    if (req == NULL && port != NULL) {
         acbio = init_responder(port);
-        if (!acbio)
+        if (acbio == NULL)
             goto end;
     }
 
-    if (rsignfile) {
-        if (!rkeyfile)
+    if (rsignfile != NULL) {
+        if (rkeyfile == NULL)
             rkeyfile = rsignfile;
         rsigner = load_cert(rsignfile, FORMAT_PEM, "responder certificate");
-        if (!rsigner) {
+        if (rsigner == NULL) {
             BIO_printf(bio_err, "Error loading responder certificate\n");
             goto end;
         }
-        rca_cert = load_cert(rca_filename, FORMAT_PEM, "CA certificate");
-        if (rcertfile) {
+        if (!load_certs(rca_filename, &rca_cert, FORMAT_PEM,
+                        NULL, "CA certificate"))
+            goto end;
+        if (rcertfile != NULL) {
             if (!load_certs(rcertfile, &rother, FORMAT_PEM, NULL,
                             "responder other certificates"))
                 goto end;
         }
         rkey = load_key(rkeyfile, FORMAT_PEM, 0, NULL, NULL,
                         "responder private key");
-        if (!rkey)
+        if (rkey == NULL)
             goto end;
     }
-    if (acbio)
+    if (acbio != NULL)
         BIO_printf(bio_err, "Waiting for OCSP client connections...\n");
 
- redo_accept:
+redo_accept:
 
-    if (acbio) {
+    if (acbio != NULL) {
         if (!do_responder(&req, &cbio, acbio))
             goto end;
-        if (!req) {
+        if (req == NULL) {
             resp =
                 OCSP_response_create(OCSP_RESPONSE_STATUS_MALFORMEDREQUEST,
                                      NULL);
@@ -534,30 +536,32 @@ int ocsp_main(int argc, char **argv)
         }
     }
 
-    if (!req && (signfile || reqout || host || add_nonce || ridx_filename)) {
+    if (req == NULL
+        && (signfile != NULL || reqout != NULL
+            || host != NULL || add_nonce || ridx_filename != NULL)) {
         BIO_printf(bio_err, "Need an OCSP request for this operation!\n");
         goto end;
     }
 
-    if (req && add_nonce)
+    if (req != NULL && add_nonce)
         OCSP_request_add1_nonce(req, NULL, -1);
 
-    if (signfile) {
-        if (!keyfile)
+    if (signfile != NULL) {
+        if (keyfile == NULL)
             keyfile = signfile;
         signer = load_cert(signfile, FORMAT_PEM, "signer certificate");
-        if (!signer) {
+        if (signer == NULL) {
             BIO_printf(bio_err, "Error loading signer certificate\n");
             goto end;
         }
-        if (sign_certfile) {
+        if (sign_certfile != NULL) {
             if (!load_certs(sign_certfile, &sign_other, FORMAT_PEM, NULL,
                             "signer certificates"))
                 goto end;
         }
         key = load_key(keyfile, FORMAT_PEM, 0, NULL, NULL,
                        "signer private key");
-        if (!key)
+        if (key == NULL)
             goto end;
 
         if (!OCSP_request_sign
@@ -567,10 +571,10 @@ int ocsp_main(int argc, char **argv)
         }
     }
 
-    if (req_text && req)
+    if (req_text && req != NULL)
         OCSP_REQUEST_print(out, req, 0);
 
-    if (reqout) {
+    if (reqout != NULL) {
         derbio = bio_open_default(reqout, 'w', FORMAT_ASN1);
         if (derbio == NULL)
             goto end;
@@ -578,43 +582,44 @@ int ocsp_main(int argc, char **argv)
         BIO_free(derbio);
     }
 
-    if (ridx_filename && (!rkey || !rsigner || !rca_cert)) {
+    if (ridx_filename != NULL
+        && (rkey == NULL || rsigner == NULL || rca_cert == NULL)) {
         BIO_printf(bio_err,
                    "Need a responder certificate, key and CA for this operation!\n");
         goto end;
     }
 
-    if (ridx_filename && !rdb) {
+    if (ridx_filename != NULL && rdb == NULL) {
         rdb = load_index(ridx_filename, NULL);
-        if (!rdb)
+        if (rdb == NULL)
             goto end;
         if (!index_index(rdb))
             goto end;
     }
 
-    if (rdb) {
+    if (rdb != NULL) {
         make_ocsp_response(&resp, req, rdb, rca_cert, rsigner, rkey,
                                rsign_md, rother, rflags, nmin, ndays, badsig);
-        if (cbio)
+        if (cbio != NULL)
             send_ocsp_response(cbio, resp);
-    } else if (host) {
+    } else if (host != NULL) {
 # ifndef OPENSSL_NO_SOCK
         resp = process_responder(req, host, path,
                                  port, use_ssl, headers, req_timeout);
-        if (!resp)
+        if (resp == NULL)
             goto end;
 # else
         BIO_printf(bio_err,
                    "Error creating connect BIO - sockets not supported.\n");
         goto end;
 # endif
-    } else if (respin) {
+    } else if (respin != NULL) {
         derbio = bio_open_default(respin, 'r', FORMAT_ASN1);
         if (derbio == NULL)
             goto end;
         resp = d2i_OCSP_RESPONSE_bio(derbio, NULL);
         BIO_free(derbio);
-        if (!resp) {
+        if (resp == NULL) {
             BIO_printf(bio_err, "Error reading OCSP response\n");
             goto end;
         }
@@ -625,7 +630,7 @@ int ocsp_main(int argc, char **argv)
 
  done_resp:
 
-    if (respout) {
+    if (respout != NULL) {
         derbio = bio_open_default(respout, 'w', FORMAT_ASN1);
         if (derbio == NULL)
             goto end;
@@ -647,7 +652,7 @@ int ocsp_main(int argc, char **argv)
         OCSP_RESPONSE_print(out, resp, 0);
 
     /* If running as responder don't verify our own response */
-    if (cbio) {
+    if (cbio != NULL) {
         /* If not unlimited, see if we took all we should. */
         if (accept_count != -1 && --accept_count <= 0) {
             ret = 0;
@@ -661,26 +666,26 @@ int ocsp_main(int argc, char **argv)
         resp = NULL;
         goto redo_accept;
     }
-    if (ridx_filename) {
+    if (ridx_filename != NULL) {
         ret = 0;
         goto end;
     }
 
-    if (!store) {
+    if (store == NULL) {
         store = setup_verify(CAfile, CApath, noCAfile, noCApath);
         if (!store)
             goto end;
     }
     if (vpmtouched)
         X509_STORE_set1_param(store, vpm);
-    if (verify_certfile) {
+    if (verify_certfile != NULL) {
         if (!load_certs(verify_certfile, &verify_other, FORMAT_PEM, NULL,
                         "validator certificate"))
             goto end;
     }
 
     bs = OCSP_response_get1_basic(resp);
-    if (!bs) {
+    if (bs == NULL) {
         BIO_printf(bio_err, "Error parsing response\n");
         goto end;
     }
@@ -688,7 +693,7 @@ int ocsp_main(int argc, char **argv)
     ret = 0;
 
     if (!noverify) {
-        if (req && ((i = OCSP_check_nonce(req, bs)) <= 0)) {
+        if (req != NULL && ((i = OCSP_check_nonce(req, bs)) <= 0)) {
             if (i == -1)
                 BIO_printf(bio_err, "WARNING: no nonce in response\n");
             else {
@@ -708,9 +713,9 @@ int ocsp_main(int argc, char **argv)
             BIO_printf(bio_err, "Response Verify Failure\n");
             ERR_print_errors(bio_err);
             ret = 1;
-        } else
+        } else {
             BIO_printf(bio_err, "Response verify OK\n");
-
+        }
     }
 
     print_ocsp_summary(out, bs, req, reqnames, ids, nsec, maxage);
@@ -725,7 +730,7 @@ int ocsp_main(int argc, char **argv)
     X509_free(cert);
     sk_X509_pop_free(issuers, X509_free);
     X509_free(rsigner);
-    X509_free(rca_cert);
+    sk_X509_pop_free(rca_cert, X509_free);
     free_index(rdb);
     BIO_free_all(cbio);
     BIO_free_all(acbio);
@@ -750,7 +755,8 @@ static int add_ocsp_cert(OCSP_REQUEST **req, X509 *cert,
                          STACK_OF(OCSP_CERTID) *ids)
 {
     OCSP_CERTID *id;
-    if (!issuer) {
+
+    if (issuer == NULL) {
         BIO_printf(bio_err, "No issuer certificate specified\n");
         return 0;
     }
@@ -759,7 +765,7 @@ static int add_ocsp_cert(OCSP_REQUEST **req, X509 *cert,
     if (*req == NULL)
         goto err;
     id = OCSP_cert_to_id(cert_id_md, cert, issuer);
-    if (!id || !sk_OCSP_CERTID_push(ids, id))
+    if (id == NULL || !sk_OCSP_CERTID_push(ids, id))
         goto err;
     if (!OCSP_request_add0_id(*req, id))
         goto err;
@@ -778,7 +784,8 @@ static int add_ocsp_serial(OCSP_REQUEST **req, char *serial,
     X509_NAME *iname;
     ASN1_BIT_STRING *ikey;
     ASN1_INTEGER *sno;
-    if (!issuer) {
+
+    if (issuer == NULL) {
         BIO_printf(bio_err, "No issuer certificate specified\n");
         return 0;
     }
@@ -789,7 +796,7 @@ static int add_ocsp_serial(OCSP_REQUEST **req, char *serial,
     iname = X509_get_subject_name(issuer);
     ikey = X509_get0_pubkey_bitstr(issuer);
     sno = s2i_ASN1_INTEGER(NULL, serial);
-    if (!sno) {
+    if (sno == NULL) {
         BIO_printf(bio_err, "Error converting serial number %s\n", serial);
         return 0;
     }
@@ -816,7 +823,7 @@ static void print_ocsp_summary(BIO *out, OCSP_BASICRESP *bs, OCSP_REQUEST *req,
     int i, status, reason;
     ASN1_GENERALIZEDTIME *rev, *thisupd, *nextupd;
 
-    if (!bs || !req || !sk_OPENSSL_STRING_num(names)
+    if (bs == NULL || req == NULL || !sk_OPENSSL_STRING_num(names)
         || !sk_OCSP_CERTID_num(ids))
         return;
 
@@ -864,13 +871,13 @@ static void print_ocsp_summary(BIO *out, OCSP_BASICRESP *bs, OCSP_REQUEST *req,
 }
 
 static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
-                              CA_DB *db, X509 *ca, X509 *rcert,
+                              CA_DB *db, STACK_OF(X509) *ca, X509 *rcert,
                               EVP_PKEY *rkey, const EVP_MD *rmd,
                               STACK_OF(X509) *rother, unsigned long flags,
                               int nmin, int ndays, int badsig)
 {
     ASN1_TIME *thisupd = NULL, *nextupd = NULL;
-    OCSP_CERTID *cid, *ca_id = NULL;
+    OCSP_CERTID *cid;
     OCSP_BASICRESP *bs = NULL;
     int i, id_count;
 
@@ -892,6 +899,8 @@ static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
         OCSP_ONEREQ *one;
         ASN1_INTEGER *serial;
         char **inf;
+        int jj;
+        int found = 0;
         ASN1_OBJECT *cert_id_md_oid;
         const EVP_MD *cert_id_md;
         one = OCSP_request_onereq_get0(req, i);
@@ -900,16 +909,22 @@ static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
         OCSP_id_get0_info(NULL, &cert_id_md_oid, NULL, NULL, cid);
 
         cert_id_md = EVP_get_digestbyobj(cert_id_md_oid);
-        if (!cert_id_md) {
+        if (cert_id_md == NULL) {
             *resp = OCSP_response_create(OCSP_RESPONSE_STATUS_INTERNALERROR,
                                          NULL);
             goto end;
         }
-        OCSP_CERTID_free(ca_id);
-        ca_id = OCSP_cert_to_id(cert_id_md, NULL, ca);
+        for (jj = 0; jj < sk_X509_num(ca) && !found; jj++) {
+            X509 *ca_cert = sk_X509_value(ca, jj);
+            OCSP_CERTID *ca_id = OCSP_cert_to_id(cert_id_md, NULL, ca_cert);
 
-        /* Is this request about our CA? */
-        if (OCSP_id_issuer_cmp(ca_id, cid)) {
+            if (OCSP_id_issuer_cmp(ca_id, cid) == 0)
+                found = 1;
+
+            OCSP_CERTID_free(ca_id);
+        }
+
+        if (!found) {
             OCSP_basic_add1_status(bs, cid,
                                    V_OCSP_CERTSTATUS_UNKNOWN,
                                    0, NULL, thisupd, nextupd);
@@ -917,15 +932,15 @@ static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
         }
         OCSP_id_get0_info(NULL, NULL, NULL, &serial, cid);
         inf = lookup_serial(db, serial);
-        if (!inf)
+        if (inf == NULL) {
             OCSP_basic_add1_status(bs, cid,
                                    V_OCSP_CERTSTATUS_UNKNOWN,
                                    0, NULL, thisupd, nextupd);
-        else if (inf[DB_type][0] == DB_TYPE_VAL)
+        } else if (inf[DB_type][0] == DB_TYPE_VAL) {
             OCSP_basic_add1_status(bs, cid,
                                    V_OCSP_CERTSTATUS_GOOD,
                                    0, NULL, thisupd, nextupd);
-        else if (inf[DB_type][0] == DB_TYPE_REV) {
+        } else if (inf[DB_type][0] == DB_TYPE_REV) {
             ASN1_OBJECT *inst = NULL;
             ASN1_TIME *revtm = NULL;
             ASN1_GENERALIZEDTIME *invtm = NULL;
@@ -935,10 +950,10 @@ static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
             single = OCSP_basic_add1_status(bs, cid,
                                             V_OCSP_CERTSTATUS_REVOKED,
                                             reason, revtm, thisupd, nextupd);
-            if (invtm)
+            if (invtm != NULL)
                 OCSP_SINGLERESP_add1_ext_i2d(single, NID_invalidity_date,
                                              invtm, 0, 0);
-            else if (inst)
+            else if (inst != NULL)
                 OCSP_SINGLERESP_add1_ext_i2d(single,
                                              NID_hold_instruction_code, inst,
                                              0, 0);
@@ -962,7 +977,6 @@ static void make_ocsp_response(OCSP_RESPONSE **resp, OCSP_REQUEST *req,
  end:
     ASN1_TIME_free(thisupd);
     ASN1_TIME_free(nextupd);
-    OCSP_CERTID_free(ca_id);
     OCSP_BASICRESP_free(bs);
 }
 
@@ -1124,13 +1138,14 @@ static int do_responder(OCSP_REQUEST **preq, BIO **pcbio, BIO *acbio)
     }
 
     /* Try to read OCSP request */
-    if (getbio) {
+    if (getbio != NULL) {
         req = d2i_OCSP_REQUEST_bio(getbio, NULL);
         BIO_free_all(getbio);
-    } else
+    } else {
         req = d2i_OCSP_REQUEST_bio(cbio, NULL);
+    }
 
-    if (!req) {
+    if (req == NULL) {
         BIO_printf(bio_err, "Error parsing OCSP request\n");
         ERR_print_errors(bio_err);
     }
@@ -1146,7 +1161,7 @@ static int send_ocsp_response(BIO *cbio, OCSP_RESPONSE *resp)
     char http_resp[] =
         "HTTP/1.0 200 OK\r\nContent-type: application/ocsp-response\r\n"
         "Content-Length: %d\r\n\r\n";
-    if (!cbio)
+    if (cbio == NULL)
         return 0;
     BIO_printf(cbio, http_resp, i2d_OCSP_RESPONSE(resp, NULL));
     i2d_OCSP_RESPONSE_bio(cbio, resp);
@@ -1224,11 +1239,11 @@ static OCSP_RESPONSE *query_responder(BIO *cbio, const char *host,
         openssl_fdset(fd, &confds);
         tv.tv_usec = 0;
         tv.tv_sec = req_timeout;
-        if (BIO_should_read(cbio))
+        if (BIO_should_read(cbio)) {
             rv = select(fd + 1, (void *)&confds, NULL, NULL, &tv);
-        else if (BIO_should_write(cbio))
+        } else if (BIO_should_write(cbio)) {
             rv = select(fd + 1, NULL, (void *)&confds, NULL, &tv);
-        else {
+        } else {
             BIO_puts(bio_err, "Unexpected retry condition\n");
             goto err;
         }
@@ -1259,11 +1274,11 @@ OCSP_RESPONSE *process_responder(OCSP_REQUEST *req,
     OCSP_RESPONSE *resp = NULL;
 
     cbio = BIO_new_connect(host);
-    if (!cbio) {
+    if (cbio == NULL) {
         BIO_printf(bio_err, "Error creating connect BIO\n");
         goto end;
     }
-    if (port)
+    if (port != NULL)
         BIO_set_conn_port(cbio, port);
     if (use_ssl == 1) {
         BIO *sbio;
@@ -1278,7 +1293,7 @@ OCSP_RESPONSE *process_responder(OCSP_REQUEST *req,
     }
 
     resp = query_responder(cbio, host, path, headers, req, req_timeout);
-    if (!resp)
+    if (resp == NULL)
         BIO_printf(bio_err, "Error querying OCSP responder\n");
  end:
     BIO_free_all(cbio);

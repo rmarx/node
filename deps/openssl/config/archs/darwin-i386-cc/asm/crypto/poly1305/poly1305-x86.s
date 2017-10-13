@@ -1,4 +1,3 @@
-.file	"poly1305-x86.s"
 .text
 .align	6,0x90
 .globl	_poly1305_init

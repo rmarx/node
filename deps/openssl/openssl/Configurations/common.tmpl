@@ -9,15 +9,23 @@
  # there are no duplicate dependencies and that they are in the
  # right order.  This is especially used to sort the list of
  # libraries that a build depends on.
+ sub extensionlesslib {
+     my @result = map { $_ =~ /(\.a)?$/; $` } @_;
+     return @result if wantarray;
+     return $result[0];
+ }
  sub resolvedepends {
      my $thing = shift;
+     my $extensionlessthing = extensionlesslib($thing);
      my @listsofar = @_;    # to check if we're looping
-     my @list = @{$unified_info{depends}->{$thing}};
+     my @list = @{$unified_info{depends}->{$thing} //
+                      $unified_info{depends}->{$extensionlessthing}};
      my @newlist = ();
      if (scalar @list) {
          foreach my $item (@list) {
+             my $extensionlessitem = extensionlesslib($item);
              # It's time to break off when the dependency list starts looping
-             next if grep { $_ eq $item } @listsofar;
+             next if grep { extensionlesslib($_) eq $extensionlessitem } @listsofar;
              push @newlist, $item, resolvedepends($item, @listsofar, $item);
          }
      }
@@ -26,12 +34,34 @@
  sub reducedepends {
      my @list = @_;
      my @newlist = ();
+     my %replace = ();
      while (@list) {
          my $item = shift @list;
-         push @newlist, $item
-             unless grep { $item eq $_ } @list;
+         my $extensionlessitem = extensionlesslib($item);
+         if (grep { $extensionlessitem eq extensionlesslib($_) } @list) {
+             if ($item ne $extensionlessitem) {
+                 # If this instance of the library is explicitely static, we
+                 # prefer that to any shared library name, since it must have
+                 # been done on purpose.
+                 $replace{$extensionlessitem} = $item;
+             }
+         } else {
+             push @newlist, $item;
+         }
      }
-     @newlist;
+     map { $replace{$_} // $_; } @newlist;
+ }
+
+ # is_installed checks if a given file will be installed (i.e. they are
+ # not defined _NO_INST in build.info)
+ sub is_installed {
+     my $product = shift;
+     if (grep { $product eq $_ }
+         map { (@{$unified_info{install}->{$_}}) }
+         keys %{$unified_info{install}}) {
+         return 1;
+     }
+     return 0;
  }
 
  # dogenerate is responsible for producing all the recipes that build
@@ -72,6 +102,7 @@
      my %opts = @_;
      if (@{$unified_info{sources}->{$obj}}) {
          $OUT .= src2obj(obj => $obj_no_o,
+                         product => $bin,
                          srcs => $unified_info{sources}->{$obj},
                          deps => $unified_info{depends}->{$obj},
                          incs => [ @{$unified_info{includes}->{$bin}},
@@ -92,7 +123,7 @@
  sub dolib {
      my $lib = shift;
      return "" if $cache{$lib};
-     unless ($disabled{shared}) {
+     unless ($disabled{shared} || $lib =~ /\.a$/) {
          my %ordinals =
              $unified_info{ordinals}->{$lib}
              ? (ordinals => $unified_info{ordinals}->{$lib}) : ();
@@ -102,16 +133,17 @@
                                         (@{$unified_info{sources}->{$lib}},
                                          @{$unified_info{shared_sources}->{$lib}}) ],
                               deps => [ reducedepends(resolvedepends($lib)) ],
+                              installed => is_installed($lib),
                               %ordinals);
          foreach (@{$unified_info{shared_sources}->{$lib}}) {
-             doobj($_, $lib, intent => "lib");
+             doobj($_, $lib, intent => "lib", installed => is_installed($lib));
          }
      }
      $OUT .= obj2lib(lib => $lib,
                      objs => [ map { (my $x = $_) =~ s|\.o$||; $x }
                                @{$unified_info{sources}->{$lib}} ]);
      foreach (@{$unified_info{sources}->{$lib}}) {
-         doobj($_, $lib, intent => "lib");
+         doobj($_, $lib, intent => "lib", installed => is_installed($lib));
      }
      $cache{$lib} = 1;
  }
@@ -126,10 +158,11 @@
                      objs => [ map { (my $x = $_) =~ s|\.o$||; $x }
                                (@{$unified_info{sources}->{$lib}},
                                 @{$unified_info{shared_sources}->{$lib}}) ],
-                     deps => [ resolvedepends($lib) ]);
+                     deps => [ resolvedepends($lib) ],
+                     installed => is_installed($lib));
      foreach ((@{$unified_info{sources}->{$lib}},
                @{$unified_info{shared_sources}->{$lib}})) {
-         doobj($_, $lib, intent => "dso");
+         doobj($_, $lib, intent => "dso", installed => is_installed($lib));
      }
      $cache{$lib} = 1;
  }
@@ -143,9 +176,10 @@
      $OUT .= obj2bin(bin => $bin,
                      objs => [ map { (my $x = $_) =~ s|\.o$||; $x }
                                @{$unified_info{sources}->{$bin}} ],
-                     deps => $deps);
+                     deps => $deps,
+                     installed => is_installed($bin));
      foreach (@{$unified_info{sources}->{$bin}}) {
-         doobj($_, $bin, intent => "bin");
+         doobj($_, $bin, intent => "bin", installed => is_installed($bin));
      }
      $cache{$bin} = 1;
  }
@@ -156,7 +190,8 @@
      my $script = shift;
      return "" if $cache{$script};
      $OUT .= in2script(script => $script,
-                       sources => $unified_info{sources}->{$script});
+                       sources => $unified_info{sources}->{$script},
+                       installed => is_installed($script));
      $cache{$script} = 1;
  }
 

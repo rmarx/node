@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -21,6 +21,7 @@ typedef int sk_cmp_fn_type(const char *const *a, const char *const *b);
 
 static STACK_OF(EVP_PKEY_METHOD) *app_pkey_methods = NULL;
 
+/* This array needs to be in order of NIDs */
 static const EVP_PKEY_METHOD *standard_methods[] = {
 #ifndef OPENSSL_NO_RSA
     &rsa_pkey_meth,
@@ -38,14 +39,29 @@ static const EVP_PKEY_METHOD *standard_methods[] = {
 #ifndef OPENSSL_NO_CMAC
     &cmac_pkey_meth,
 #endif
+#ifndef OPENSSL_NO_RSA
+    &rsa_pss_pkey_meth,
+#endif
 #ifndef OPENSSL_NO_DH
     &dhx_pkey_meth,
+#endif
+#ifndef OPENSSL_NO_SCRYPT
+    &scrypt_pkey_meth,
 #endif
     &tls1_prf_pkey_meth,
 #ifndef OPENSSL_NO_EC
     &ecx25519_pkey_meth,
 #endif
-    &hkdf_pkey_meth
+    &hkdf_pkey_meth,
+#ifndef OPENSSL_NO_POLY1305
+    &poly1305_pkey_meth,
+#endif
+#ifndef OPENSSL_NO_SIPHASH
+    &siphash_pkey_meth,
+#endif
+#ifndef OPENSSL_NO_EC
+    &ed25519_pkey_meth,
+#endif
 };
 
 DECLARE_OBJ_BSEARCH_CMP_FN(const EVP_PKEY_METHOD *, const EVP_PKEY_METHOD *,
@@ -89,16 +105,17 @@ static EVP_PKEY_CTX *int_ctx_new(EVP_PKEY *pkey, ENGINE *e, int id)
         id = pkey->ameth->pkey_id;
     }
 #ifndef OPENSSL_NO_ENGINE
-    if (pkey && pkey->engine)
-        e = pkey->engine;
+    if (e == NULL && pkey != NULL)
+        e = pkey->pmeth_engine != NULL ? pkey->pmeth_engine : pkey->engine;
     /* Try to find an ENGINE which implements this method */
     if (e) {
         if (!ENGINE_init(e)) {
             EVPerr(EVP_F_INT_CTX_NEW, ERR_R_ENGINE_LIB);
             return NULL;
         }
-    } else
+    } else {
         e = ENGINE_get_pkey_meth_engine(id);
+    }
 
     /*
      * If an ENGINE handled this method look it up. Otherwise use internal
@@ -112,6 +129,9 @@ static EVP_PKEY_CTX *int_ctx_new(EVP_PKEY *pkey, ENGINE *e, int id)
         pmeth = EVP_PKEY_meth_find(id);
 
     if (pmeth == NULL) {
+#ifndef OPENSSL_NO_ENGINE
+        ENGINE_finish(e);
+#endif
         EVPerr(EVP_F_INT_CTX_NEW, EVP_R_UNSUPPORTED_ALGORITHM);
         return NULL;
     }
@@ -203,6 +223,8 @@ void EVP_PKEY_meth_copy(EVP_PKEY_METHOD *dst, const EVP_PKEY_METHOD *src)
 
     dst->ctrl = src->ctrl;
     dst->ctrl_str = src->ctrl_str;
+
+    dst->check = src->check;
 }
 
 void EVP_PKEY_meth_free(EVP_PKEY_METHOD *pmeth)
@@ -278,6 +300,42 @@ int EVP_PKEY_meth_add0(const EVP_PKEY_METHOD *pmeth)
     return 1;
 }
 
+void evp_app_cleanup_int(void)
+{
+    if (app_pkey_methods != NULL)
+        sk_EVP_PKEY_METHOD_pop_free(app_pkey_methods, EVP_PKEY_meth_free);
+}
+
+int EVP_PKEY_meth_remove(const EVP_PKEY_METHOD *pmeth)
+{
+    const EVP_PKEY_METHOD *ret;
+
+    ret = sk_EVP_PKEY_METHOD_delete_ptr(app_pkey_methods, pmeth);
+
+    return ret == NULL ? 0 : 1;
+}
+
+size_t EVP_PKEY_meth_get_count(void)
+{
+    size_t rv = OSSL_NELEM(standard_methods);
+
+    if (app_pkey_methods)
+        rv += sk_EVP_PKEY_METHOD_num(app_pkey_methods);
+    return rv;
+}
+
+const EVP_PKEY_METHOD *EVP_PKEY_meth_get0(size_t idx)
+{
+    if (idx < OSSL_NELEM(standard_methods))
+        return standard_methods[idx];
+    if (app_pkey_methods == NULL)
+        return NULL;
+    idx -= OSSL_NELEM(standard_methods);
+    if (idx >= (size_t)sk_EVP_PKEY_METHOD_num(app_pkey_methods))
+        return NULL;
+    return sk_EVP_PKEY_METHOD_value(app_pkey_methods, idx);
+}
+
 void EVP_PKEY_CTX_free(EVP_PKEY_CTX *ctx)
 {
     if (ctx == NULL)
@@ -322,6 +380,12 @@ int EVP_PKEY_CTX_ctrl(EVP_PKEY_CTX *ctx, int keytype, int optype,
 
 }
 
+int EVP_PKEY_CTX_ctrl_uint64(EVP_PKEY_CTX *ctx, int keytype, int optype,
+                             int cmd, uint64_t value)
+{
+    return EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, 0, &value);
+}
+
 int EVP_PKEY_CTX_ctrl_str(EVP_PKEY_CTX *ctx,
                           const char *name, const char *value)
 {
@@ -329,14 +393,9 @@ int EVP_PKEY_CTX_ctrl_str(EVP_PKEY_CTX *ctx,
         EVPerr(EVP_F_EVP_PKEY_CTX_CTRL_STR, EVP_R_COMMAND_NOT_SUPPORTED);
         return -2;
     }
-    if (strcmp(name, "digest") == 0) {
-        const EVP_MD *md;
-        if (value == NULL || (md = EVP_get_digestbyname(value)) == NULL) {
-            EVPerr(EVP_F_EVP_PKEY_CTX_CTRL_STR, EVP_R_INVALID_DIGEST);
-            return 0;
-        }
-        return EVP_PKEY_CTX_set_signature_md(ctx, md);
-    }
+    if (strcmp(name, "digest") == 0)
+        return EVP_PKEY_CTX_md(ctx, EVP_PKEY_OP_TYPE_SIG, EVP_PKEY_CTRL_MD,
+                               value);
     return ctx->pmeth->ctrl_str(ctx, name, value);
 }
 
@@ -365,6 +424,18 @@ int EVP_PKEY_CTX_hex2ctrl(EVP_PKEY_CTX *ctx, int cmd, const char *hex)
         rv = ctx->pmeth->ctrl(ctx, cmd, binlen, bin);
     OPENSSL_free(bin);
     return rv;
+}
+
+/* Pass a message digest to a ctrl */
+int EVP_PKEY_CTX_md(EVP_PKEY_CTX *ctx, int optype, int cmd, const char *md)
+{
+    const EVP_MD *m;
+
+    if (md == NULL || (m = EVP_get_digestbyname(md)) == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_CTX_MD, EVP_R_INVALID_DIGEST);
+        return 0;
+    }
+    return EVP_PKEY_CTX_ctrl(ctx, -1, optype, cmd, 0, (void *)m);
 }
 
 int EVP_PKEY_CTX_get_operation(EVP_PKEY_CTX *ctx)
@@ -553,6 +624,12 @@ void EVP_PKEY_meth_set_ctrl(EVP_PKEY_METHOD *pmeth,
     pmeth->ctrl_str = ctrl_str;
 }
 
+void EVP_PKEY_meth_set_check(EVP_PKEY_METHOD *pmeth,
+                             int (*check) (EVP_PKEY *pkey))
+{
+    pmeth->check = check;
+}
+
 void EVP_PKEY_meth_get_init(EVP_PKEY_METHOD *pmeth,
                             int (**pinit) (EVP_PKEY_CTX *ctx))
 {
@@ -718,4 +795,11 @@ void EVP_PKEY_meth_get_ctrl(EVP_PKEY_METHOD *pmeth,
         *pctrl = pmeth->ctrl;
     if (pctrl_str)
         *pctrl_str = pmeth->ctrl_str;
+}
+
+void EVP_PKEY_meth_get_check(EVP_PKEY_METHOD *pmeth,
+                             int (**pcheck) (EVP_PKEY *pkey))
+{
+    if (*pcheck)
+        *pcheck = pmeth->check;
 }

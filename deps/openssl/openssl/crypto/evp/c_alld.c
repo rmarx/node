@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include "internal/cryptlib.h"
 #include <openssl/evp.h>
-#include <internal/evp_int.h>
+#include "internal/evp_int.h"
 #include <openssl/pkcs12.h>
 #include <openssl/objects.h>
 
@@ -46,4 +46,10 @@ void openssl_add_all_digests_int(void)
     EVP_add_digest(EVP_blake2b512());
     EVP_add_digest(EVP_blake2s256());
 #endif
+    EVP_add_digest(EVP_sha3_224());
+    EVP_add_digest(EVP_sha3_256());
+    EVP_add_digest(EVP_sha3_384());
+    EVP_add_digest(EVP_sha3_512());
+    EVP_add_digest(EVP_shake128());
+    EVP_add_digest(EVP_shake256());
 }

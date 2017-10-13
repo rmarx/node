@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -10,36 +10,16 @@
 #include <stdio.h>
 #include <openssl/crypto.h>
 #include "internal/cryptlib.h"
-#include <openssl/lhash.h>
+#include "internal/refcount.h"
 #include "internal/bn_int.h"
 #include <openssl/engine.h>
+#include <openssl/evp.h>
+#include "internal/evp_int.h"
 #include "rsa_locl.h"
-
-static const RSA_METHOD *default_RSA_meth = NULL;
 
 RSA *RSA_new(void)
 {
-    RSA *r = RSA_new_method(NULL);
-
-    return r;
-}
-
-void RSA_set_default_method(const RSA_METHOD *meth)
-{
-    default_RSA_meth = meth;
-}
-
-const RSA_METHOD *RSA_get_default_method(void)
-{
-    if (default_RSA_meth == NULL) {
-#ifdef RSA_NULL
-        default_RSA_meth = RSA_null_method();
-#else
-        default_RSA_meth = RSA_PKCS1_OpenSSL();
-#endif
-    }
-
-    return default_RSA_meth;
+    return RSA_new_method(NULL);
 }
 
 const RSA_METHOD *RSA_get_method(const RSA *rsa)
@@ -93,8 +73,9 @@ RSA *RSA_new_method(ENGINE *engine)
             goto err;
         }
         ret->engine = engine;
-    } else
+    } else {
         ret->engine = ENGINE_get_default_RSA();
+    }
     if (ret->engine) {
         ret->meth = ENGINE_get_RSA(ret->engine);
         if (ret->meth == NULL) {
@@ -128,7 +109,7 @@ void RSA_free(RSA *r)
     if (r == NULL)
         return;
 
-    CRYPTO_atomic_add(&r->references, -1, &i, r->lock);
+    CRYPTO_DOWN_REF(&r->references, &i, r->lock);
     REF_PRINT_COUNT("RSA", r);
     if (i > 0)
         return;
@@ -152,6 +133,7 @@ void RSA_free(RSA *r)
     BN_clear_free(r->dmp1);
     BN_clear_free(r->dmq1);
     BN_clear_free(r->iqmp);
+    RSA_PSS_PARAMS_free(r->pss);
     BN_BLINDING_free(r->blinding);
     BN_BLINDING_free(r->mt_blinding);
     OPENSSL_free(r->bignum_data);
@@ -162,22 +144,22 @@ int RSA_up_ref(RSA *r)
 {
     int i;
 
-    if (CRYPTO_atomic_add(&r->references, 1, &i, r->lock) <= 0)
+    if (CRYPTO_UP_REF(&r->references, &i, r->lock) <= 0)
         return 0;
 
     REF_PRINT_COUNT("RSA", r);
     REF_ASSERT_ISNT(i < 2);
-    return ((i > 1) ? 1 : 0);
+    return i > 1 ? 1 : 0;
 }
 
 int RSA_set_ex_data(RSA *r, int idx, void *arg)
 {
-    return (CRYPTO_set_ex_data(&r->ex_data, idx, arg));
+    return CRYPTO_set_ex_data(&r->ex_data, idx, arg);
 }
 
 void *RSA_get_ex_data(const RSA *r, int idx)
 {
-    return (CRYPTO_get_ex_data(&r->ex_data, idx));
+    return CRYPTO_get_ex_data(&r->ex_data, idx);
 }
 
 int RSA_security_bits(const RSA *rsa)
@@ -307,4 +289,14 @@ void RSA_set_flags(RSA *r, int flags)
 ENGINE *RSA_get0_engine(const RSA *r)
 {
     return r->engine;
+}
+
+int RSA_pkey_ctx_ctrl(EVP_PKEY_CTX *ctx, int optype, int cmd, int p1, void *p2)
+{
+    /* If key type not RSA or RSA-PSS return error */
+    if (ctx != NULL && ctx->pmeth != NULL
+        && ctx->pmeth->pkey_id != EVP_PKEY_RSA
+        && ctx->pmeth->pkey_id != EVP_PKEY_RSA_PSS)
+        return -1;
+     return EVP_PKEY_CTX_ctrl(ctx, -1, optype, cmd, p1, p2);
 }

@@ -13,7 +13,9 @@ use File::Spec::Functions;
 use File::Basename;
 use File::Copy;
 use File::Path;
-use if $^O ne "VMS", 'File::Glob' => qw/glob/;
+use FindBin;
+use lib "$FindBin::Bin/perl";
+use OpenSSL::Glob;
 use Getopt::Long;
 use Pod::Usage;
 
@@ -28,31 +30,32 @@ use OpenSSL::Util::Pod;
 my %options = ();
 GetOptions(\%options,
            'sourcedir=s',       # Source directory
-           'subdir=s%',         # Subdirectories to look through,
+           'section=i@',        # Subdirectories to look through,
                                 # with associated section numbers
            'destdir=s',         # Destination directory
            #'in=s@',             # Explicit files to process (ignores sourcedir)
-           #'section=i',         # Default section used for --in files
            'type=s',            # The result type, 'man' or 'html'
+           'suffix:s',          # Suffix to add to the extension.
+                                # Only used with type=man
            'remove',            # To remove files rather than writing them
            'dry-run|n',         # Only output file names on STDOUT
            'debug|D+',
           );
 
-unless ($options{subdir}) {
-    $options{subdir} = { apps   => '1',
-                         crypto => '3',
-                         ssl    => '3' };
+unless ($options{section}) {
+    $options{section} = [ 1, 3, 5, 7 ];
 }
 unless ($options{sourcedir}) {
     $options{sourcedir} = catdir($config{sourcedir}, "doc");
 }
-pod2usage(1) unless ( defined $options{subdir}
+pod2usage(1) unless ( defined $options{section}
                       && defined $options{sourcedir}
                       && defined $options{destdir}
                       && defined $options{type}
                       && ($options{type} eq 'man'
                           || $options{type} eq 'html') );
+pod2usage(1) if ( $options{type} eq 'html'
+                  && defined $options{suffix} );
 
 if ($options{debug}) {
     print STDERR "DEBUG: options:\n";
@@ -62,8 +65,10 @@ if ($options{debug}) {
         if defined $options{destdir};
     print STDERR "DEBUG:   --type      = $options{type}\n"
         if defined $options{type};
-    foreach (keys %{$options{subdir}}) {
-        print STDERR "DEBUG:   --subdir    = $_=$options{subdir}->{$_}\n";
+    print STDERR "DEBUG:   --suffix    = $options{suffix}\n"
+        if defined $options{suffix};
+    foreach (sort @{$options{section}}) {
+        print STDERR "DEBUG:   --section   = $_\n";
     }
     print STDERR "DEBUG:   --remove    = $options{remove}\n"
         if defined $options{remove};
@@ -75,8 +80,8 @@ if ($options{debug}) {
 
 my $symlink_exists = eval { symlink("",""); 1 };
 
-foreach my $subdir (keys %{$options{subdir}}) {
-    my $section = $options{subdir}->{$subdir};
+foreach my $section (sort @{$options{section}}) {
+    my $subdir = "man$section";
     my $podsourcedir = catfile($options{sourcedir}, $subdir);
     my $podglob = catfile($podsourcedir, "*.pod");
 
@@ -90,10 +95,10 @@ foreach my $subdir (keys %{$options{subdir}}) {
 
         my $updir = updir();
         my $name = uc $podname;
-        my $suffix = { man  => ".$podinfo{section}",
+        my $suffix = { man  => ".$podinfo{section}".($options{suffix} // ""),
                        html => ".html" } -> {$options{type}};
         my $generate = { man  => "pod2man --name=$name --section=$podinfo{section} --center=OpenSSL --release=$config{version} \"$podpath\"",
-                         html => "pod2html \"--podroot=$options{sourcedir}\" --htmldir=$updir --podpath=apps:crypto:ssl \"--infile=$podpath\" \"--title=$podname\""
+                         html => "pod2html \"--podroot=$options{sourcedir}\" --htmldir=$updir --podpath=man1:man3:man5:man7 \"--infile=$podpath\" \"--title=$podname\""
                          } -> {$options{type}};
         my $output_dir = catdir($options{destdir}, "man$podinfo{section}");
         my $output_file = $podname . $suffix;
@@ -105,7 +110,7 @@ foreach my $subdir (keys %{$options{subdir}}) {
                 if $options{debug};
             unless ($options{"dry-run"}) {
                 @output = `$generate`;
-                map { s|href="http://man\.he\.net/(man\d/[^"]+)(?:\.html)?"|href="../$1.html|g; } @output
+                map { s|href="http://man\.he\.net/(man\d/[^"]+)(?:\.html)?"|href="../$1.html"|g; } @output
                     if $options{type} eq "html";
             }
             print STDERR "DEBUG: Done processing\n" if $options{debug};
@@ -177,6 +182,7 @@ B<process_docs.pl>
 [B<--sourcedir>=I<dir>]
 B<--destdir>=I<dir>
 B<--type>=B<man>|B<html>
+[B<--suffix>=I<suffix>]
 [B<--remove>]
 [B<--dry-run>|B<-n>]
 [B<--debug>|B<-D>]
@@ -208,6 +214,10 @@ Top directory where the resulting files should end up
 =item B<--type>=B<man>|B<html>
 
 Type of output to produce.  Currently supported are man pages and HTML files.
+
+=item B<--suffix>=I<suffix>
+
+A suffix added to the extension.  Only valid with B<--type>=B<man>
 
 =item B<--remove>
 

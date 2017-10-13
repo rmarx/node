@@ -34,20 +34,20 @@ my $proxy = TLSProxy::Proxy->new(
     (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE})
 );
 
+my $boundary_test_type;
+
 #Test 1: Injecting out of context empty records should fail
 my $content_type = TLSProxy::Record::RT_APPLICATION_DATA;
 my $inject_recs_num = 1;
+$proxy->serverflags("-tls1_2");
 $proxy->start() or plan skip_all => "Unable to start up Proxy for tests";
-my $num_tests = 10;
-if (!disabled("tls1_1")) {
-    $num_tests++;
-}
-plan tests => $num_tests;
+plan tests => 18;
 ok(TLSProxy::Message->fail(), "Out of context empty records test");
 
 #Test 2: Injecting in context empty records should succeed
 $proxy->clear();
 $content_type = TLSProxy::Record::RT_HANDSHAKE;
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->success(), "In context empty records test");
 
@@ -55,16 +55,18 @@ ok(TLSProxy::Message->success(), "In context empty records test");
 $proxy->clear();
 #We allow 32 consecutive in context empty records
 $inject_recs_num = 33;
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->fail(), "Too many in context empty records test");
 
-#Test 4: Injecting a fragmented fatal alert should fail. We actually expect no
-#        alerts to be sent from either side because *we* injected the fatal
-#        alert, i.e. this will look like a disorderly close
+#Test 4: Injecting a fragmented fatal alert should fail. We expect the server to
+#        send back an alert of its own because it cannot handle fragmented
+#        alerts
 $proxy->clear();
 $proxy->filter(\&add_frag_alert_filter);
+$proxy->serverflags("-tls1_2");
 $proxy->start();
-ok(!TLSProxy::Message->end(), "Fragmented alert records test");
+ok(TLSProxy::Message->fail(), "Fragmented alert records test");
 
 #Run some SSLv2 ClientHello tests
 
@@ -79,6 +81,7 @@ use constant {
 my $sslv2testtype = TLSV1_2_IN_SSLV2;
 $proxy->clear();
 $proxy->filter(\&add_sslv2_filter);
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->success(), "TLSv1.2 in SSLv2 ClientHello test");
 
@@ -87,14 +90,16 @@ ok(TLSProxy::Message->success(), "TLSv1.2 in SSLv2 ClientHello test");
 #        protocol so we don't even send an alert in this case.
 $sslv2testtype = SSLV2_IN_SSLV2;
 $proxy->clear();
+$proxy->serverflags("-tls1_2");
 $proxy->start();
-ok(!TLSProxy::Message->end(), "SSLv2 in SSLv2 ClientHello test");
+ok(TLSProxy::Message->fail(), "SSLv2 in SSLv2 ClientHello test");
 
 #Test 7: Sanity check ClientHello fragmentation. This isn't really an SSLv2 test
 #        at all, but it gives us confidence that Test 8 fails for the right
 #        reasons
 $sslv2testtype = FRAGMENTED_IN_TLSV1_2;
 $proxy->clear();
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->success(), "Fragmented ClientHello in TLSv1.2 test");
 
@@ -102,6 +107,7 @@ ok(TLSProxy::Message->success(), "Fragmented ClientHello in TLSv1.2 test");
 #        record; and another TLS1.2 record. This isn't allowed so should fail
 $sslv2testtype = FRAGMENTED_IN_SSLV2;
 $proxy->clear();
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->fail(), "Fragmented ClientHello in TLSv1.2/SSLv2 test");
 
@@ -109,24 +115,90 @@ ok(TLSProxy::Message->fail(), "Fragmented ClientHello in TLSv1.2/SSLv2 test");
 #        fail because an SSLv2 ClientHello must be the first record.
 $sslv2testtype = ALERT_BEFORE_SSLV2;
 $proxy->clear();
+$proxy->serverflags("-tls1_2");
 $proxy->start();
 ok(TLSProxy::Message->fail(), "Alert before SSLv2 ClientHello test");
 
-#Unregcognised record type tests
+#Unrecognised record type tests
 
 #Test 10: Sending an unrecognised record type in TLS1.2 should fail
 $proxy->clear();
+$proxy->serverflags("-tls1_2");
 $proxy->filter(\&add_unknown_record_type);
 $proxy->start();
 ok(TLSProxy::Message->fail(), "Unrecognised record type in TLS1.2");
 
-#Test 11: Sending an unrecognised record type in TLS1.1 should fail
-if (!disabled("tls1_1")) {
+SKIP: {
+    skip "TLSv1.1 disabled", 1 if disabled("tls1_1");
+
+    #Test 11: Sending an unrecognised record type in TLS1.1 should fail
     $proxy->clear();
     $proxy->clientflags("-tls1_1");
     $proxy->start();
     ok(TLSProxy::Message->fail(), "Unrecognised record type in TLS1.1");
 }
+
+#Test 12: Sending a different record version in TLS1.2 should fail
+$proxy->clear();
+$proxy->clientflags("-tls1_2");
+$proxy->filter(\&change_version);
+$proxy->start();
+ok(TLSProxy::Message->fail(), "Changed record version in TLS1.2");
+
+#TLS1.3 specific tests
+SKIP: {
+    skip "TLSv1.3 disabled", 6 if disabled("tls1_3");
+
+    #Test 13: Sending a different record version in TLS1.3 should succeed
+    $proxy->clear();
+    $proxy->filter(\&change_version);
+    $proxy->start();
+    ok(TLSProxy::Message->success(), "Changed record version in TLS1.3");
+
+    #Test 14: Sending an unrecognised record type in TLS1.3 should fail
+    $proxy->clear();
+    $proxy->filter(\&add_unknown_record_type);
+    $proxy->start();
+    ok(TLSProxy::Message->fail(), "Unrecognised record type in TLS1.3");
+
+    #Test 15: Sending an outer record type other than app data once encrypted
+    #should fail
+    $proxy->clear();
+    $proxy->filter(\&change_outer_record_type);
+    $proxy->start();
+    ok(TLSProxy::Message->fail(), "Wrong outer record type in TLS1.3");
+
+    use constant {
+        DATA_AFTER_SERVER_HELLO => 0,
+        DATA_AFTER_FINISHED => 1,
+        DATA_AFTER_KEY_UPDATE => 2
+    };
+
+    #Test 16: Sending a ServerHello which doesn't end on a record boundary
+    #         should fail
+    $proxy->clear();
+    $boundary_test_type = DATA_AFTER_SERVER_HELLO;
+    $proxy->filter(\&not_on_record_boundary);
+    $proxy->start();
+    ok(TLSProxy::Message->fail(), "Record not on bounday in TLS1.3 (ServerHello)");
+
+    #Test 17: Sending a Finished which doesn't end on a record boundary
+    #         should fail
+    $proxy->clear();
+    $boundary_test_type = DATA_AFTER_FINISHED;
+    $proxy->filter(\&not_on_record_boundary);
+    $proxy->start();
+    ok(TLSProxy::Message->fail(), "Record not on bounday in TLS1.3 (Finished)");
+
+    #Test 18: Sending a KeyUpdate which doesn't end on a record boundary
+    #         should fail
+    $proxy->clear();
+    $boundary_test_type = DATA_AFTER_KEY_UPDATE;
+    $proxy->filter(\&not_on_record_boundary);
+    $proxy->start();
+    ok(TLSProxy::Message->fail(), "Record not on bounday in TLS1.3 (KeyUpdate)");
+ }
+
 
 sub add_empty_recs_filter
 {
@@ -360,13 +432,13 @@ sub add_unknown_record_type
     my $proxy = shift;
 
     # We'll change a record after the initial version neg has taken place
-    if ($proxy->flight != 2) {
+    if ($proxy->flight != 1) {
         return;
     }
 
     my $lastrec = ${$proxy->record_list}[-1];
     my $record = TLSProxy::Record->new(
-        2,
+        1,
         TLSProxy::Record::RT_UNKNOWN,
         $lastrec->version(),
         1,
@@ -377,5 +449,114 @@ sub add_unknown_record_type
         "X"
     );
 
-    unshift @{$proxy->record_list}, $record;
+    #Find ServerHello record and insert after that
+    my $i;
+    for ($i = 0; ${$proxy->record_list}[$i]->flight() < 1; $i++) {
+        next;
+    }
+    $i++;
+
+    splice @{$proxy->record_list}, $i, 0, $record;
+}
+
+sub change_version
+{
+    my $proxy = shift;
+
+    # We'll change a version after the initial version neg has taken place
+    if ($proxy->flight != 2) {
+        return;
+    }
+
+    (${$proxy->record_list}[-1])->version(TLSProxy::Record::VERS_TLS_1_1);
+}
+
+sub change_outer_record_type
+{
+    my $proxy = shift;
+
+    # We'll change a record after the initial version neg has taken place
+    if ($proxy->flight != 1) {
+        return;
+    }
+
+    #Find ServerHello record and change record after that
+    my $i;
+    for ($i = 0; ${$proxy->record_list}[$i]->flight() < 1; $i++) {
+        next;
+    }
+    $i++;
+    ${$proxy->record_list}[$i]->outer_content_type(TLSProxy::Record::RT_HANDSHAKE);
+}
+
+sub not_on_record_boundary
+{
+    my $proxy = shift;
+    my $data;
+
+    #Find server's first flight
+    if ($proxy->flight != 1) {
+        return;
+    }
+
+    if ($boundary_test_type == DATA_AFTER_SERVER_HELLO) {
+        #Merge the ServerHello and EncryptedExtensions records into one
+        my $i;
+        for ($i = 0; ${$proxy->record_list}[$i]->flight() < 1; $i++) {
+            next;
+        }
+        $data = ${$proxy->record_list}[$i]->data();
+        $data .= ${$proxy->record_list}[$i + 1]->decrypt_data();
+        ${$proxy->record_list}[$i]->data($data);
+        ${$proxy->record_list}[$i]->len(length $data);
+
+        #Delete the old EncryptedExtensions record
+        splice @{$proxy->record_list}, $i + 1, 1;
+    } elsif ($boundary_test_type == DATA_AFTER_FINISHED) {
+        $data = ${$proxy->record_list}[-1]->decrypt_data;
+
+        #Add a KeyUpdate message onto the end of the Finished record
+        my $keyupdate = pack "C5",
+            0x18, # KeyUpdate
+            0x00, 0x00, 0x01, # Message length
+            0x00; # Update not requested
+
+        $data .= $keyupdate;
+
+        #Add content type and tag
+        $data .= pack("C", TLSProxy::Record::RT_HANDSHAKE).("\0"x16);
+
+        #Update the record
+        ${$proxy->record_list}[-1]->data($data);
+        ${$proxy->record_list}[-1]->len(length $data);
+    } else {
+        #KeyUpdates must end on a record boundary
+
+        my $record = TLSProxy::Record->new(
+            1,
+            TLSProxy::Record::RT_APPLICATION_DATA,
+            TLSProxy::Record::VERS_TLS_1_0,
+            0,
+            0,
+            0,
+            0,
+            "",
+            ""
+        );
+
+        #Add two KeyUpdate messages into a single record
+        my $keyupdate = pack "C5",
+            0x18, # KeyUpdate
+            0x00, 0x00, 0x01, # Message length
+            0x00; # Update not requested
+
+        $data = $keyupdate.$keyupdate;
+
+        #Add content type and tag
+        $data .= pack("C", TLSProxy::Record::RT_HANDSHAKE).("\0"x16);
+
+        $record->data($data);
+        $record->len(length $data);
+        push @{$proxy->record_list}, $record;
+    }
 }

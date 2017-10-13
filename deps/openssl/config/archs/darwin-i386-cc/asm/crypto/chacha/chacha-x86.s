@@ -1,4 +1,3 @@
-.file	"chacha-x86.s"
 .text
 .globl	_ChaCha20_ctr32
 .align	4

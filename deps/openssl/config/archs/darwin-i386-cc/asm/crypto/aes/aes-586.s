@@ -1,4 +1,3 @@
-.file	"aes-586.s"
 .text
 .align	4
 __x86_AES_encrypt_compact:

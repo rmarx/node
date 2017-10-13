@@ -18,6 +18,7 @@
  For additional platform specific requirements, solutions to specific
  issues and other details, please read one of these:
 
+  * NOTES.UNIX (any supported Unix like system)
   * NOTES.VMS (OpenVMS)
   * NOTES.WIN (any supported Windows)
   * NOTES.DJGPP (DOS platform with DJGPP)
@@ -114,6 +115,11 @@
   On OpenVMS:
 
     $ @config --prefix=PROGRAM:[INSTALLS] --openssldir=SYS$MANAGER:[OPENSSL]
+
+ (Note: if you do add options to the configuration command, please make sure
+ you've read more than just this Quick Start, such as relevant NOTES.* files,
+ the options outline below, as configuration options may change the outcome
+ in otherwise unexpected ways)
 
 
  Configuration Options
@@ -310,6 +316,13 @@
   no-err
                    Don't compile in any error strings.
 
+  enable-external-tests
+                   Enable building of integration with external test suites.
+                   This is a developer option and may not work on all platforms.
+                   The only supported external test suite at the current time is
+                   the BoringSSL test suite. See the file test/README.external
+                   for further details.
+
   no-filenames
                    Don't compile in filename and line number information (e.g.
                    for errors and memory allocation).
@@ -325,9 +338,6 @@
                    if this feature is enabled then GOST ciphersuites are only
                    available if the GOST algorithms are also available through
                    loading an externally supplied engine.
-
-  enable-heartbeats
-                   Build support for DTLS heartbeats.
 
   no-hw-padlock
                    Don't build the padlock engine.
@@ -402,11 +412,15 @@
                    has an impact when not built "shared".
 
   no-stdio
-                   Don't use any C "stdio" features. Only libcrypto and libssl
-                   can be built in this way. Using this option will suppress
+                   Don't use anything from the C header file "stdio.h" that
+                   makes use of the "FILE" type. Only libcrypto and libssl can
+                   be built in this way. Using this option will suppress
                    building the command line applications. Additionally since
                    the OpenSSL tests also use the command line applications the
                    tests will also be skipped.
+
+  no-tests
+                   Don't build test programs or run any test.
 
   no-threads
                    Don't try to build with support for multi-threaded
@@ -418,6 +432,16 @@
                    platform where this is not the case then this will usually
                    require additional system-dependent options! See "Note on
                    multi-threading" below.
+
+  enable-tls13downgrade
+                   TODO(TLS1.3): Make this enabled by default and remove the
+                   option when TLSv1.3 is out of draft
+                   TLSv1.3 offers a downgrade protection mechanism. This is
+                   implemented but disabled by default. It should not typically
+                   be enabled except for testing purposes. Otherwise this could
+                   cause problems if a pre-RFC version of OpenSSL talks to an
+                   RFC implementation (it will erroneously be detected as a
+                   downgrade).
 
   no-ts
                    Don't build Time Stamping Authority support.
@@ -458,6 +482,13 @@
                    likely to complement configuration command line with
                    suitable compiler-specific option.
 
+  enable-tls1_3
+                   TODO(TLS1.3): Make this enabled by default
+                   Build support for TLS1.3. Note: This is a WIP feature and
+                   only a single draft version is supported.  Implementations
+                   of different draft versions will negotiate TLS 1.2 instead
+                   of (draft) TLS 1.3.  Use with caution!!
+
   no-<prot>
                    Don't build support for negotiating the specified SSL/TLS
                    protocol (one of ssl, ssl3, tls, tls1, tls1_1, tls1_2, dtls,
@@ -481,19 +512,25 @@
                    Build without support for the specified algorithm, where
                    <alg> is one of: bf, blake2, camellia, cast, chacha, cmac,
                    des, dh, dsa, ecdh, ecdsa, idea, md4, mdc2, ocb, poly1305,
-                   rc2, rc4, rmd160, scrypt, seed or whirlpool. The "ripemd"
-                   algorithm is deprecated and if used is synonymous with rmd160.
+                   rc2, rc4, rmd160, scrypt, seed, siphash or whirlpool. The
+                   "ripemd" algorithm is deprecated and if used is synonymous
+                   with rmd160.
 
-  -Dxxx, -lxxx, -Lxxx, -fxxx, -mXXX, -Kxxx
-                   These system specific options will be passed through to the
-                   compiler to allow you to define preprocessor symbols, specify
-                   additional libraries, library directories or other compiler
-                   options. It might be worth noting that some compilers
-                   generate code specifically for processor the compiler
-                   currently executes on. This is not necessarily what you might
-                   have in mind, since it might be unsuitable for execution on
-                   other, typically older, processor. Consult your compiler
-                   documentation.
+  -Dxxx, lxxx, -Lxxx, -Wl, -rpath, -R, -framework, -static
+                   These system specific options will be recognised and
+                   passed through to the compiler to allow you to define
+                   preprocessor symbols, specify additional libraries, library
+                   directories or other compiler options. It might be worth
+                   noting that some compilers generate code specifically for
+                   processor the compiler currently executes on. This is not
+                   necessarily what you might have in mind, since it might be
+                   unsuitable for execution on other, typically older,
+                   processor. Consult your compiler documentation.
+
+  -xxx, +xxx
+                   Additional options that are not otherwise recognised are
+                   passed through as they are to the compiler as well.  Again,
+                   consult your compiler documentation.
 
 
  Installation in Detail
@@ -667,7 +704,11 @@
      compiler optimization flags from the CFLAGS line in Makefile and
      run "make clean; make" or corresponding.
 
-     Please send bug reports to <rt@openssl.org>.
+     To report a bug please open an issue on GitHub, at
+     https://github.com/openssl/openssl/issues.
+
+     For more details on how the make variables TESTS can be used,
+     see section TESTS in Detail below.
 
   4. If everything tests ok, install OpenSSL with
 
@@ -806,11 +847,14 @@
                 possible to create your own ".conf" and ".tmpl" files and store
                 them locally, outside the OpenSSL source tree. This environment
                 variable can be set to the directory where these files are held
-                and will have Configure to consider them in addition to the
-                standard ones.
+                and will be considered by Configure before it looks in the
+                standard directories.
 
  PERL
                 The name of the Perl executable to use when building OpenSSL.
+                This variable is used in config script only. Configure on the
+                other hand imposes the interpreter by which it itself was
+                executed on the whole build procedure.
 
  HASHBANGPERL
                 The command string for the Perl executable to insert in the
@@ -880,6 +924,57 @@
                 OpenSSL you may need to use this if you want to update
                 automatically generated files; add new error codes or add new
                 (or change the visibility of) public API functions. (Unix only).
+
+ TESTS in Detail
+ ---------------
+
+ The make variable TESTS supports a versatile set of space separated tokens
+ with which you can specify a set of tests to be performed.  With a "current
+ set of tests" in mind, initially being empty, here are the possible tokens:
+
+ alltests       The current set of tests becomes the whole set of available
+                tests (as listed when you do 'make list-tests' or similar).
+ xxx            Adds the test 'xxx' to the current set of tests.
+ -xxx           Removes 'xxx' from the current set of tests.  If this is the
+                first token in the list, the current set of tests is first
+                assigned the whole set of available tests, effectively making
+                this token equivalent to TESTS="alltests -xxx".
+ nn             Adds the test group 'nn' (which is a number) to the current
+                set of tests.
+ -nn            Removes the test group 'nn' from the current set of tests.
+                If this is the first token in the list, the current set of
+                tests is first assigned the whole set of available tests,
+                effectively making this token equivalent to
+                TESTS="alltests -xxx".
+
+ Also, all tokens except for "alltests" may have wildcards, such as *.
+ (on Unix and Windows, BSD style wildcards are supported, while on VMS,
+ it's VMS style wildcards)
+
+ Example: All tests except for the fuzz tests:
+
+ $ make TESTS=-test_fuzz test
+
+ or (if you want to be explicit)
+
+ $ make TESTS='alltests -test_fuzz' test
+
+ Example: All tests that have a name starting with "test_ssl" but not those
+ starting with "test_ssl_":
+
+ $ make TESTS='test_ssl* -test_ssl_*' test
+
+ Example: Only test group 10:
+
+ $ make TESTS='10'
+
+ Example: All tests except the slow group (group 99):
+
+ $ make TESTS='-99'
+
+ Example: All tests in test groups 80 to 99 except for tests in group 90:
+
+ $ make TESTS='[89]? -90'
 
  Note on multi-threading
  -----------------------

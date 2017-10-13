@@ -9,11 +9,11 @@
 
 /* Part of the code in here was originally in conf.c, which is now removed */
 
+#include "e_os.h"
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/conf.h>
 #include <openssl/conf_api.h>
-#include "e_os.h"
 
 static void value_free_hash(const CONF_VALUE *a, LHASH_OF(CONF_VALUE) *conf);
 static void value_free_stack_doall(CONF_VALUE *a);
@@ -204,7 +204,8 @@ CONF_VALUE *_CONF_new_section(CONF *conf, const char *section)
     v->value = (char *)sk;
 
     vv = lh_CONF_VALUE_insert(conf->data, v);
-    OPENSSL_assert(vv == NULL);
+    if (vv != NULL)
+        goto err;
     return v;
 
  err:

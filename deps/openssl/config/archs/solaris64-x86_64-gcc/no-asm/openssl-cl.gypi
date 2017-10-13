@@ -12,7 +12,7 @@
       '-m64 -Wall -DL_ENDIAN -O3 -pthread -DFILIO_H',
     ],
     'openssl_ex_libs_solaris64-x86_64-gcc': [
-      '-lresolv -lsocket -lnsl -ldl',
+      '-lsocket -lnsl -ldl',
     ],
     'openssl_cli_srcs_solaris64-x86_64-gcc': [
       'openssl/apps/app_rand.c',
@@ -62,6 +62,7 @@
       'openssl/apps/speed.c',
       'openssl/apps/spkac.c',
       'openssl/apps/srp.c',
+      'openssl/apps/storeutl.c',
       'openssl/apps/ts.c',
       'openssl/apps/verify.c',
       'openssl/apps/version.c',

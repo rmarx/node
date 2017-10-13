@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -7,6 +7,7 @@
  * https://www.openssl.org/source/license.html
  */
 
+#include <internal/cryptlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -21,10 +22,6 @@
 # include <openssl/engine.h>
 #endif
 #include <openssl/err.h>
-#ifdef OPENSSL_FIPS
-# include <openssl/fips.h>
-#endif
-#define USE_SOCKETS /* needed for the _O_BINARY defs in the MS world */
 #include "s_apps.h"
 /* Needed to get the other O_xxx flags. */
 #ifdef OPENSSL_SYS_VMS
@@ -33,14 +30,13 @@
 #define INCLUDE_FUNCTION_TABLE
 #include "apps.h"
 
-
-#ifdef OPENSSL_NO_CAMELLIA
-# define FORMAT "%-15s"
-# define COLUMNS 5
-#else
-# define FORMAT "%-18s"
-# define COLUMNS 4
-#endif
+/* Structure to hold the number of columns to be displayed and the
+ * field width used to display them.
+ */
+typedef struct {
+    int columns;
+    int width;
+} DISPLAY_COLUMNS;
 
 /* Special sentinel to exit the program. */
 #define EXIT_THE_PROGRAM (-1)
@@ -54,13 +50,28 @@
 static LHASH_OF(FUNCTION) *prog_init(void);
 static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[]);
 static void list_pkey(void);
-static void list_type(FUNC_TYPE ft);
+static void list_pkey_meth(void);
+static void list_type(FUNC_TYPE ft, int one);
 static void list_disabled(void);
 char *default_config_file = NULL;
 
 BIO *bio_in = NULL;
 BIO *bio_out = NULL;
 BIO *bio_err = NULL;
+
+static void calculate_columns(DISPLAY_COLUMNS *dc)
+{
+    FUNCTION *f;
+    int len, maxlen = 0;
+
+    for (f = functions; f->name != NULL; ++f)
+        if (f->type == FT_general || f->type == FT_md || f->type == FT_cipher)
+            if ((len = strlen(f->name)) > maxlen)
+                maxlen = len;
+
+    dc->width = maxlen + 2;
+    dc->columns = (80 - 1) / dc->width;
+}
 
 static int apps_startup()
 {
@@ -73,18 +84,14 @@ static int apps_startup()
                              | OPENSSL_INIT_LOAD_CONFIG, NULL))
         return 0;
 
-#ifndef OPENSSL_NO_UI
     setup_ui_method();
-#endif
 
     return 1;
 }
 
 static void apps_shutdown()
 {
-#ifndef OPENSSL_NO_UI
     destroy_ui_method();
-#endif
 }
 
 static char *make_config_name()
@@ -143,19 +150,17 @@ int main(int argc, char *argv[])
     CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
 
     if (getenv("OPENSSL_FIPS")) {
-#ifdef OPENSSL_FIPS
-        if (!FIPS_mode_set(1)) {
-            ERR_print_errors(bio_err);
-            return 1;
-        }
-#else
         BIO_printf(bio_err, "FIPS mode not supported.\n");
         return 1;
-#endif
     }
 
-    if (!apps_startup())
+    if (!apps_startup()) {
+        BIO_printf(bio_err,
+                   "FATAL: Startup failure (dev note: apps_startup() failed)\n");
+        ERR_print_errors(bio_err);
+        ret = 1;
         goto end;
+    }
 
     prog = prog_init();
     pname = opt_progname(argv[0]);
@@ -249,6 +254,7 @@ int main(int argc, char *argv[])
     OPENSSL_free(default_config_file);
     lh_FUNCTION_free(prog);
     OPENSSL_free(arg.argv);
+    app_RAND_write();
 
     BIO_free(bio_in);
     BIO_free_all(bio_out);
@@ -261,19 +267,15 @@ int main(int argc, char *argv[])
     EXIT(ret);
 }
 
-OPTIONS exit_options[] = {
-    {NULL}
-};
-
 static void list_cipher_fn(const EVP_CIPHER *c,
                            const char *from, const char *to, void *arg)
 {
-    if (c)
+    if (c != NULL) {
         BIO_printf(arg, "%s\n", EVP_CIPHER_name(c));
-    else {
-        if (!from)
+    } else {
+        if (from == NULL)
             from = "<undefined>";
-        if (!to)
+        if (to == NULL)
             to = "<undefined>";
         BIO_printf(arg, "%s => %s\n", from, to);
     }
@@ -282,27 +284,74 @@ static void list_cipher_fn(const EVP_CIPHER *c,
 static void list_md_fn(const EVP_MD *m,
                        const char *from, const char *to, void *arg)
 {
-    if (m)
+    if (m != NULL) {
         BIO_printf(arg, "%s\n", EVP_MD_name(m));
-    else {
-        if (!from)
+    } else {
+        if (from == NULL)
             from = "<undefined>";
-        if (!to)
+        if (to == NULL)
             to = "<undefined>";
         BIO_printf((BIO *)arg, "%s => %s\n", from, to);
     }
 }
 
+static void list_missing_help(void)
+{
+    const FUNCTION *fp;
+    const OPTIONS *o;
+
+    for (fp = functions; fp->name != NULL; fp++) {
+        if ((o = fp->help) != NULL) {
+            /* If there is help, list what flags are not documented. */
+            for ( ; o->name != NULL; o++) {
+                if (o->helpstr == NULL)
+                    BIO_printf(bio_out, "%s %s\n", fp->name, o->name);
+            }
+        } else if (fp->func != dgst_main) {
+            /* If not aliased to the dgst command, */
+            BIO_printf(bio_out, "%s *\n", fp->name);
+        }
+    }
+}
+
+static void list_options_for_command(const char *command)
+{
+    const FUNCTION *fp;
+    const OPTIONS *o;
+
+    for (fp = functions; fp->name != NULL; fp++)
+        if (strcmp(fp->name, command) == 0)
+            break;
+    if (fp->name == NULL) {
+        BIO_printf(bio_err, "Invalid command '%s'; type \"help\" for a list.\n",
+                command);
+        return;
+    }
+
+    if ((o = fp->help) == NULL)
+        return;
+
+    for ( ; o->name != NULL; o++) {
+        if (o->name == OPT_HELP_STR
+                || o->name == OPT_MORE_STR
+                || o->name[0] == '\0')
+            continue;
+        BIO_printf(bio_out, "%s %c\n", o->name, o->valtype);
+    }
+}
+
+
 /* Unified enum for help and list commands. */
 typedef enum HELPLIST_CHOICE {
-    OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
-    OPT_COMMANDS, OPT_DIGEST_COMMANDS,
+    OPT_ERR = -1, OPT_EOF = 0, OPT_HELP, OPT_ONE,
+    OPT_COMMANDS, OPT_DIGEST_COMMANDS, OPT_OPTIONS,
     OPT_DIGEST_ALGORITHMS, OPT_CIPHER_COMMANDS, OPT_CIPHER_ALGORITHMS,
-    OPT_PK_ALGORITHMS, OPT_DISABLED
+    OPT_PK_ALGORITHMS, OPT_PK_METHOD, OPT_DISABLED, OPT_MISSING_HELP
 } HELPLIST_CHOICE;
 
-OPTIONS list_options[] = {
+const OPTIONS list_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
+    {"1", OPT_ONE, '-', "List in one column"},
     {"commands", OPT_COMMANDS, '-', "List of standard commands"},
     {"digest-commands", OPT_DIGEST_COMMANDS, '-',
      "List of message digest commands"},
@@ -313,8 +362,14 @@ OPTIONS list_options[] = {
      "List of cipher algorithms"},
     {"public-key-algorithms", OPT_PK_ALGORITHMS, '-',
      "List of public key algorithms"},
+    {"public-key-methods", OPT_PK_METHOD, '-',
+     "List of public key methods"},
     {"disabled", OPT_DISABLED, '-',
      "List of disabled features"},
+    {"missing-help", OPT_MISSING_HELP, '-',
+     "List missing detailed help strings"},
+    {"options", OPT_OPTIONS, 's',
+     "List options for specified command"},
     {NULL}
 };
 
@@ -322,29 +377,33 @@ int list_main(int argc, char **argv)
 {
     char *prog;
     HELPLIST_CHOICE o;
-    int done = 0;
+    int one = 0, done = 0;
 
     prog = opt_init(argc, argv, list_options);
     while ((o = opt_next()) != OPT_EOF) {
         switch (o) {
         case OPT_EOF:  /* Never hit, but suppresses warning */
         case OPT_ERR:
+opthelp:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             return 1;
         case OPT_HELP:
             opt_help(list_options);
             break;
+        case OPT_ONE:
+            one = 1;
+            break;
         case OPT_COMMANDS:
-            list_type(FT_general);
+            list_type(FT_general, one);
             break;
         case OPT_DIGEST_COMMANDS:
-            list_type(FT_md);
+            list_type(FT_md, one);
             break;
         case OPT_DIGEST_ALGORITHMS:
             EVP_MD_do_all_sorted(list_md_fn, bio_out);
             break;
         case OPT_CIPHER_COMMANDS:
-            list_type(FT_cipher);
+            list_type(FT_cipher, one);
             break;
         case OPT_CIPHER_ALGORITHMS:
             EVP_CIPHER_do_all_sorted(list_cipher_fn, bio_out);
@@ -352,25 +411,41 @@ int list_main(int argc, char **argv)
         case OPT_PK_ALGORITHMS:
             list_pkey();
             break;
+        case OPT_PK_METHOD:
+            list_pkey_meth();
+            break;
         case OPT_DISABLED:
             list_disabled();
+            break;
+        case OPT_MISSING_HELP:
+            list_missing_help();
+            break;
+        case OPT_OPTIONS:
+            list_options_for_command(opt_arg());
             break;
         }
         done = 1;
     }
-
-    if (!done) {
-        BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
-        return 1;
+    if (opt_num_rest() != 0) {
+        BIO_printf(bio_err, "Extra arguments given.\n");
+        goto opthelp;
     }
+
+    if (!done)
+        goto opthelp;
 
     return 0;
 }
 
-OPTIONS help_options[] = {
-    {"help", OPT_HELP, '-', "Display this summary"},
+typedef enum HELP_CHOICE {
+    OPT_hERR = -1, OPT_hEOF = 0, OPT_hHELP
+} HELP_CHOICE;
+
+const OPTIONS help_options[] = {
+    {"help", OPT_hHELP, '-', "Display this summary"},
     {NULL}
 };
+
 
 int help_main(int argc, char **argv)
 {
@@ -378,15 +453,17 @@ int help_main(int argc, char **argv)
     int i, nl;
     FUNC_TYPE tp;
     char *prog;
-    HELPLIST_CHOICE o;
+    HELP_CHOICE o;
+    DISPLAY_COLUMNS dc;
 
     prog = opt_init(argc, argv, help_options);
-    while ((o = opt_next()) != OPT_EOF) {
+    while ((o = opt_next()) != OPT_hEOF) {
         switch (o) {
-        default:
+        case OPT_hERR:
+        case OPT_hEOF:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             return 1;
-        case OPT_HELP:
+        case OPT_hHELP:
             opt_help(help_options);
             return 0;
         }
@@ -397,12 +474,13 @@ int help_main(int argc, char **argv)
         return 1;
     }
 
-    BIO_printf(bio_err, "\nStandard commands");
+    calculate_columns(&dc);
+    BIO_printf(bio_err, "Standard commands");
     i = 0;
     tp = FT_none;
     for (fp = functions; fp->name != NULL; fp++) {
         nl = 0;
-        if (((i++) % COLUMNS) == 0) {
+        if (i++ % dc.columns == 0) {
             BIO_printf(bio_err, "\n");
             nl = 1;
         }
@@ -420,29 +498,35 @@ int help_main(int argc, char **argv)
                            "\nCipher commands (see the `enc' command for more details)\n");
             }
         }
-        BIO_printf(bio_err, FORMAT, fp->name);
+        BIO_printf(bio_err, "%-*s", dc.width, fp->name);
     }
     BIO_printf(bio_err, "\n\n");
     return 0;
 }
 
-int exit_main(int argc, char **argv)
-{
-    return EXIT_THE_PROGRAM;
-}
-
-static void list_type(FUNC_TYPE ft)
+static void list_type(FUNC_TYPE ft, int one)
 {
     FUNCTION *fp;
     int i = 0;
+    DISPLAY_COLUMNS dc;
 
-    for (fp = functions; fp->name != NULL; fp++)
-        if (fp->type == ft) {
-            if ((i++ % COLUMNS) == 0)
+    if (!one)
+        calculate_columns(&dc);
+
+    for (fp = functions; fp->name != NULL; fp++) {
+        if (fp->type != ft)
+            continue;
+        if (one) {
+            BIO_printf(bio_out, "%s\n", fp->name);
+        } else {
+            if (i % dc.columns == 0 && i > 0)
                 BIO_printf(bio_out, "\n");
-            BIO_printf(bio_out, FORMAT, fp->name);
+            BIO_printf(bio_out, "%-*s", dc.width, fp->name);
+            i++;
         }
-    BIO_printf(bio_out, "\n");
+    }
+    if (!one)
+        BIO_printf(bio_out, "\n\n");
 }
 
 static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
@@ -487,7 +571,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
 
     BIO_printf(bio_err, "Invalid command '%s'; type \"help\" for a list.\n",
                argv[0]);
-    return (1);
+    return 1;
 }
 
 static void list_pkey(void)
@@ -519,6 +603,22 @@ static void list_pkey(void)
     }
 }
 
+static void list_pkey_meth(void)
+{
+    size_t i;
+    size_t meth_count = EVP_PKEY_meth_get_count();
+
+    for (i = 0; i < meth_count; i++) {
+        const EVP_PKEY_METHOD *pmeth = EVP_PKEY_meth_get0(i);
+        int pkey_id, pkey_flags;
+
+        EVP_PKEY_meth_get0_info(&pkey_id, &pkey_flags, pmeth);
+        BIO_printf(bio_out, "%s\n", OBJ_nid2ln(pkey_id));
+        BIO_printf(bio_out, "\tType: %s Algorithm\n",
+                   pkey_flags & ASN1_PKEY_DYNAMIC ?  "External" : "Builtin");
+    }
+}
+
 static int function_cmp(const FUNCTION * a, const FUNCTION * b)
 {
     return strncmp(a->name, b->name, 8);
@@ -542,6 +642,9 @@ static int SortFnByName(const void *_f1, const void *_f2)
 static void list_disabled(void)
 {
     BIO_puts(bio_out, "Disabled algorithms:\n");
+#ifdef OPENSSL_NO_ARIA
+    BIO_puts(bio_out, "ARIA\n");
+#endif
 #ifdef OPENSSL_NO_BF
     BIO_puts(bio_out, "BF\n");
 #endif
@@ -691,5 +794,5 @@ static LHASH_OF(FUNCTION) *prog_init(void)
 
     for (f = functions; f->name != NULL; f++)
         (void)lh_FUNCTION_insert(ret, f);
-    return (ret);
+    return ret;
 }

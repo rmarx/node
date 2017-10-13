@@ -1,4 +1,3 @@
-.file	"engines/asm/e_padlock-x86.s"
 .text
 .globl	padlock_capability
 .type	padlock_capability,@function

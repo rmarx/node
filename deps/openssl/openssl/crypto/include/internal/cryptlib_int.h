@@ -7,7 +7,7 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include <internal/cryptlib.h>
+#include "internal/cryptlib.h"
 
 /* This file is not scanned by mkdef.pl, whereas cryptlib.h is */
 
@@ -29,3 +29,4 @@ int ossl_init_thread_start(uint64_t opts);
 # define OPENSSL_INIT_THREAD_ASYNC           0x01
 # define OPENSSL_INIT_THREAD_ERR_STATE       0x02
 
+void ossl_malloc_setup_failures(void);

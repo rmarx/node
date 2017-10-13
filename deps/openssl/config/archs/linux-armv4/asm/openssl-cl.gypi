@@ -72,6 +72,7 @@
       'openssl/apps/speed.c',
       'openssl/apps/spkac.c',
       'openssl/apps/srp.c',
+      'openssl/apps/storeutl.c',
       'openssl/apps/ts.c',
       'openssl/apps/verify.c',
       'openssl/apps/version.c',

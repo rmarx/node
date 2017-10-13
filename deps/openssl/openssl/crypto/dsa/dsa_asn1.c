@@ -75,7 +75,7 @@ static int dsa_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
 }
 
 ASN1_SEQUENCE_cb(DSAPrivateKey, dsa_cb) = {
-        ASN1_SIMPLE(DSA, version, LONG),
+        ASN1_EMBED(DSA, version, INT32),
         ASN1_SIMPLE(DSA, p, BIGNUM),
         ASN1_SIMPLE(DSA, q, BIGNUM),
         ASN1_SIMPLE(DSA, g, BIGNUM),
@@ -111,7 +111,7 @@ int DSA_sign(int type, const unsigned char *dgst, int dlen,
              unsigned char *sig, unsigned int *siglen, DSA *dsa)
 {
     DSA_SIG *s;
-    RAND_seed(dgst, dlen);
+
     s = DSA_do_sign(dgst, dlen, dsa);
     if (s == NULL) {
         *siglen = 0;
@@ -119,7 +119,7 @@ int DSA_sign(int type, const unsigned char *dgst, int dlen,
     }
     *siglen = i2d_DSA_SIG(s, &sig);
     DSA_SIG_free(s);
-    return (1);
+    return 1;
 }
 
 /* data has already been hashed (probably with SHA or SHA-1). */

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include "internal/cryptlib.h"
+#include "internal/refcount.h"
 #include <openssl/bn.h>
 #include <openssl/err.h>
 #include <openssl/objects.h>
@@ -160,7 +161,7 @@ int EVP_PKEY_up_ref(EVP_PKEY *pkey)
 {
     int i;
 
-    if (CRYPTO_atomic_add(&pkey->references, 1, &i, pkey->lock) <= 0)
+    if (CRYPTO_UP_REF(&pkey->references, &i, pkey->lock) <= 0)
         return 0;
 
     REF_PRINT_COUNT("EVP_PKEY", pkey);
@@ -187,9 +188,11 @@ static int pkey_set_type(EVP_PKEY *pkey, int type, const char *str, int len)
         if ((type == pkey->save_type) && pkey->ameth)
             return 1;
 #ifndef OPENSSL_NO_ENGINE
-        /* If we have an ENGINE release it */
+        /* If we have ENGINEs release them */
         ENGINE_finish(pkey->engine);
         pkey->engine = NULL;
+        ENGINE_finish(pkey->pmeth_engine);
+        pkey->pmeth_engine = NULL;
 #endif
     }
     if (str)
@@ -223,7 +226,25 @@ int EVP_PKEY_set_type_str(EVP_PKEY *pkey, const char *str, int len)
 {
     return pkey_set_type(pkey, EVP_PKEY_NONE, str, len);
 }
-
+#ifndef OPENSSL_NO_ENGINE
+int EVP_PKEY_set1_engine(EVP_PKEY *pkey, ENGINE *e)
+{
+    if (e != NULL) {
+        if (!ENGINE_init(e)) {
+            EVPerr(EVP_F_EVP_PKEY_SET1_ENGINE, ERR_R_ENGINE_LIB);
+            return 0;
+        }
+        if (ENGINE_get_pkey_meth(e, pkey->type) == NULL) {
+            ENGINE_finish(e);
+            EVPerr(EVP_F_EVP_PKEY_SET1_ENGINE, EVP_R_UNSUPPORTED_ALGORITHM);
+            return 0;
+        }
+    }
+    ENGINE_finish(pkey->pmeth_engine);
+    pkey->pmeth_engine = e;
+    return 1;
+}
+#endif
 int EVP_PKEY_assign(EVP_PKEY *pkey, int type, void *key)
 {
     if (pkey == NULL || !EVP_PKEY_set_type(pkey, type))
@@ -248,6 +269,35 @@ const unsigned char *EVP_PKEY_get0_hmac(const EVP_PKEY *pkey, size_t *len)
     *len = os->length;
     return os->data;
 }
+
+#ifndef OPENSSL_NO_POLY1305
+const unsigned char *EVP_PKEY_get0_poly1305(const EVP_PKEY *pkey, size_t *len)
+{
+    ASN1_OCTET_STRING *os = NULL;
+    if (pkey->type != EVP_PKEY_POLY1305) {
+        EVPerr(EVP_F_EVP_PKEY_GET0_POLY1305, EVP_R_EXPECTING_A_POLY1305_KEY);
+        return NULL;
+    }
+    os = EVP_PKEY_get0(pkey);
+    *len = os->length;
+    return os->data;
+}
+#endif
+
+#ifndef OPENSSL_NO_SIPHASH
+const unsigned char *EVP_PKEY_get0_siphash(const EVP_PKEY *pkey, size_t *len)
+{
+    ASN1_OCTET_STRING *os = NULL;
+
+    if (pkey->type != EVP_PKEY_SIPHASH) {
+        EVPerr(EVP_F_EVP_PKEY_GET0_SIPHASH, EVP_R_EXPECTING_A_SIPHASH_KEY);
+        return NULL;
+    }
+    os = EVP_PKEY_get0(pkey);
+    *len = os->length;
+    return os->data;
+}
+#endif
 
 #ifndef OPENSSL_NO_RSA
 int EVP_PKEY_set1_RSA(EVP_PKEY *pkey, RSA *key)
@@ -392,7 +442,7 @@ void EVP_PKEY_free(EVP_PKEY *x)
     if (x == NULL)
         return;
 
-    CRYPTO_atomic_add(&x->references, -1, &i, x->lock);
+    CRYPTO_DOWN_REF(&x->references, &i, x->lock);
     REF_PRINT_COUNT("EVP_PKEY", x);
     if (i > 0)
         return;
@@ -413,6 +463,8 @@ static void EVP_PKEY_free_it(EVP_PKEY *x)
 #ifndef OPENSSL_NO_ENGINE
     ENGINE_finish(x->engine);
     x->engine = NULL;
+    ENGINE_finish(x->pmeth_engine);
+    x->pmeth_engine = NULL;
 #endif
 }
 

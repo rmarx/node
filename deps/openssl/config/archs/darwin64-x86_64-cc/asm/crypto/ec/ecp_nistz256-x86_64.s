@@ -2397,8 +2397,12 @@ L$ONE_mont:
 
 .p2align	6
 _ecp_nistz256_mul_by_2:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$mul_by_2_body:
 
 	movq	0(%rsi),%r8
 	xorq	%r13,%r13
@@ -2431,9 +2435,15 @@ _ecp_nistz256_mul_by_2:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$mul_by_2_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2442,8 +2452,12 @@ _ecp_nistz256_mul_by_2:
 
 .p2align	5
 _ecp_nistz256_div_by_2:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$div_by_2_body:
 
 	movq	0(%rsi),%r8
 	movq	8(%rsi),%r9
@@ -2491,9 +2505,15 @@ _ecp_nistz256_div_by_2:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$div_by_2_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2502,8 +2522,12 @@ _ecp_nistz256_div_by_2:
 
 .p2align	5
 _ecp_nistz256_mul_by_3:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$mul_by_3_body:
 
 	movq	0(%rsi),%r8
 	xorq	%r13,%r13
@@ -2557,9 +2581,15 @@ _ecp_nistz256_mul_by_3:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$mul_by_3_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2568,8 +2598,12 @@ _ecp_nistz256_mul_by_3:
 
 .p2align	5
 _ecp_nistz256_add:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$add_body:
 
 	movq	0(%rsi),%r8
 	xorq	%r13,%r13
@@ -2603,9 +2637,15 @@ _ecp_nistz256_add:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$add_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2614,8 +2654,12 @@ _ecp_nistz256_add:
 
 .p2align	5
 _ecp_nistz256_sub:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$sub_body:
 
 	movq	0(%rsi),%r8
 	xorq	%r13,%r13
@@ -2649,9 +2693,15 @@ _ecp_nistz256_sub:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$sub_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2660,8 +2710,12 @@ _ecp_nistz256_sub:
 
 .p2align	5
 _ecp_nistz256_neg:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$neg_body:
 
 	xorq	%r8,%r8
 	xorq	%r9,%r9
@@ -2695,9 +2749,15 @@ _ecp_nistz256_neg:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$neg_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2723,15 +2783,23 @@ _ecp_nistz256_to_mont:
 
 .p2align	5
 _ecp_nistz256_mul_mont:
+
 	movl	$0x80100,%ecx
 	andl	_OPENSSL_ia32cap_P+8(%rip),%ecx
 L$mul_mont:
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
+L$mul_body:
 	cmpl	$0x80100,%ecx
 	je	L$mul_montx
 	movq	%rdx,%rbx
@@ -2756,13 +2824,23 @@ L$mul_montx:
 
 	call	__ecp_nistz256_mul_montx
 L$mul_mont_done:
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	movq	0(%rsp),%r15
+
+	movq	8(%rsp),%r14
+
+	movq	16(%rsp),%r13
+
+	movq	24(%rsp),%r12
+
+	movq	32(%rsp),%rbx
+
+	movq	40(%rsp),%rbp
+
+	leaq	48(%rsp),%rsp
+
+L$mul_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2992,14 +3070,22 @@ __ecp_nistz256_mul_montq:
 
 .p2align	5
 _ecp_nistz256_sqr_mont:
+
 	movl	$0x80100,%ecx
 	andl	_OPENSSL_ia32cap_P+8(%rip),%ecx
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
+L$sqr_body:
 	cmpl	$0x80100,%ecx
 	je	L$sqr_montx
 	movq	0(%rsi),%rax
@@ -3020,13 +3106,23 @@ L$sqr_montx:
 
 	call	__ecp_nistz256_sqr_montx
 L$sqr_mont_done:
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	movq	0(%rsp),%r15
+
+	movq	8(%rsp),%r14
+
+	movq	16(%rsp),%r13
+
+	movq	24(%rsp),%r12
+
+	movq	32(%rsp),%rbx
+
+	movq	40(%rsp),%rbp
+
+	leaq	48(%rsp),%rsp
+
+L$sqr_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -3410,19 +3506,18 @@ __ecp_nistz256_sqr_montx:
 	adoxq	%rbp,%r13
 .byte	0x67,0x67
 	mulxq	%rdx,%rcx,%rax
-	movq	%r8,%rdx
+	movq	L$poly+24(%rip),%rdx
 	adoxq	%rcx,%r14
 	shlxq	%rsi,%r8,%rcx
 	adoxq	%rax,%r15
 	shrxq	%rsi,%r8,%rax
-	movq	L$poly+24(%rip),%rbp
+	movq	%rdx,%rbp
 
 
 	addq	%rcx,%r9
 	adcq	%rax,%r10
 
-	mulxq	%rbp,%rcx,%r8
-	movq	%r9,%rdx
+	mulxq	%r8,%rcx,%r8
 	adcq	%rcx,%r11
 	shlxq	%rsi,%r9,%rcx
 	adcq	$0,%r8
@@ -3432,8 +3527,7 @@ __ecp_nistz256_sqr_montx:
 	addq	%rcx,%r10
 	adcq	%rax,%r11
 
-	mulxq	%rbp,%rcx,%r9
-	movq	%r10,%rdx
+	mulxq	%r9,%rcx,%r9
 	adcq	%rcx,%r8
 	shlxq	%rsi,%r10,%rcx
 	adcq	$0,%r9
@@ -3443,8 +3537,7 @@ __ecp_nistz256_sqr_montx:
 	addq	%rcx,%r11
 	adcq	%rax,%r8
 
-	mulxq	%rbp,%rcx,%r10
-	movq	%r11,%rdx
+	mulxq	%r10,%rcx,%r10
 	adcq	%rcx,%r9
 	shlxq	%rsi,%r11,%rcx
 	adcq	$0,%r10
@@ -3454,12 +3547,12 @@ __ecp_nistz256_sqr_montx:
 	addq	%rcx,%r8
 	adcq	%rax,%r9
 
-	mulxq	%rbp,%rcx,%r11
+	mulxq	%r11,%rcx,%r11
 	adcq	%rcx,%r10
 	adcq	$0,%r11
 
 	xorq	%rdx,%rdx
-	adcq	%r8,%r12
+	addq	%r8,%r12
 	movq	L$poly+8(%rip),%rsi
 	adcq	%r9,%r13
 	movq	%r12,%r8
@@ -3468,8 +3561,7 @@ __ecp_nistz256_sqr_montx:
 	movq	%r13,%r9
 	adcq	$0,%rdx
 
-	xorl	%eax,%eax
-	sbbq	$-1,%r12
+	subq	$-1,%r12
 	movq	%r14,%r10
 	sbbq	%rsi,%r13
 	sbbq	$0,%r14
@@ -3498,8 +3590,12 @@ __ecp_nistz256_sqr_montx:
 
 .p2align	5
 _ecp_nistz256_from_mont:
+
 	pushq	%r12
+
 	pushq	%r13
+
+L$from_body:
 
 	movq	0(%rsi),%rax
 	movq	L$poly+24(%rip),%r13
@@ -3580,9 +3676,15 @@ _ecp_nistz256_from_mont:
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 
-	popq	%r13
-	popq	%r12
+	movq	0(%rsp),%r13
+
+	movq	8(%rsp),%r12
+
+	leaq	16(%rsp),%rsp
+
+L$from_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -3668,6 +3770,7 @@ L$select_loop_sse_w5:
 	movdqu	%xmm6,64(%rdi)
 	movdqu	%xmm7,80(%rdi)
 	.byte	0xf3,0xc3
+L$SEH_end_ecp_nistz256_gather_w5:
 
 
 
@@ -3738,6 +3841,7 @@ L$select_loop_sse_w7:
 	movdqu	%xmm4,32(%rdi)
 	movdqu	%xmm5,48(%rdi)
 	.byte	0xf3,0xc3
+L$SEH_end_ecp_nistz256_gather_w7:
 
 
 
@@ -3798,6 +3902,7 @@ L$select_loop_avx2_w5:
 	vmovdqu	%ymm4,64(%rdi)
 	vzeroupper
 	.byte	0xf3,0xc3
+L$SEH_end_ecp_nistz256_avx2_gather_w5:
 
 
 
@@ -3875,6 +3980,7 @@ L$select_loop_avx2_w7:
 	vmovdqu	%ymm3,32(%rdi)
 	vzeroupper
 	.byte	0xf3,0xc3
+L$SEH_end_ecp_nistz256_avx2_gather_w7:
 
 
 .p2align	5
@@ -4001,17 +4107,26 @@ __ecp_nistz256_mul_by_2q:
 
 .p2align	5
 _ecp_nistz256_point_double:
+
 	movl	$0x80100,%ecx
 	andl	_OPENSSL_ia32cap_P+8(%rip),%ecx
 	cmpl	$0x80100,%ecx
 	je	L$point_doublex
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$160+8,%rsp
+
+L$point_doubleq_body:
 
 L$point_double_shortcutq:
 	movdqu	0(%rsi),%xmm0
@@ -4194,30 +4309,50 @@ L$point_double_shortcutq:
 .byte	102,72,15,126,207
 	call	__ecp_nistz256_sub_fromq
 
-	addq	$160+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	160+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$point_doubleq_epilogue:
 	.byte	0xf3,0xc3
+
 
 .globl	_ecp_nistz256_point_add
 
 .p2align	5
 _ecp_nistz256_point_add:
+
 	movl	$0x80100,%ecx
 	andl	_OPENSSL_ia32cap_P+8(%rip),%ecx
 	cmpl	$0x80100,%ecx
 	je	L$point_addx
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$576+8,%rsp
+
+L$point_addq_body:
 
 	movdqu	0(%rsi),%xmm0
 	movdqu	16(%rsi),%xmm1
@@ -4594,30 +4729,50 @@ L$add_proceedq:
 	movdqu	%xmm3,48(%rdi)
 
 L$add_doneq:
-	addq	$576+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	576+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$point_addq_epilogue:
 	.byte	0xf3,0xc3
+
 
 .globl	_ecp_nistz256_point_add_affine
 
 .p2align	5
 _ecp_nistz256_point_add_affine:
+
 	movl	$0x80100,%ecx
 	andl	_OPENSSL_ia32cap_P+8(%rip),%ecx
 	cmpl	$0x80100,%ecx
 	je	L$point_add_affinex
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$480+8,%rsp
+
+L$add_affineq_body:
 
 	movdqu	0(%rsi),%xmm0
 	movq	%rdx,%rbx
@@ -4900,14 +5055,25 @@ _ecp_nistz256_point_add_affine:
 	movdqu	%xmm2,32(%rdi)
 	movdqu	%xmm3,48(%rdi)
 
-	addq	$480+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	480+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$add_affineq_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .p2align	5
@@ -5039,14 +5205,23 @@ __ecp_nistz256_mul_by_2x:
 
 .p2align	5
 ecp_nistz256_point_doublex:
+
 L$point_doublex:
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$160+8,%rsp
+
+L$point_doublex_body:
 
 L$point_double_shortcutx:
 	movdqu	0(%rsi),%xmm0
@@ -5229,26 +5404,46 @@ L$point_double_shortcutx:
 .byte	102,72,15,126,207
 	call	__ecp_nistz256_sub_fromx
 
-	addq	$160+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	160+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$point_doublex_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .p2align	5
 ecp_nistz256_point_addx:
+
 L$point_addx:
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$576+8,%rsp
+
+L$point_addx_body:
 
 	movdqu	0(%rsi),%xmm0
 	movdqu	16(%rsi),%xmm1
@@ -5625,26 +5820,46 @@ L$add_proceedx:
 	movdqu	%xmm3,48(%rdi)
 
 L$add_donex:
-	addq	$576+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	576+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$point_addx_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .p2align	5
 ecp_nistz256_point_add_affinex:
+
 L$point_add_affinex:
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$480+8,%rsp
+
+L$add_affinex_body:
 
 	movdqu	0(%rsi),%xmm0
 	movq	%rdx,%rbx
@@ -5927,12 +6142,23 @@ L$point_add_affinex:
 	movdqu	%xmm2,32(%rdi)
 	movdqu	%xmm3,48(%rdi)
 
-	addq	$480+8,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbx
-	popq	%rbp
+	leaq	480+56(%rsp),%rsi
+
+	movq	-48(%rsi),%r15
+
+	movq	-40(%rsi),%r14
+
+	movq	-32(%rsi),%r13
+
+	movq	-24(%rsi),%r12
+
+	movq	-16(%rsi),%rbx
+
+	movq	-8(%rsi),%rbp
+
+	leaq	(%rsi),%rsp
+
+L$add_affinex_epilogue:
 	.byte	0xf3,0xc3
+
 

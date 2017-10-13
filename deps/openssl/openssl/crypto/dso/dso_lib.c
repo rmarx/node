@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2000-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,6 +8,7 @@
  */
 
 #include "dso_locl.h"
+#include "internal/refcount.h"
 
 static DSO_METHOD *default_DSO_meth = NULL;
 
@@ -63,9 +64,9 @@ int DSO_free(DSO *dso)
     int i;
 
     if (dso == NULL)
-        return (1);
+        return 1;
 
-    if (CRYPTO_atomic_add(&dso->references, -1, &i, dso->lock) <= 0)
+    if (CRYPTO_DOWN_REF(&dso->references, &i, dso->lock) <= 0)
         return 0;
 
     REF_PRINT_COUNT("DSO", dso);
@@ -107,7 +108,7 @@ int DSO_up_ref(DSO *dso)
         return 0;
     }
 
-    if (CRYPTO_atomic_add(&dso->references, 1, &i, dso->lock) <= 0)
+    if (CRYPTO_UP_REF(&dso->references, &i, dso->lock) <= 0)
         return 0;
 
     REF_PRINT_COUNT("DSO", r);
@@ -256,7 +257,7 @@ int DSO_set_filename(DSO *dso, const char *filename)
     }
     OPENSSL_free(dso->filename);
     dso->filename = copied;
-    return (1);
+    return 1;
 }
 
 char *DSO_merge(DSO *dso, const char *filespec1, const char *filespec2)

@@ -31,16 +31,10 @@
  * work which got its smarts from Daniel J. Bernstein's work on the same.
  */
 
-#include <openssl/opensslconf.h>
+#include <openssl/e_os2.h>
 #ifdef OPENSSL_NO_EC_NISTP_64_GCC_128
 NON_EMPTY_TRANSLATION_UNIT
 #else
-
-# ifndef OPENSSL_SYS_VMS
-#  include <stdint.h>
-# else
-#  include <inttypes.h>
-# endif
 
 # include <string.h>
 # include <openssl/err.h>
@@ -892,7 +886,7 @@ static limb felem_is_zero(const felem in)
     return is_zero;
 }
 
-static int felem_is_zero_int(const felem in)
+static int felem_is_zero_int(const void *in)
 {
     return (int)(felem_is_zero(in) & ((limb) 1));
 }
@@ -1163,9 +1157,9 @@ static void copy_conditional(felem out, const felem in, limb mask)
  * adapted for mixed addition (z2 = 1, or z2 = 0 for the point at infinity).
  *
  * This function includes a branch for checking whether the two input points
- * are equal (while not equal to the point at infinity). This case never
- * happens during single point multiplication, so there is no timing leak for
- * ECDH or ECDSA signing. */
+ * are equal (while not equal to the point at infinity). See comment below
+ * on constant-time.
+ */
 static void point_add(felem x3, felem y3, felem z3,
                       const felem x1, const felem y1, const felem z1,
                       const int mixed, const felem x2, const felem y2,
@@ -1259,6 +1253,22 @@ static void point_add(felem x3, felem y3, felem z3,
     /* ftmp5[i] < 2^61 */
 
     if (x_equal && y_equal && !z1_is_zero && !z2_is_zero) {
+        /*
+         * This is obviously not constant-time but it will almost-never happen
+         * for ECDH / ECDSA. The case where it can happen is during scalar-mult
+         * where the intermediate value gets very close to the group order.
+         * Since |ec_GFp_nistp_recode_scalar_bits| produces signed digits for
+         * the scalar, it's possible for the intermediate value to be a small
+         * negative multiple of the base point, and for the final signed digit
+         * to be the same value. We believe that this only occurs for the scalar
+         * 1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+         * ffffffa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb
+         * 71e913863f7, in that case the penultimate intermediate is -9G and
+         * the final digit is also -9G. Since this only happens for a single
+         * scalar, the timing leak is irrelevent. (Any attacker who wanted to
+         * check whether a secret scalar was that exact value, can already do
+         * so.)
+         */
         point_double(x3, y3, z3, x1, y1, z1);
         return;
     }
@@ -1594,7 +1604,7 @@ static void batch_mul(felem x_out, felem y_out, felem z_out,
 /* Precomputation for the group generator. */
 struct nistp521_pre_comp_st {
     felem g_pre_comp[16][3];
-    int references;
+    CRYPTO_REF_COUNT references;
     CRYPTO_RWLOCK *lock;
 };
 
@@ -1684,7 +1694,7 @@ NISTP521_PRE_COMP *EC_nistp521_pre_comp_dup(NISTP521_PRE_COMP *p)
 {
     int i;
     if (p != NULL)
-        CRYPTO_atomic_add(&p->references, 1, &i, p->lock);
+        CRYPTO_UP_REF(&p->references, &i, p->lock);
     return p;
 }
 
@@ -1695,7 +1705,7 @@ void EC_nistp521_pre_comp_free(NISTP521_PRE_COMP *p)
     if (p == NULL)
         return;
 
-    CRYPTO_atomic_add(&p->references, -1, &i, p->lock);
+    CRYPTO_DOWN_REF(&p->references, &i, p->lock);
     REF_PRINT_COUNT("EC_nistp521", x);
     if (i > 0)
         return;
@@ -1730,9 +1740,10 @@ int ec_GFp_nistp521_group_set_curve(EC_GROUP *group, const BIGNUM *p,
         if ((ctx = new_ctx = BN_CTX_new()) == NULL)
             return 0;
     BN_CTX_start(ctx);
-    if (((curve_p = BN_CTX_get(ctx)) == NULL) ||
-        ((curve_a = BN_CTX_get(ctx)) == NULL) ||
-        ((curve_b = BN_CTX_get(ctx)) == NULL))
+    curve_p = BN_CTX_get(ctx);
+    curve_a = BN_CTX_get(ctx);
+    curve_b = BN_CTX_get(ctx);
+    if (curve_b == NULL)
         goto err;
     BN_bin2bn(nistp521_curve_params[0], sizeof(felem_bytearray), curve_p);
     BN_bin2bn(nistp521_curve_params[1], sizeof(felem_bytearray), curve_a);
@@ -1811,7 +1822,6 @@ static void make_points_affine(size_t num, felem points[][3],
                                              sizeof(felem),
                                              tmp_felems,
                                              (void (*)(void *))felem_one,
-                                             (int (*)(const void *))
                                              felem_is_zero_int,
                                              (void (*)(void *, const void *))
                                              felem_assign,
@@ -1862,10 +1872,11 @@ int ec_GFp_nistp521_points_mul(const EC_GROUP *group, EC_POINT *r,
         if ((ctx = new_ctx = BN_CTX_new()) == NULL)
             return 0;
     BN_CTX_start(ctx);
-    if (((x = BN_CTX_get(ctx)) == NULL) ||
-        ((y = BN_CTX_get(ctx)) == NULL) ||
-        ((z = BN_CTX_get(ctx)) == NULL) ||
-        ((tmp_scalar = BN_CTX_get(ctx)) == NULL))
+    x = BN_CTX_get(ctx);
+    y = BN_CTX_get(ctx);
+    z = BN_CTX_get(ctx);
+    tmp_scalar = BN_CTX_get(ctx);
+    if (tmp_scalar == NULL)
         goto err;
 
     if (scalar != NULL) {
@@ -2049,7 +2060,9 @@ int ec_GFp_nistp521_precompute_mult(EC_GROUP *group, BN_CTX *ctx)
         if ((ctx = new_ctx = BN_CTX_new()) == NULL)
             return 0;
     BN_CTX_start(ctx);
-    if (((x = BN_CTX_get(ctx)) == NULL) || ((y = BN_CTX_get(ctx)) == NULL))
+    x = BN_CTX_get(ctx);
+    y = BN_CTX_get(ctx);
+    if (y == NULL)
         goto err;
     /* get the generator */
     if (group->generator == NULL)

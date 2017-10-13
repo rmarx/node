@@ -25,7 +25,7 @@ typedef enum OPTION_choice {
     OPT_TEXT, OPT_PRINT, OPT_PRINT_CERTS, OPT_ENGINE
 } OPTION_CHOICE;
 
-OPTIONS pkcs7_options[] = {
+const OPTIONS pkcs7_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"inform", OPT_INFORM, 'F', "Input format - DER or PEM"},
     {"in", OPT_IN, '<', "Input file"},
@@ -163,7 +163,7 @@ int pkcs7_main(int argc, char **argv)
             for (i = 0; i < sk_X509_CRL_num(crls); i++) {
                 crl = sk_X509_CRL_value(crls, i);
 
-                X509_CRL_print(out, crl);
+                X509_CRL_print_ex(out, crl, get_nameopt());
 
                 if (!noout)
                     PEM_write_bio_X509_CRL(out, crl);

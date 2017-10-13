@@ -34,7 +34,6 @@
 # define ASYNC_WIN
 #endif
 
-#define DASYNC_LIB_NAME "DASYNC"
 #include "e_dasync_err.c"
 
 /* Engine Id and Name */
@@ -606,6 +605,8 @@ static int dasync_cipher_ctrl_helper(EVP_CIPHER_CTX *ctx, int type, int arg,
 
             if (pipe_ctx->enc) {
                 if ((p[arg - 4] << 8 | p[arg - 3]) >= TLS1_1_VERSION) {
+                    if (len < AES_BLOCK_SIZE)
+                        return 0;
                     len -= AES_BLOCK_SIZE;
                 }
 

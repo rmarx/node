@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,7 +8,7 @@
  */
 
 #include <stdio.h>
-#include <ctype.h>
+#include "internal/ctype.h"
 #include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 
@@ -25,24 +25,10 @@ int ASN1_PRINTABLE_type(const unsigned char *s, int len)
 
     while ((*s) && (len-- != 0)) {
         c = *(s++);
-#ifndef CHARSET_EBCDIC
-        if (!(((c >= 'a') && (c <= 'z')) ||
-              ((c >= 'A') && (c <= 'Z')) ||
-              ((c >= '0') && (c <= '9')) ||
-              (c == ' ') || (c == '\'') ||
-              (c == '(') || (c == ')') ||
-              (c == '+') || (c == ',') ||
-              (c == '-') || (c == '.') ||
-              (c == '/') || (c == ':') || (c == '=') || (c == '?')))
+        if (!ossl_isasn1print(c))
             ia5 = 1;
-        if (c & 0x80)
+        if (!ossl_isascii(c))
             t61 = 1;
-#else
-        if (!isalnum(c) && (c != ' ') && strchr("'()+,-./:=?", c) == NULL)
-            ia5 = 1;
-        if (os_toascii[c] & 0x80)
-            t61 = 1;
-#endif
     }
     if (t61)
         return (V_ASN1_T61STRING);
@@ -76,7 +62,7 @@ int ASN1_UNIVERSALSTRING_to_string(ASN1_UNIVERSALSTRING *s)
     *(p) = '\0';
     s->length /= 4;
     s->type = ASN1_PRINTABLE_type(s->data, s->length);
-    return (1);
+    return 1;
 }
 
 int ASN1_STRING_print(BIO *bp, const ASN1_STRING *v)
@@ -105,5 +91,5 @@ int ASN1_STRING_print(BIO *bp, const ASN1_STRING *v)
     if (n > 0)
         if (BIO_write(bp, buf, n) <= 0)
             return (0);
-    return (1);
+    return 1;
 }

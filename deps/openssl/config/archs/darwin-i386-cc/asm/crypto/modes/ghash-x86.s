@@ -1,4 +1,3 @@
-.file	"ghash-x86.s"
 .text
 .globl	_gcm_gmult_4bit_x86
 .align	4

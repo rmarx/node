@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2003-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -7,8 +7,10 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include <stdio.h>
+#include "e_os.h"               /* for strncasecmp */
 #include "internal/cryptlib.h"
+#include <limits.h>
+#include <stdio.h>
 #include "internal/asn1_int.h"
 #include <openssl/asn1t.h>
 #include <openssl/conf.h>
@@ -165,6 +167,22 @@ static int print_nc_ipadd(BIO *bp, ASN1_OCTET_STRING *ip)
     return 1;
 }
 
+#define NAME_CHECK_MAX (1 << 20)
+
+static int add_lengths(int *out, int a, int b)
+{
+    /* sk_FOO_num(NULL) returns -1 but is effectively 0 when iterating. */
+    if (a < 0)
+        a = 0;
+    if (b < 0)
+        b = 0;
+
+    if (a > INT_MAX - b)
+        return 0;
+    *out = a + b;
+    return 1;
+}
+
 /*-
  * Check a certificate conforms to a specified set of constraints.
  * Return values:
@@ -179,10 +197,22 @@ static int print_nc_ipadd(BIO *bp, ASN1_OCTET_STRING *ip)
 
 int NAME_CONSTRAINTS_check(X509 *x, NAME_CONSTRAINTS *nc)
 {
-    int r, i;
+    int r, i, name_count, constraint_count;
     X509_NAME *nm;
 
     nm = X509_get_subject_name(x);
+
+    /*
+     * Guard against certificates with an excessive number of names or
+     * constraints causing a computationally expensive name constraints check.
+     */
+    if (!add_lengths(&name_count, X509_NAME_entry_count(nm),
+                     sk_GENERAL_NAME_num(x->altname))
+        || !add_lengths(&constraint_count,
+                        sk_GENERAL_SUBTREE_num(nc->permittedSubtrees),
+                        sk_GENERAL_SUBTREE_num(nc->excludedSubtrees))
+        || (name_count > 0 && constraint_count > NAME_CHECK_MAX / name_count))
+        return X509_V_ERR_UNSPECIFIED;
 
     if (X509_NAME_entry_count(nm) > 0) {
         GENERAL_NAME gntmp;
@@ -247,6 +277,7 @@ int NAME_CONSTRAINTS_check_CN(X509 *x, NAME_CONSTRAINTS *nc)
     for (i = -1;;) {
         X509_NAME_ENTRY *ne;
         ASN1_STRING *hn;
+
         i = X509_NAME_get_index_by_NID(nm, NID_commonName, i);
         if (i == -1)
             break;

@@ -136,10 +136,10 @@ void AES_ctr32_encrypt(const unsigned char *in, unsigned char *out,
                        const unsigned char ivec[AES_BLOCK_SIZE]);
 #endif
 #ifdef AES_XTS_ASM
-void AES_xts_encrypt(const char *inp, char *out, size_t len,
+void AES_xts_encrypt(const unsigned char *inp, unsigned char *out, size_t len,
                      const AES_KEY *key1, const AES_KEY *key2,
                      const unsigned char iv[16]);
-void AES_xts_decrypt(const char *inp, char *out, size_t len,
+void AES_xts_decrypt(const unsigned char *inp, unsigned char *out, size_t len,
                      const AES_KEY *key1, const AES_KEY *key2,
                      const unsigned char iv[16]);
 #endif
@@ -1978,6 +1978,7 @@ static int aes_ccm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
 
     case EVP_CTRL_AEAD_SET_IVLEN:
         arg = 15 - arg;
+        /* fall thru */
     case EVP_CTRL_CCM_SET_L:
         if (arg < 2 || arg > 8)
             return 0;
@@ -2129,6 +2130,10 @@ static int aes_ccm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
     if (cctx->tls_aad_len >= 0)
         return aes_ccm_tls_cipher(ctx, out, in, len);
 
+    /* EVP_*Final() doesn't return any data */
+    if (in == NULL && out != NULL)
+        return 0;
+
     if (!cctx->iv_set)
         return -1;
 
@@ -2148,9 +2153,6 @@ static int aes_ccm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
         CRYPTO_ccm128_aad(ccm, in, len);
         return len;
     }
-    /* EVP_*Final() doesn't return any data */
-    if (!in)
-        return 0;
     /* If not set length yet do it */
     if (!cctx->len_set) {
         if (CRYPTO_ccm128_setiv(ccm, EVP_CIPHER_CTX_iv_noconst(ctx),

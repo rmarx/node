@@ -13,6 +13,7 @@
       'SHA512_ASM',
       'AES_ASM',
       'VPAES_ASM',
+      'ECP_NISTZ256_ASM',
       'POLY1305_ASM',
     ],
     'openssl_cflags_linux-ppc64le': [
@@ -69,6 +70,7 @@
       'openssl/apps/speed.c',
       'openssl/apps/spkac.c',
       'openssl/apps/srp.c',
+      'openssl/apps/storeutl.c',
       'openssl/apps/ts.c',
       'openssl/apps/verify.c',
       'openssl/apps/version.c',

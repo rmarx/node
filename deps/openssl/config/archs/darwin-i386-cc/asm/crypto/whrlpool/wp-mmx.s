@@ -1,4 +1,3 @@
-.file	"wp-mmx.s"
 .text
 .globl	_whirlpool_block_mmx
 .align	4

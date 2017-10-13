@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include "internal/cryptlib.h"
 #include <openssl/evp.h>
-#include <internal/objects.h>
+#include "internal/objects.h"
 #include <openssl/x509.h>
 #include "internal/evp_int.h"
 
@@ -90,6 +90,8 @@ void evp_cleanup_int(void)
 
     EVP_PBE_cleanup();
     OBJ_sigid_free();
+
+    evp_app_cleanup_int();
 }
 
 struct doall_cipher {

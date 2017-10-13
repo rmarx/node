@@ -1,16 +1,11 @@
 /*
- * Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2001-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
- */
-
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- * Portions of this software developed by SUN MICROSYSTEMS, INC.,
- * and contributed to the OpenSSL project.
  */
 
 #include <string.h>
@@ -19,12 +14,17 @@
 #include "internal/cryptlib.h"
 #include "internal/bn_int.h"
 #include "ec_lcl.h"
+#include "internal/refcount.h"
 
 /*
  * This file implements the wNAF-based interleaving multi-exponentiation method
- * (<URL:http://www.informatik.tu-darmstadt.de/TI/Mitarbeiter/moeller.html#multiexp>);
- * for multiplication with precomputation, we use wNAF splitting
- * (<URL:http://www.informatik.tu-darmstadt.de/TI/Mitarbeiter/moeller.html#fastexp>).
+ * Formerly at:
+ *   http://www.informatik.tu-darmstadt.de/TI/Mitarbeiter/moeller.html#multiexp
+ * You might now find it here:
+ *   http://link.springer.com/chapter/10.1007%2F3-540-45537-X_13
+ *   http://www.bmoeller.de/pdf/TI-01-08.multiexp.pdf
+ * For multiplication with precomputation, we use wNAF splitting, formerly at:
+ *   http://www.informatik.tu-darmstadt.de/TI/Mitarbeiter/moeller.html#fastexp
  */
 
 /* structure for precomputed multiples of the generator */
@@ -38,7 +38,7 @@ struct ec_pre_comp_st {
                                  * generator: 'num' pointers to EC_POINT
                                  * objects followed by a NULL */
     size_t num;                 /* numblocks * 2^(w-1) */
-    int references;
+    CRYPTO_REF_COUNT references;
     CRYPTO_RWLOCK *lock;
 };
 
@@ -73,7 +73,7 @@ EC_PRE_COMP *EC_ec_pre_comp_dup(EC_PRE_COMP *pre)
 {
     int i;
     if (pre != NULL)
-        CRYPTO_atomic_add(&pre->references, 1, &i, pre->lock);
+        CRYPTO_UP_REF(&pre->references, &i, pre->lock);
     return pre;
 }
 
@@ -84,7 +84,7 @@ void EC_ec_pre_comp_free(EC_PRE_COMP *pre)
     if (pre == NULL)
         return;
 
-    CRYPTO_atomic_add(&pre->references, -1, &i, pre->lock);
+    CRYPTO_DOWN_REF(&pre->references, &i, pre->lock);
     REF_PRINT_COUNT("EC_ec", pre);
     if (i > 0)
         return;

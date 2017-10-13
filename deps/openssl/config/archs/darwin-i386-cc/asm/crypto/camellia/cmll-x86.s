@@ -1,4 +1,3 @@
-.file	"cmll-586.s"
 .text
 .globl	_Camellia_EncryptBlock_Rounds
 .align	4

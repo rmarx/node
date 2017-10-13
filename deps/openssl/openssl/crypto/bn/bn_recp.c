@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -48,7 +48,7 @@ int BN_RECP_CTX_set(BN_RECP_CTX *recp, const BIGNUM *d, BN_CTX *ctx)
     BN_zero(&(recp->Nr));
     recp->num_bits = BN_num_bits(d);
     recp->shift = 0;
-    return (1);
+    return 1;
 }
 
 int BN_mod_mul_reciprocal(BIGNUM *r, const BIGNUM *x, const BIGNUM *y,
@@ -87,17 +87,11 @@ int BN_div_recp(BIGNUM *dv, BIGNUM *rem, const BIGNUM *m,
     BIGNUM *a, *b, *d, *r;
 
     BN_CTX_start(ctx);
+    d = (dv != NULL) ? dv : BN_CTX_get(ctx);
+    r = (rem != NULL) ? rem : BN_CTX_get(ctx);
     a = BN_CTX_get(ctx);
     b = BN_CTX_get(ctx);
-    if (dv != NULL)
-        d = dv;
-    else
-        d = BN_CTX_get(ctx);
-    if (rem != NULL)
-        r = rem;
-    else
-        r = BN_CTX_get(ctx);
-    if (a == NULL || b == NULL || d == NULL || r == NULL)
+    if (b == NULL)
         goto err;
 
     if (BN_ucmp(m, &(recp->N)) < 0) {
@@ -107,7 +101,7 @@ int BN_div_recp(BIGNUM *dv, BIGNUM *rem, const BIGNUM *m,
             return 0;
         }
         BN_CTX_end(ctx);
-        return (1);
+        return 1;
     }
 
     /*

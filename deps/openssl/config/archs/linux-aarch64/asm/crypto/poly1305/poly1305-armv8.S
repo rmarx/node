@@ -48,7 +48,11 @@ poly1305_init:
 	csel	x12,x12,x7,eq
 	csel	x13,x13,x8,eq
 
+#ifdef	__ILP32__
+	stp	w12,w13,[x2]
+#else
 	stp	x12,x13,[x2]
+#endif
 
 	mov	x0,#1
 .Lno_key:

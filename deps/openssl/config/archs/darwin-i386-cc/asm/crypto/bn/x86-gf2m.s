@@ -1,4 +1,3 @@
-.file	"crypto/bn/asm/x86-gf2m.s"
 .text
 .align	4
 __mul_1x1_mmx:

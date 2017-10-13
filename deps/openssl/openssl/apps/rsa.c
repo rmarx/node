@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -35,7 +35,7 @@ typedef enum OPTION_choice {
     OPT_NOOUT, OPT_TEXT, OPT_MODULUS, OPT_CHECK, OPT_CIPHER
 } OPTION_CHOICE;
 
-OPTIONS rsa_options[] = {
+const OPTIONS rsa_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"inform", OPT_INFORM, 'f', "Input format, one of DER NET PEM"},
     {"outform", OPT_OUTFORM, 'f', "Output format, one of DER NET PEM PVK"},
@@ -176,12 +176,14 @@ int rsa_main(int argc, char **argv)
                     tmpformat = FORMAT_PEMRSA;
                 else if (informat == FORMAT_ASN1)
                     tmpformat = FORMAT_ASN1RSA;
-            } else
+            } else {
                 tmpformat = informat;
+            }
 
             pkey = load_pubkey(infile, tmpformat, 1, passin, e, "Public Key");
-        } else
+        } else {
             pkey = load_key(infile, informat, 1, passin, e, "Private Key");
+        }
 
         if (pkey != NULL)
             rsa = EVP_PKEY_get1_RSA(pkey);
@@ -215,16 +217,16 @@ int rsa_main(int argc, char **argv)
     }
 
     if (check) {
-        int r = RSA_check_key(rsa);
+        int r = RSA_check_key_ex(rsa, NULL);
 
-        if (r == 1)
+        if (r == 1) {
             BIO_printf(out, "RSA key ok\n");
-        else if (r == 0) {
+        } else if (r == 0) {
             unsigned long err;
 
             while ((err = ERR_peek_error()) != 0 &&
                    ERR_GET_LIB(err) == ERR_LIB_RSA &&
-                   ERR_GET_FUNC(err) == RSA_F_RSA_CHECK_KEY &&
+                   ERR_GET_FUNC(err) == RSA_F_RSA_CHECK_KEY_EX &&
                    ERR_GET_REASON(err) != ERR_R_MALLOC_FAILURE) {
                 BIO_printf(out, "RSA key error: %s\n",
                            ERR_reason_error_string(err));
@@ -251,8 +253,7 @@ int rsa_main(int argc, char **argv)
             assert(private);
             i = i2d_RSAPrivateKey_bio(out, rsa);
         }
-    }
-    else if (outformat == FORMAT_PEM) {
+    } else if (outformat == FORMAT_PEM) {
         if (pubout || pubin) {
             if (pubout == 2)
                 i = PEM_write_bio_RSAPublicKey(out, rsa);
@@ -297,8 +298,9 @@ int rsa_main(int argc, char **argv)
     if (i <= 0) {
         BIO_printf(bio_err, "unable to write key\n");
         ERR_print_errors(bio_err);
-    } else
+    } else {
         ret = 0;
+    }
  end:
     release_engine(e);
     BIO_free_all(out);

@@ -1,4 +1,3 @@
-.file	"crypto/bn/asm/x86-mont.s"
 .text
 .globl	_bn_mul_mont
 .align	4

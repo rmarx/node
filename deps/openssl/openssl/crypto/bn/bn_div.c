@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -34,7 +34,7 @@ int BN_div(BIGNUM *dv, BIGNUM *rem, const BIGNUM *m, const BIGNUM *d,
         }
         if (dv != NULL)
             BN_zero(dv);
-        return (1);
+        return 1;
     }
 
     BN_CTX_start(ctx);
@@ -187,18 +187,15 @@ int BN_div(BIGNUM *dv, BIGNUM *rm, const BIGNUM *num, const BIGNUM *divisor,
         }
         if (dv != NULL)
             BN_zero(dv);
-        return (1);
+        return 1;
     }
 
     BN_CTX_start(ctx);
+    res = (dv == NULL) ? BN_CTX_get(ctx) : dv;
     tmp = BN_CTX_get(ctx);
     snum = BN_CTX_get(ctx);
     sdiv = BN_CTX_get(ctx);
-    if (dv == NULL)
-        res = BN_CTX_get(ctx);
-    else
-        res = dv;
-    if (sdiv == NULL || res == NULL || tmp == NULL || snum == NULL)
+    if (sdiv == NULL)
         goto err;
 
     /* First we normalise the numbers */
@@ -414,7 +411,7 @@ int BN_div(BIGNUM *dv, BIGNUM *rm, const BIGNUM *num, const BIGNUM *divisor,
     if (no_branch)
         bn_correct_top(res);
     BN_CTX_end(ctx);
-    return (1);
+    return 1;
  err:
     bn_check_top(rm);
     BN_CTX_end(ctx);

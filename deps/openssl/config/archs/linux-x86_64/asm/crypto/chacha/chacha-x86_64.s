@@ -21,24 +21,50 @@
 .byte	0x3,0x0,0x1,0x2, 0x7,0x4,0x5,0x6, 0xb,0x8,0x9,0xa, 0xf,0xc,0xd,0xe
 .Lsigma:
 .byte	101,120,112,97,110,100,32,51,50,45,98,121,116,101,32,107,0
+.align	64
+.Lzeroz:
+.long	0,0,0,0, 1,0,0,0, 2,0,0,0, 3,0,0,0
+.Lfourz:
+.long	4,0,0,0, 4,0,0,0, 4,0,0,0, 4,0,0,0
+.Lincz:
+.long	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+.Lsixteen:
+.long	16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16
 .byte	67,104,97,67,104,97,50,48,32,102,111,114,32,120,56,54,95,54,52,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .globl	ChaCha20_ctr32
 .type	ChaCha20_ctr32,@function
 .align	64
 ChaCha20_ctr32:
+.cfi_startproc	
 	cmpq	$0,%rdx
 	je	.Lno_data
 	movq	OPENSSL_ia32cap_P+4(%rip),%r10
+	btq	$48,%r10
+	jc	.LChaCha20_avx512
 	testl	$512,%r10d
 	jnz	.LChaCha20_ssse3
 
 	pushq	%rbx
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbx,-16
 	pushq	%rbp
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbp,-24
 	pushq	%r12
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r12,-32
 	pushq	%r13
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r13,-40
 	pushq	%r14
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r14,-48
 	pushq	%r15
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r15,-56
 	subq	$64+24,%rsp
+.cfi_adjust_cfa_offset	64+24
+.Lctr32_body:
 
 
 	movdqu	(%rcx),%xmm1
@@ -276,34 +302,40 @@ ChaCha20_ctr32:
 	jnz	.Loop_tail
 
 .Ldone:
-	addq	$64+24,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbp
-	popq	%rbx
+	leaq	64+24+48(%rsp),%rsi
+.cfi_def_cfa	%rsi,8
+	movq	-48(%rsi),%r15
+.cfi_restore	%r15
+	movq	-40(%rsi),%r14
+.cfi_restore	%r14
+	movq	-32(%rsi),%r13
+.cfi_restore	%r13
+	movq	-24(%rsi),%r12
+.cfi_restore	%r12
+	movq	-16(%rsi),%rbp
+.cfi_restore	%rbp
+	movq	-8(%rsi),%rbx
+.cfi_restore	%rbx
+	leaq	(%rsi),%rsp
+.cfi_def_cfa_register	%rsp
 .Lno_data:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	ChaCha20_ctr32,.-ChaCha20_ctr32
 .type	ChaCha20_ssse3,@function
 .align	32
 ChaCha20_ssse3:
+.cfi_startproc	
 .LChaCha20_ssse3:
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
 	testl	$2048,%r10d
 	jnz	.LChaCha20_4xop
 	cmpq	$128,%rdx
 	ja	.LChaCha20_4x
 
 .Ldo_sse3_after_all:
-	pushq	%rbx
-	pushq	%rbp
-	pushq	%r12
-	pushq	%r13
-	pushq	%r14
-	pushq	%r15
-
-	subq	$64+24,%rsp
+	subq	$64+8,%rsp
 	movdqa	.Lsigma(%rip),%xmm0
 	movdqu	(%rcx),%xmm1
 	movdqu	16(%rcx),%xmm2
@@ -315,7 +347,7 @@ ChaCha20_ssse3:
 	movdqa	%xmm1,16(%rsp)
 	movdqa	%xmm2,32(%rsp)
 	movdqa	%xmm3,48(%rsp)
-	movl	$10,%ebp
+	movq	$10,%r8
 	jmp	.Loop_ssse3
 
 .align	32
@@ -325,7 +357,7 @@ ChaCha20_ssse3:
 	movdqa	16(%rsp),%xmm1
 	movdqa	32(%rsp),%xmm2
 	paddd	48(%rsp),%xmm3
-	movl	$10,%ebp
+	movq	$10,%r8
 	movdqa	%xmm3,48(%rsp)
 	jmp	.Loop_ssse3
 
@@ -374,7 +406,7 @@ ChaCha20_ssse3:
 	pshufd	$78,%xmm2,%xmm2
 	pshufd	$147,%xmm1,%xmm1
 	pshufd	$57,%xmm3,%xmm3
-	decl	%ebp
+	decq	%r8
 	jnz	.Loop_ssse3
 	paddd	0(%rsp),%xmm0
 	paddd	16(%rsp),%xmm1
@@ -411,31 +443,31 @@ ChaCha20_ssse3:
 	movdqa	%xmm1,16(%rsp)
 	movdqa	%xmm2,32(%rsp)
 	movdqa	%xmm3,48(%rsp)
-	xorq	%rbx,%rbx
+	xorq	%r8,%r8
 
 .Loop_tail_ssse3:
-	movzbl	(%rsi,%rbx,1),%eax
-	movzbl	(%rsp,%rbx,1),%ecx
-	leaq	1(%rbx),%rbx
+	movzbl	(%rsi,%r8,1),%eax
+	movzbl	(%rsp,%r8,1),%ecx
+	leaq	1(%r8),%r8
 	xorl	%ecx,%eax
-	movb	%al,-1(%rdi,%rbx,1)
+	movb	%al,-1(%rdi,%r8,1)
 	decq	%rdx
 	jnz	.Loop_tail_ssse3
 
 .Ldone_ssse3:
-	addq	$64+24,%rsp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbp
-	popq	%rbx
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.Lssse3_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	ChaCha20_ssse3,.-ChaCha20_ssse3
 .type	ChaCha20_4x,@function
 .align	32
 ChaCha20_4x:
+.cfi_startproc	
 .LChaCha20_4x:
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
 	movq	%r10,%r11
 	shrq	$32,%r10
 	testq	$32,%r10
@@ -448,8 +480,7 @@ ChaCha20_4x:
 	je	.Ldo_sse3_after_all
 
 .Lproceed4x:
-	leaq	-120(%rsp),%r11
-	subq	$0x148+0,%rsp
+	subq	$0x140+8,%rsp
 	movdqa	.Lsigma(%rip),%xmm11
 	movdqu	(%rcx),%xmm15
 	movdqu	16(%rcx),%xmm7
@@ -976,15 +1007,20 @@ ChaCha20_4x:
 	jnz	.Loop_tail4x
 
 .Ldone4x:
-	addq	$0x148+0,%rsp
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.L4x_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	ChaCha20_4x,.-ChaCha20_4x
 .type	ChaCha20_4xop,@function
 .align	32
 ChaCha20_4xop:
+.cfi_startproc	
 .LChaCha20_4xop:
-	leaq	-120(%rsp),%r11
-	subq	$0x148+0,%rsp
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
+	subq	$0x140+8,%rsp
 	vzeroupper
 
 	vmovdqa	.Lsigma(%rip),%xmm11
@@ -1386,18 +1422,22 @@ ChaCha20_4xop:
 
 .Ldone4xop:
 	vzeroupper
-	addq	$0x148+0,%rsp
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.L4xop_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	ChaCha20_4xop,.-ChaCha20_4xop
 .type	ChaCha20_8x,@function
 .align	32
 ChaCha20_8x:
+.cfi_startproc	
 .LChaCha20_8x:
-	movq	%rsp,%r10
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
 	subq	$0x280+8,%rsp
 	andq	$-32,%rsp
 	vzeroupper
-	movq	%r10,640(%rsp)
 
 
 
@@ -1988,6 +2028,669 @@ ChaCha20_8x:
 
 .Ldone8x:
 	vzeroall
-	movq	640(%rsp),%rsp
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.L8x_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	ChaCha20_8x,.-ChaCha20_8x
+.type	ChaCha20_avx512,@function
+.align	32
+ChaCha20_avx512:
+.cfi_startproc	
+.LChaCha20_avx512:
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
+	cmpq	$512,%rdx
+	ja	.LChaCha20_16x
+
+	subq	$64+8,%rsp
+	vbroadcasti32x4	.Lsigma(%rip),%zmm0
+	vbroadcasti32x4	(%rcx),%zmm1
+	vbroadcasti32x4	16(%rcx),%zmm2
+	vbroadcasti32x4	(%r8),%zmm3
+
+	vmovdqa32	%zmm0,%zmm16
+	vmovdqa32	%zmm1,%zmm17
+	vmovdqa32	%zmm2,%zmm18
+	vpaddd	.Lzeroz(%rip),%zmm3,%zmm3
+	vmovdqa32	.Lfourz(%rip),%zmm20
+	movq	$10,%r8
+	vmovdqa32	%zmm3,%zmm19
+	jmp	.Loop_avx512
+
+.align	16
+.Loop_outer_avx512:
+	vmovdqa32	%zmm16,%zmm0
+	vmovdqa32	%zmm17,%zmm1
+	vmovdqa32	%zmm18,%zmm2
+	vpaddd	%zmm20,%zmm19,%zmm3
+	movq	$10,%r8
+	vmovdqa32	%zmm3,%zmm19
+	jmp	.Loop_avx512
+
+.align	32
+.Loop_avx512:
+	vpaddd	%zmm1,%zmm0,%zmm0
+	vpxord	%zmm0,%zmm3,%zmm3
+	vprold	$16,%zmm3,%zmm3
+	vpaddd	%zmm3,%zmm2,%zmm2
+	vpxord	%zmm2,%zmm1,%zmm1
+	vprold	$12,%zmm1,%zmm1
+	vpaddd	%zmm1,%zmm0,%zmm0
+	vpxord	%zmm0,%zmm3,%zmm3
+	vprold	$8,%zmm3,%zmm3
+	vpaddd	%zmm3,%zmm2,%zmm2
+	vpxord	%zmm2,%zmm1,%zmm1
+	vprold	$7,%zmm1,%zmm1
+	vpshufd	$78,%zmm2,%zmm2
+	vpshufd	$57,%zmm1,%zmm1
+	vpshufd	$147,%zmm3,%zmm3
+	vpaddd	%zmm1,%zmm0,%zmm0
+	vpxord	%zmm0,%zmm3,%zmm3
+	vprold	$16,%zmm3,%zmm3
+	vpaddd	%zmm3,%zmm2,%zmm2
+	vpxord	%zmm2,%zmm1,%zmm1
+	vprold	$12,%zmm1,%zmm1
+	vpaddd	%zmm1,%zmm0,%zmm0
+	vpxord	%zmm0,%zmm3,%zmm3
+	vprold	$8,%zmm3,%zmm3
+	vpaddd	%zmm3,%zmm2,%zmm2
+	vpxord	%zmm2,%zmm1,%zmm1
+	vprold	$7,%zmm1,%zmm1
+	vpshufd	$78,%zmm2,%zmm2
+	vpshufd	$147,%zmm1,%zmm1
+	vpshufd	$57,%zmm3,%zmm3
+	decq	%r8
+	jnz	.Loop_avx512
+	vpaddd	%zmm16,%zmm0,%zmm0
+	vpaddd	%zmm17,%zmm1,%zmm1
+	vpaddd	%zmm18,%zmm2,%zmm2
+	vpaddd	%zmm19,%zmm3,%zmm3
+
+	subq	$64,%rdx
+	jb	.Ltail64_avx512
+
+	vpxor	0(%rsi),%xmm0,%xmm4
+	vpxor	16(%rsi),%xmm1,%xmm5
+	vpxor	32(%rsi),%xmm2,%xmm6
+	vpxor	48(%rsi),%xmm3,%xmm7
+	leaq	64(%rsi),%rsi
+
+	vmovdqu	%xmm4,0(%rdi)
+	vmovdqu	%xmm5,16(%rdi)
+	vmovdqu	%xmm6,32(%rdi)
+	vmovdqu	%xmm7,48(%rdi)
+	leaq	64(%rdi),%rdi
+
+	jz	.Ldone_avx512
+
+	vextracti32x4	$1,%zmm0,%xmm4
+	vextracti32x4	$1,%zmm1,%xmm5
+	vextracti32x4	$1,%zmm2,%xmm6
+	vextracti32x4	$1,%zmm3,%xmm7
+
+	subq	$64,%rdx
+	jb	.Ltail_avx512
+
+	vpxor	0(%rsi),%xmm4,%xmm4
+	vpxor	16(%rsi),%xmm5,%xmm5
+	vpxor	32(%rsi),%xmm6,%xmm6
+	vpxor	48(%rsi),%xmm7,%xmm7
+	leaq	64(%rsi),%rsi
+
+	vmovdqu	%xmm4,0(%rdi)
+	vmovdqu	%xmm5,16(%rdi)
+	vmovdqu	%xmm6,32(%rdi)
+	vmovdqu	%xmm7,48(%rdi)
+	leaq	64(%rdi),%rdi
+
+	jz	.Ldone_avx512
+
+	vextracti32x4	$2,%zmm0,%xmm4
+	vextracti32x4	$2,%zmm1,%xmm5
+	vextracti32x4	$2,%zmm2,%xmm6
+	vextracti32x4	$2,%zmm3,%xmm7
+
+	subq	$64,%rdx
+	jb	.Ltail_avx512
+
+	vpxor	0(%rsi),%xmm4,%xmm4
+	vpxor	16(%rsi),%xmm5,%xmm5
+	vpxor	32(%rsi),%xmm6,%xmm6
+	vpxor	48(%rsi),%xmm7,%xmm7
+	leaq	64(%rsi),%rsi
+
+	vmovdqu	%xmm4,0(%rdi)
+	vmovdqu	%xmm5,16(%rdi)
+	vmovdqu	%xmm6,32(%rdi)
+	vmovdqu	%xmm7,48(%rdi)
+	leaq	64(%rdi),%rdi
+
+	jz	.Ldone_avx512
+
+	vextracti32x4	$3,%zmm0,%xmm4
+	vextracti32x4	$3,%zmm1,%xmm5
+	vextracti32x4	$3,%zmm2,%xmm6
+	vextracti32x4	$3,%zmm3,%xmm7
+
+	subq	$64,%rdx
+	jb	.Ltail_avx512
+
+	vpxor	0(%rsi),%xmm4,%xmm4
+	vpxor	16(%rsi),%xmm5,%xmm5
+	vpxor	32(%rsi),%xmm6,%xmm6
+	vpxor	48(%rsi),%xmm7,%xmm7
+	leaq	64(%rsi),%rsi
+
+	vmovdqu	%xmm4,0(%rdi)
+	vmovdqu	%xmm5,16(%rdi)
+	vmovdqu	%xmm6,32(%rdi)
+	vmovdqu	%xmm7,48(%rdi)
+	leaq	64(%rdi),%rdi
+
+	jnz	.Loop_outer_avx512
+
+	jmp	.Ldone_avx512
+
+.align	16
+.Ltail64_avx512:
+	vmovdqa	%xmm0,0(%rsp)
+	vmovdqa	%xmm1,16(%rsp)
+	vmovdqa	%xmm2,32(%rsp)
+	vmovdqa	%xmm3,48(%rsp)
+	addq	$64,%rdx
+	jmp	.Loop_tail_avx512
+
+.align	16
+.Ltail_avx512:
+	vmovdqa	%xmm4,0(%rsp)
+	vmovdqa	%xmm5,16(%rsp)
+	vmovdqa	%xmm6,32(%rsp)
+	vmovdqa	%xmm7,48(%rsp)
+	addq	$64,%rdx
+
+.Loop_tail_avx512:
+	movzbl	(%rsi,%r8,1),%eax
+	movzbl	(%rsp,%r8,1),%ecx
+	leaq	1(%r8),%r8
+	xorl	%ecx,%eax
+	movb	%al,-1(%rdi,%r8,1)
+	decq	%rdx
+	jnz	.Loop_tail_avx512
+
+	vmovdqa32	%zmm16,0(%rsp)
+
+.Ldone_avx512:
+	vzeroall
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.Lavx512_epilogue:
+	.byte	0xf3,0xc3
+.cfi_endproc	
+.size	ChaCha20_avx512,.-ChaCha20_avx512
+.type	ChaCha20_16x,@function
+.align	32
+ChaCha20_16x:
+.cfi_startproc	
+.LChaCha20_16x:
+	movq	%rsp,%r9
+.cfi_def_cfa_register	%r9
+	subq	$64+8,%rsp
+	andq	$-64,%rsp
+	vzeroupper
+
+	leaq	.Lsigma(%rip),%r10
+	vbroadcasti32x4	(%r10),%zmm3
+	vbroadcasti32x4	(%rcx),%zmm7
+	vbroadcasti32x4	16(%rcx),%zmm11
+	vbroadcasti32x4	(%r8),%zmm15
+
+	vpshufd	$0x00,%zmm3,%zmm0
+	vpshufd	$0x55,%zmm3,%zmm1
+	vpshufd	$0xaa,%zmm3,%zmm2
+	vpshufd	$0xff,%zmm3,%zmm3
+	vmovdqa64	%zmm0,%zmm16
+	vmovdqa64	%zmm1,%zmm17
+	vmovdqa64	%zmm2,%zmm18
+	vmovdqa64	%zmm3,%zmm19
+
+	vpshufd	$0x00,%zmm7,%zmm4
+	vpshufd	$0x55,%zmm7,%zmm5
+	vpshufd	$0xaa,%zmm7,%zmm6
+	vpshufd	$0xff,%zmm7,%zmm7
+	vmovdqa64	%zmm4,%zmm20
+	vmovdqa64	%zmm5,%zmm21
+	vmovdqa64	%zmm6,%zmm22
+	vmovdqa64	%zmm7,%zmm23
+
+	vpshufd	$0x00,%zmm11,%zmm8
+	vpshufd	$0x55,%zmm11,%zmm9
+	vpshufd	$0xaa,%zmm11,%zmm10
+	vpshufd	$0xff,%zmm11,%zmm11
+	vmovdqa64	%zmm8,%zmm24
+	vmovdqa64	%zmm9,%zmm25
+	vmovdqa64	%zmm10,%zmm26
+	vmovdqa64	%zmm11,%zmm27
+
+	vpshufd	$0x00,%zmm15,%zmm12
+	vpshufd	$0x55,%zmm15,%zmm13
+	vpshufd	$0xaa,%zmm15,%zmm14
+	vpshufd	$0xff,%zmm15,%zmm15
+	vpaddd	.Lincz(%rip),%zmm12,%zmm12
+	vmovdqa64	%zmm12,%zmm28
+	vmovdqa64	%zmm13,%zmm29
+	vmovdqa64	%zmm14,%zmm30
+	vmovdqa64	%zmm15,%zmm31
+
+	movl	$10,%eax
+	jmp	.Loop16x
+
+.align	32
+.Loop_outer16x:
+	vpbroadcastd	0(%r10),%zmm0
+	vpbroadcastd	4(%r10),%zmm1
+	vpbroadcastd	8(%r10),%zmm2
+	vpbroadcastd	12(%r10),%zmm3
+	vpaddd	.Lsixteen(%rip),%zmm28,%zmm28
+	vmovdqa64	%zmm20,%zmm4
+	vmovdqa64	%zmm21,%zmm5
+	vmovdqa64	%zmm22,%zmm6
+	vmovdqa64	%zmm23,%zmm7
+	vmovdqa64	%zmm24,%zmm8
+	vmovdqa64	%zmm25,%zmm9
+	vmovdqa64	%zmm26,%zmm10
+	vmovdqa64	%zmm27,%zmm11
+	vmovdqa64	%zmm28,%zmm12
+	vmovdqa64	%zmm29,%zmm13
+	vmovdqa64	%zmm30,%zmm14
+	vmovdqa64	%zmm31,%zmm15
+
+	vmovdqa64	%zmm0,%zmm16
+	vmovdqa64	%zmm1,%zmm17
+	vmovdqa64	%zmm2,%zmm18
+	vmovdqa64	%zmm3,%zmm19
+
+	movl	$10,%eax
+	jmp	.Loop16x
+
+.align	32
+.Loop16x:
+	vpaddd	%zmm4,%zmm0,%zmm0
+	vpaddd	%zmm5,%zmm1,%zmm1
+	vpaddd	%zmm6,%zmm2,%zmm2
+	vpaddd	%zmm7,%zmm3,%zmm3
+	vpxord	%zmm0,%zmm12,%zmm12
+	vpxord	%zmm1,%zmm13,%zmm13
+	vpxord	%zmm2,%zmm14,%zmm14
+	vpxord	%zmm3,%zmm15,%zmm15
+	vprold	$16,%zmm12,%zmm12
+	vprold	$16,%zmm13,%zmm13
+	vprold	$16,%zmm14,%zmm14
+	vprold	$16,%zmm15,%zmm15
+	vpaddd	%zmm12,%zmm8,%zmm8
+	vpaddd	%zmm13,%zmm9,%zmm9
+	vpaddd	%zmm14,%zmm10,%zmm10
+	vpaddd	%zmm15,%zmm11,%zmm11
+	vpxord	%zmm8,%zmm4,%zmm4
+	vpxord	%zmm9,%zmm5,%zmm5
+	vpxord	%zmm10,%zmm6,%zmm6
+	vpxord	%zmm11,%zmm7,%zmm7
+	vprold	$12,%zmm4,%zmm4
+	vprold	$12,%zmm5,%zmm5
+	vprold	$12,%zmm6,%zmm6
+	vprold	$12,%zmm7,%zmm7
+	vpaddd	%zmm4,%zmm0,%zmm0
+	vpaddd	%zmm5,%zmm1,%zmm1
+	vpaddd	%zmm6,%zmm2,%zmm2
+	vpaddd	%zmm7,%zmm3,%zmm3
+	vpxord	%zmm0,%zmm12,%zmm12
+	vpxord	%zmm1,%zmm13,%zmm13
+	vpxord	%zmm2,%zmm14,%zmm14
+	vpxord	%zmm3,%zmm15,%zmm15
+	vprold	$8,%zmm12,%zmm12
+	vprold	$8,%zmm13,%zmm13
+	vprold	$8,%zmm14,%zmm14
+	vprold	$8,%zmm15,%zmm15
+	vpaddd	%zmm12,%zmm8,%zmm8
+	vpaddd	%zmm13,%zmm9,%zmm9
+	vpaddd	%zmm14,%zmm10,%zmm10
+	vpaddd	%zmm15,%zmm11,%zmm11
+	vpxord	%zmm8,%zmm4,%zmm4
+	vpxord	%zmm9,%zmm5,%zmm5
+	vpxord	%zmm10,%zmm6,%zmm6
+	vpxord	%zmm11,%zmm7,%zmm7
+	vprold	$7,%zmm4,%zmm4
+	vprold	$7,%zmm5,%zmm5
+	vprold	$7,%zmm6,%zmm6
+	vprold	$7,%zmm7,%zmm7
+	vpaddd	%zmm5,%zmm0,%zmm0
+	vpaddd	%zmm6,%zmm1,%zmm1
+	vpaddd	%zmm7,%zmm2,%zmm2
+	vpaddd	%zmm4,%zmm3,%zmm3
+	vpxord	%zmm0,%zmm15,%zmm15
+	vpxord	%zmm1,%zmm12,%zmm12
+	vpxord	%zmm2,%zmm13,%zmm13
+	vpxord	%zmm3,%zmm14,%zmm14
+	vprold	$16,%zmm15,%zmm15
+	vprold	$16,%zmm12,%zmm12
+	vprold	$16,%zmm13,%zmm13
+	vprold	$16,%zmm14,%zmm14
+	vpaddd	%zmm15,%zmm10,%zmm10
+	vpaddd	%zmm12,%zmm11,%zmm11
+	vpaddd	%zmm13,%zmm8,%zmm8
+	vpaddd	%zmm14,%zmm9,%zmm9
+	vpxord	%zmm10,%zmm5,%zmm5
+	vpxord	%zmm11,%zmm6,%zmm6
+	vpxord	%zmm8,%zmm7,%zmm7
+	vpxord	%zmm9,%zmm4,%zmm4
+	vprold	$12,%zmm5,%zmm5
+	vprold	$12,%zmm6,%zmm6
+	vprold	$12,%zmm7,%zmm7
+	vprold	$12,%zmm4,%zmm4
+	vpaddd	%zmm5,%zmm0,%zmm0
+	vpaddd	%zmm6,%zmm1,%zmm1
+	vpaddd	%zmm7,%zmm2,%zmm2
+	vpaddd	%zmm4,%zmm3,%zmm3
+	vpxord	%zmm0,%zmm15,%zmm15
+	vpxord	%zmm1,%zmm12,%zmm12
+	vpxord	%zmm2,%zmm13,%zmm13
+	vpxord	%zmm3,%zmm14,%zmm14
+	vprold	$8,%zmm15,%zmm15
+	vprold	$8,%zmm12,%zmm12
+	vprold	$8,%zmm13,%zmm13
+	vprold	$8,%zmm14,%zmm14
+	vpaddd	%zmm15,%zmm10,%zmm10
+	vpaddd	%zmm12,%zmm11,%zmm11
+	vpaddd	%zmm13,%zmm8,%zmm8
+	vpaddd	%zmm14,%zmm9,%zmm9
+	vpxord	%zmm10,%zmm5,%zmm5
+	vpxord	%zmm11,%zmm6,%zmm6
+	vpxord	%zmm8,%zmm7,%zmm7
+	vpxord	%zmm9,%zmm4,%zmm4
+	vprold	$7,%zmm5,%zmm5
+	vprold	$7,%zmm6,%zmm6
+	vprold	$7,%zmm7,%zmm7
+	vprold	$7,%zmm4,%zmm4
+	decl	%eax
+	jnz	.Loop16x
+
+	vpaddd	%zmm16,%zmm0,%zmm0
+	vpaddd	%zmm17,%zmm1,%zmm1
+	vpaddd	%zmm18,%zmm2,%zmm2
+	vpaddd	%zmm19,%zmm3,%zmm3
+
+	vpunpckldq	%zmm1,%zmm0,%zmm18
+	vpunpckldq	%zmm3,%zmm2,%zmm19
+	vpunpckhdq	%zmm1,%zmm0,%zmm0
+	vpunpckhdq	%zmm3,%zmm2,%zmm2
+	vpunpcklqdq	%zmm19,%zmm18,%zmm1
+	vpunpckhqdq	%zmm19,%zmm18,%zmm18
+	vpunpcklqdq	%zmm2,%zmm0,%zmm3
+	vpunpckhqdq	%zmm2,%zmm0,%zmm0
+	vpaddd	%zmm20,%zmm4,%zmm4
+	vpaddd	%zmm21,%zmm5,%zmm5
+	vpaddd	%zmm22,%zmm6,%zmm6
+	vpaddd	%zmm23,%zmm7,%zmm7
+
+	vpunpckldq	%zmm5,%zmm4,%zmm2
+	vpunpckldq	%zmm7,%zmm6,%zmm19
+	vpunpckhdq	%zmm5,%zmm4,%zmm4
+	vpunpckhdq	%zmm7,%zmm6,%zmm6
+	vpunpcklqdq	%zmm19,%zmm2,%zmm5
+	vpunpckhqdq	%zmm19,%zmm2,%zmm2
+	vpunpcklqdq	%zmm6,%zmm4,%zmm7
+	vpunpckhqdq	%zmm6,%zmm4,%zmm4
+	vshufi32x4	$0x44,%zmm5,%zmm1,%zmm19
+	vshufi32x4	$0xee,%zmm5,%zmm1,%zmm5
+	vshufi32x4	$0x44,%zmm2,%zmm18,%zmm1
+	vshufi32x4	$0xee,%zmm2,%zmm18,%zmm2
+	vshufi32x4	$0x44,%zmm7,%zmm3,%zmm18
+	vshufi32x4	$0xee,%zmm7,%zmm3,%zmm7
+	vshufi32x4	$0x44,%zmm4,%zmm0,%zmm3
+	vshufi32x4	$0xee,%zmm4,%zmm0,%zmm4
+	vpaddd	%zmm24,%zmm8,%zmm8
+	vpaddd	%zmm25,%zmm9,%zmm9
+	vpaddd	%zmm26,%zmm10,%zmm10
+	vpaddd	%zmm27,%zmm11,%zmm11
+
+	vpunpckldq	%zmm9,%zmm8,%zmm6
+	vpunpckldq	%zmm11,%zmm10,%zmm0
+	vpunpckhdq	%zmm9,%zmm8,%zmm8
+	vpunpckhdq	%zmm11,%zmm10,%zmm10
+	vpunpcklqdq	%zmm0,%zmm6,%zmm9
+	vpunpckhqdq	%zmm0,%zmm6,%zmm6
+	vpunpcklqdq	%zmm10,%zmm8,%zmm11
+	vpunpckhqdq	%zmm10,%zmm8,%zmm8
+	vpaddd	%zmm28,%zmm12,%zmm12
+	vpaddd	%zmm29,%zmm13,%zmm13
+	vpaddd	%zmm30,%zmm14,%zmm14
+	vpaddd	%zmm31,%zmm15,%zmm15
+
+	vpunpckldq	%zmm13,%zmm12,%zmm10
+	vpunpckldq	%zmm15,%zmm14,%zmm0
+	vpunpckhdq	%zmm13,%zmm12,%zmm12
+	vpunpckhdq	%zmm15,%zmm14,%zmm14
+	vpunpcklqdq	%zmm0,%zmm10,%zmm13
+	vpunpckhqdq	%zmm0,%zmm10,%zmm10
+	vpunpcklqdq	%zmm14,%zmm12,%zmm15
+	vpunpckhqdq	%zmm14,%zmm12,%zmm12
+	vshufi32x4	$0x44,%zmm13,%zmm9,%zmm0
+	vshufi32x4	$0xee,%zmm13,%zmm9,%zmm13
+	vshufi32x4	$0x44,%zmm10,%zmm6,%zmm9
+	vshufi32x4	$0xee,%zmm10,%zmm6,%zmm10
+	vshufi32x4	$0x44,%zmm15,%zmm11,%zmm6
+	vshufi32x4	$0xee,%zmm15,%zmm11,%zmm15
+	vshufi32x4	$0x44,%zmm12,%zmm8,%zmm11
+	vshufi32x4	$0xee,%zmm12,%zmm8,%zmm12
+	vshufi32x4	$0x88,%zmm0,%zmm19,%zmm16
+	vshufi32x4	$0xdd,%zmm0,%zmm19,%zmm19
+	vshufi32x4	$0x88,%zmm13,%zmm5,%zmm0
+	vshufi32x4	$0xdd,%zmm13,%zmm5,%zmm13
+	vshufi32x4	$0x88,%zmm9,%zmm1,%zmm17
+	vshufi32x4	$0xdd,%zmm9,%zmm1,%zmm1
+	vshufi32x4	$0x88,%zmm10,%zmm2,%zmm9
+	vshufi32x4	$0xdd,%zmm10,%zmm2,%zmm10
+	vshufi32x4	$0x88,%zmm6,%zmm18,%zmm14
+	vshufi32x4	$0xdd,%zmm6,%zmm18,%zmm18
+	vshufi32x4	$0x88,%zmm15,%zmm7,%zmm6
+	vshufi32x4	$0xdd,%zmm15,%zmm7,%zmm15
+	vshufi32x4	$0x88,%zmm11,%zmm3,%zmm8
+	vshufi32x4	$0xdd,%zmm11,%zmm3,%zmm3
+	vshufi32x4	$0x88,%zmm12,%zmm4,%zmm11
+	vshufi32x4	$0xdd,%zmm12,%zmm4,%zmm12
+	cmpq	$1024,%rdx
+	jb	.Ltail16x
+
+	vpxord	0(%rsi),%zmm16,%zmm16
+	vpxord	64(%rsi),%zmm17,%zmm17
+	vpxord	128(%rsi),%zmm14,%zmm14
+	vpxord	192(%rsi),%zmm8,%zmm8
+	vmovdqu32	%zmm16,0(%rdi)
+	vmovdqu32	%zmm17,64(%rdi)
+	vmovdqu32	%zmm14,128(%rdi)
+	vmovdqu32	%zmm8,192(%rdi)
+
+	vpxord	256(%rsi),%zmm19,%zmm19
+	vpxord	320(%rsi),%zmm1,%zmm1
+	vpxord	384(%rsi),%zmm18,%zmm18
+	vpxord	448(%rsi),%zmm3,%zmm3
+	vmovdqu32	%zmm19,256(%rdi)
+	vmovdqu32	%zmm1,320(%rdi)
+	vmovdqu32	%zmm18,384(%rdi)
+	vmovdqu32	%zmm3,448(%rdi)
+
+	vpxord	512(%rsi),%zmm0,%zmm0
+	vpxord	576(%rsi),%zmm9,%zmm9
+	vpxord	640(%rsi),%zmm6,%zmm6
+	vpxord	704(%rsi),%zmm11,%zmm11
+	vmovdqu32	%zmm0,512(%rdi)
+	vmovdqu32	%zmm9,576(%rdi)
+	vmovdqu32	%zmm6,640(%rdi)
+	vmovdqu32	%zmm11,704(%rdi)
+
+	vpxord	768(%rsi),%zmm13,%zmm13
+	vpxord	832(%rsi),%zmm10,%zmm10
+	vpxord	896(%rsi),%zmm15,%zmm15
+	vpxord	960(%rsi),%zmm12,%zmm12
+	leaq	1024(%rsi),%rsi
+	vmovdqu32	%zmm13,768(%rdi)
+	vmovdqu32	%zmm10,832(%rdi)
+	vmovdqu32	%zmm15,896(%rdi)
+	vmovdqu32	%zmm12,960(%rdi)
+	leaq	1024(%rdi),%rdi
+
+	subq	$1024,%rdx
+	jnz	.Loop_outer16x
+
+	jmp	.Ldone16x
+
+.align	32
+.Ltail16x:
+	xorq	%r10,%r10
+	subq	%rsi,%rdi
+	cmpq	$64,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm16,%zmm16
+	vmovdqu32	%zmm16,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm17,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$128,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm17,%zmm17
+	vmovdqu32	%zmm17,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm14,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$192,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm14,%zmm14
+	vmovdqu32	%zmm14,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm8,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$256,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm8,%zmm8
+	vmovdqu32	%zmm8,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm19,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$320,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm19,%zmm19
+	vmovdqu32	%zmm19,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm1,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$384,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm1,%zmm1
+	vmovdqu32	%zmm1,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm18,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$448,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm18,%zmm18
+	vmovdqu32	%zmm18,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm3,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$512,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm3,%zmm3
+	vmovdqu32	%zmm3,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm0,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$576,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm0,%zmm0
+	vmovdqu32	%zmm0,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm9,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$640,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm9,%zmm9
+	vmovdqu32	%zmm9,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm6,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$704,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm6,%zmm6
+	vmovdqu32	%zmm6,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm11,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$768,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm11,%zmm11
+	vmovdqu32	%zmm11,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm13,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$832,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm13,%zmm13
+	vmovdqu32	%zmm13,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm10,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$896,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm10,%zmm10
+	vmovdqu32	%zmm10,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm15,%zmm16
+	leaq	64(%rsi),%rsi
+
+	cmpq	$960,%rdx
+	jb	.Less_than_64_16x
+	vpxord	(%rsi),%zmm15,%zmm15
+	vmovdqu32	%zmm15,(%rdi,%rsi,1)
+	je	.Ldone16x
+	vmovdqa32	%zmm12,%zmm16
+	leaq	64(%rsi),%rsi
+
+.Less_than_64_16x:
+	vmovdqa32	%zmm16,0(%rsp)
+	leaq	(%rdi,%rsi,1),%rdi
+	andq	$63,%rdx
+
+.Loop_tail16x:
+	movzbl	(%rsi,%r10,1),%eax
+	movzbl	(%rsp,%r10,1),%ecx
+	leaq	1(%r10),%r10
+	xorl	%ecx,%eax
+	movb	%al,-1(%rdi,%r10,1)
+	decq	%rdx
+	jnz	.Loop_tail16x
+
+	vpxord	%zmm16,%zmm16,%zmm16
+	vmovdqa32	%zmm16,0(%rsp)
+
+.Ldone16x:
+	vzeroall
+	leaq	(%r9),%rsp
+.cfi_def_cfa_register	%rsp
+.L16x_epilogue:
+	.byte	0xf3,0xc3
+.cfi_endproc	
+.size	ChaCha20_16x,.-ChaCha20_16x

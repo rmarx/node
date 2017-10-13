@@ -1,6 +1,7 @@
 LIBS=../../libcrypto
 SOURCE[../../libcrypto]=\
-        sha1dgst.c sha1_one.c sha256.c sha512.c {- $target{sha1_asm_src} -}
+        sha1dgst.c sha1_one.c sha256.c sha512.c {- $target{sha1_asm_src} -} \
+        keccak1600.c
 
 GENERATE[sha1-586.s]=asm/sha1-586.pl $(PERLASM_SCHEME) $(CFLAGS) $(LIB_CFLAGS) $(PROCESSOR)
 DEPEND[sha1-586.s]=../perlasm/x86asm.pl
@@ -39,8 +40,11 @@ GENERATE[sha256-parisc.s]=asm/sha512-parisc.pl $(PERLASM_SCHEME)
 GENERATE[sha512-parisc.s]=asm/sha512-parisc.pl $(PERLASM_SCHEME)
 
 GENERATE[sha1-mips.S]=asm/sha1-mips.pl $(PERLASM_SCHEME)
+INCLUDE[sha1-mips.o]=..
 GENERATE[sha256-mips.S]=asm/sha512-mips.pl $(PERLASM_SCHEME)
+INCLUDE[sha256-mips.o]=..
 GENERATE[sha512-mips.S]=asm/sha512-mips.pl $(PERLASM_SCHEME)
+INCLUDE[sha512-mips.o]=..
 
 GENERATE[sha1-armv4-large.S]=asm/sha1-armv4-large.pl $(PERLASM_SCHEME)
 INCLUDE[sha1-armv4-large.o]=..

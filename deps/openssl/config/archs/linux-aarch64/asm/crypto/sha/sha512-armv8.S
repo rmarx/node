@@ -1,4 +1,59 @@
-#include "arm_arch.h"
+// Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the OpenSSL license (the "License").  You may not use
+// this file except in compliance with the License.  You can obtain a copy
+// in the file LICENSE in the source distribution or at
+// https://www.openssl.org/source/license.html
+
+// ====================================================================
+// Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
+// project. The module is, however, dual licensed under OpenSSL and
+// CRYPTOGAMS licenses depending on where you obtain it. For further
+// details see http://www.openssl.org/~appro/cryptogams/.
+//
+// Permission to use under GPLv2 terms is granted.
+// ====================================================================
+//
+// SHA256/512 for ARMv8.
+//
+// Performance in cycles per processed byte and improvement coefficient
+// over code generated with "default" compiler:
+//
+//		SHA256-hw	SHA256(*)	SHA512
+// Apple A7	1.97		10.5 (+33%)	6.73 (-1%(**))
+// Cortex-A53	2.38		15.5 (+115%)	10.0 (+150%(***))
+// Cortex-A57	2.31		11.6 (+86%)	7.51 (+260%(***))
+// Denver	2.01		10.5 (+26%)	6.70 (+8%)
+// X-Gene			20.0 (+100%)	12.8 (+300%(***))
+// Mongoose	2.36		13.0 (+50%)	8.36 (+33%)
+//
+// (*)	Software SHA256 results are of lesser relevance, presented
+//	mostly for informational purposes.
+// (**)	The result is a trade-off: it's possible to improve it by
+//	10% (or by 1 cycle per round), but at the cost of 20% loss
+//	on Cortex-A53 (or by 4 cycles per round).
+// (***)	Super-impressive coefficients over gcc-generated code are
+//	indication of some compiler "pathology", most notably code
+//	generated with -mgeneral-regs-only is significanty faster
+//	and the gap is only 40-90%.
+//
+// October 2016.
+//
+// Originally it was reckoned that it makes no sense to implement NEON
+// version of SHA256 for 64-bit processors. This is because performance
+// improvement on most wide-spread Cortex-A5x processors was observed
+// to be marginal, same on Cortex-A53 and ~10% on A57. But then it was
+// observed that 32-bit NEON SHA256 performs significantly better than
+// 64-bit scalar version on *some* of the more recent processors. As
+// result 64-bit NEON version of SHA256 was added to provide best
+// all-round performance. For example it executes ~30% faster on X-Gene
+// and Mongoose. [For reference, NEON version of SHA512 is bound to
+// deliver much less improvement, likely *negative* on Cortex-A5x.
+// Which is why NEON support is limited to SHA256.]
+
+#ifndef	__KERNEL__
+# include "arm_arch.h"
+#endif
 
 .text
 
@@ -30,7 +85,7 @@ sha512_block_data_order:
 	ldr	x19,[x30],#8			// *K++
 	eor	x28,x21,x22				// magic seed
 	str	x1,[x29,#112]
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x3,x3			// 0
 #endif
 	ror	x16,x24,#14
@@ -53,7 +108,7 @@ sha512_block_data_order:
 	add	x27,x27,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x27,x27,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x4,x4			// 1
 #endif
 	ldp	x5,x6,[x1],#2*8
@@ -78,7 +133,7 @@ sha512_block_data_order:
 	add	x26,x26,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x26,x26,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x5,x5			// 2
 #endif
 	add	x26,x26,x17			// h+=Sigma0(a)
@@ -102,7 +157,7 @@ sha512_block_data_order:
 	add	x25,x25,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x25,x25,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x6,x6			// 3
 #endif
 	ldp	x7,x8,[x1],#2*8
@@ -127,7 +182,7 @@ sha512_block_data_order:
 	add	x24,x24,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x24,x24,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x7,x7			// 4
 #endif
 	add	x24,x24,x17			// h+=Sigma0(a)
@@ -151,7 +206,7 @@ sha512_block_data_order:
 	add	x23,x23,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x23,x23,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x8,x8			// 5
 #endif
 	ldp	x9,x10,[x1],#2*8
@@ -176,7 +231,7 @@ sha512_block_data_order:
 	add	x22,x22,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x22,x22,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x9,x9			// 6
 #endif
 	add	x22,x22,x17			// h+=Sigma0(a)
@@ -200,7 +255,7 @@ sha512_block_data_order:
 	add	x21,x21,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x21,x21,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x10,x10			// 7
 #endif
 	ldp	x11,x12,[x1],#2*8
@@ -225,7 +280,7 @@ sha512_block_data_order:
 	add	x20,x20,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x20,x20,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x11,x11			// 8
 #endif
 	add	x20,x20,x17			// h+=Sigma0(a)
@@ -249,7 +304,7 @@ sha512_block_data_order:
 	add	x27,x27,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x27,x27,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x12,x12			// 9
 #endif
 	ldp	x13,x14,[x1],#2*8
@@ -274,7 +329,7 @@ sha512_block_data_order:
 	add	x26,x26,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x26,x26,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x13,x13			// 10
 #endif
 	add	x26,x26,x17			// h+=Sigma0(a)
@@ -298,7 +353,7 @@ sha512_block_data_order:
 	add	x25,x25,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x25,x25,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x14,x14			// 11
 #endif
 	ldp	x15,x0,[x1],#2*8
@@ -324,7 +379,7 @@ sha512_block_data_order:
 	add	x24,x24,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x24,x24,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x15,x15			// 12
 #endif
 	add	x24,x24,x17			// h+=Sigma0(a)
@@ -349,7 +404,7 @@ sha512_block_data_order:
 	add	x23,x23,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x23,x23,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x0,x0			// 13
 #endif
 	ldp	x1,x2,[x1]
@@ -375,7 +430,7 @@ sha512_block_data_order:
 	add	x22,x22,x19			// h+=Maj(a,b,c)
 	ldr	x19,[x30],#8		// *K++, x28 in next round
 	//add	x22,x22,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x1,x1			// 14
 #endif
 	ldr	x6,[sp,#24]
@@ -401,7 +456,7 @@ sha512_block_data_order:
 	add	x21,x21,x28			// h+=Maj(a,b,c)
 	ldr	x28,[x30],#8		// *K++, x19 in next round
 	//add	x21,x21,x17			// h+=Sigma0(a)
-#ifndef	__ARMEB__
+#ifndef	__AARCH64EB__
 	rev	x2,x2			// 15
 #endif
 	ldr	x7,[sp,#0]
@@ -1014,14 +1069,18 @@ sha512_block_data_order:
 .quad	0x5fcb6fab3ad6faec,0x6c44198c4a475817
 .quad	0	// terminator
 .size	.LK512,.-.LK512
+#ifndef	__KERNEL__
 .align	3
 .LOPENSSL_armcap_P:
-#ifdef	__ILP32__
+# ifdef	__ILP32__
 .long	OPENSSL_armcap_P-.
-#else
+# else
 .quad	OPENSSL_armcap_P-.
+# endif
 #endif
 .byte	83,72,65,53,49,50,32,98,108,111,99,107,32,116,114,97,110,115,102,111,114,109,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2
 .align	2
+#ifndef	__KERNEL__
 .comm	OPENSSL_armcap_P,4,4
+#endif

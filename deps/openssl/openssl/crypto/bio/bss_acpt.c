@@ -54,7 +54,11 @@ static void BIO_ACCEPT_free(BIO_ACCEPT *a);
 static const BIO_METHOD methods_acceptp = {
     BIO_TYPE_ACCEPT,
     "socket accept",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     acpt_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     acpt_read,
     acpt_puts,
     NULL,                       /* connect_gets, */
@@ -81,7 +85,7 @@ static int acpt_new(BIO *bi)
     bi->ptr = (char *)ba;
     ba->state = ACPT_S_BEFORE;
     bi->shutdown = 1;
-    return (1);
+    return 1;
 }
 
 static BIO_ACCEPT *BIO_ACCEPT_new(void)
@@ -139,7 +143,7 @@ static int acpt_free(BIO *a)
         a->flags = 0;
         a->init = 0;
     }
-    return (1);
+    return 1;
 }
 
 static int acpt_state(BIO *b, BIO_ACCEPT *c)
@@ -517,12 +521,6 @@ static long acpt_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = (long)data->bind_mode;
         break;
     case BIO_CTRL_DUP:
-/*-     dbio=(BIO *)ptr;
-        if (data->param_port) EAY EAY
-                BIO_set_port(dbio,data->param_port);
-        if (data->param_hostname)
-                BIO_set_hostname(dbio,data->param_hostname);
-        BIO_set_nbio(dbio,data->nbio); */
         break;
 
     default:

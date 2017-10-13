@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,9 +9,10 @@
 
 /* X509 v3 extension utilities */
 
-#include <stdio.h>
-#include <ctype.h>
+#include "e_os.h"
 #include "internal/cryptlib.h"
+#include <stdio.h>
+#include "internal/ctype.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 #include "internal/x509_int.h"
@@ -37,6 +38,7 @@ int X509V3_add_value(const char *name, const char *value,
 {
     CONF_VALUE *vtmp = NULL;
     char *tname = NULL, *tvalue = NULL;
+    int sk_allocated = (*extlist == NULL);
 
     if (name && (tname = OPENSSL_strdup(name)) == NULL)
         goto err;
@@ -44,7 +46,7 @@ int X509V3_add_value(const char *name, const char *value,
         goto err;
     if ((vtmp = OPENSSL_malloc(sizeof(*vtmp))) == NULL)
         goto err;
-    if (*extlist == NULL && (*extlist = sk_CONF_VALUE_new_null()) == NULL)
+    if (sk_allocated && (*extlist = sk_CONF_VALUE_new_null()) == NULL)
         goto err;
     vtmp->section = NULL;
     vtmp->name = tname;
@@ -54,6 +56,8 @@ int X509V3_add_value(const char *name, const char *value,
     return 1;
  err:
     X509V3err(X509V3_F_X509V3_ADD_VALUE, ERR_R_MALLOC_FAILURE);
+    if (sk_allocated)
+        sk_CONF_VALUE_free(*extlist);
     OPENSSL_free(vtmp);
     OPENSSL_free(tname);
     OPENSSL_free(tvalue);
@@ -334,12 +338,12 @@ static char *strip_spaces(char *name)
     char *p, *q;
     /* Skip over leading spaces */
     p = name;
-    while (*p && isspace((unsigned char)*p))
+    while (*p && ossl_isspace(*p))
         p++;
     if (!*p)
         return NULL;
     q = p + strlen(p) - 1;
-    while ((q != p) && isspace((unsigned char)*q))
+    while ((q != p) && ossl_isspace(*q))
         q--;
     if (p != q)
         q[1] = 0;
@@ -424,11 +428,11 @@ static STACK_OF(OPENSSL_STRING) *get_email(X509_NAME *name,
 {
     STACK_OF(OPENSSL_STRING) *ret = NULL;
     X509_NAME_ENTRY *ne;
-    ASN1_IA5STRING *email;
+    const ASN1_IA5STRING *email;
     GENERAL_NAME *gen;
-    int i;
+    int i = -1;
+
     /* Now add any email address(es) to STACK */
-    i = -1;
     /* First supplied X509_NAME */
     while ((i = X509_NAME_get_index_by_NID(name,
                                            NID_pkcs9_emailAddress, i)) >= 0) {

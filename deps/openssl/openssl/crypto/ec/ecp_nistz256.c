@@ -1,45 +1,27 @@
 /*
- * Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2014-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright (c) 2014, Intel Corporation. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
+ *
+ * Originally written by Shay Gueron (1, 2), and Vlad Krasnov (1)
+ * (1) Intel Corporation, Israel Development Center, Haifa, Israel
+ * (2) University of Haifa, Israel
+ *
+ * Reference:
+ * S.Gueron and V.Krasnov, "Fast Prime Field Elliptic Curve Cryptography with
+ *                          256 Bit Primes"
  */
-
-/******************************************************************************
- *                                                                            *
- * Copyright 2014 Intel Corporation                                           *
- *                                                                            *
- * Licensed under the Apache License, Version 2.0 (the "License");            *
- * you may not use this file except in compliance with the License.           *
- * You may obtain a copy of the License at                                    *
- *                                                                            *
- *    http://www.apache.org/licenses/LICENSE-2.0                              *
- *                                                                            *
- * Unless required by applicable law or agreed to in writing, software        *
- * distributed under the License is distributed on an "AS IS" BASIS,          *
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   *
- * See the License for the specific language governing permissions and        *
- * limitations under the License.                                             *
- *                                                                            *
- ******************************************************************************
- *                                                                            *
- * Developers and authors:                                                    *
- * Shay Gueron (1, 2), and Vlad Krasnov (1)                                   *
- * (1) Intel Corporation, Israel Development Center                           *
- * (2) University of Haifa                                                    *
- * Reference:                                                                 *
- * S.Gueron and V.Krasnov, "Fast Prime Field Elliptic Curve Cryptography with *
- *                          256 Bit Primes"                                   *
- *                                                                            *
- ******************************************************************************/
 
 #include <string.h>
 
 #include "internal/cryptlib.h"
 #include "internal/bn_int.h"
 #include "ec_lcl.h"
+#include "internal/refcount.h"
 
 #if BN_BITS2 != 64
 # define TOBN(hi,lo)    lo,hi
@@ -84,7 +66,7 @@ struct nistz256_pre_comp_st {
      */
     PRECOMP256_ROW *precomp;
     void *precomp_storage;
-    int references;
+    CRYPTO_REF_COUNT references;
     CRYPTO_RWLOCK *lock;
 };
 
@@ -254,6 +236,16 @@ static BN_ULONG is_one(const BIGNUM *z)
     return res;
 }
 
+/*
+ * For reference, this macro is used only when new ecp_nistz256 assembly
+ * module is being developed.  For example, configure with
+ * -DECP_NISTZ256_REFERENCE_IMPLEMENTATION and implement only functions
+ * performing simplest arithmetic operations on 256-bit vectors. Then
+ * work on implementation of higher-level functions performing point
+ * operations. Then remove ECP_NISTZ256_REFERENCE_IMPLEMENTATION
+ * and never define it again. (The correct macro denoting presence of
+ * ecp_nistz256 module is ECP_NISTZ256_ASM.)
+ */
 #ifndef ECP_NISTZ256_REFERENCE_IMPLEMENTATION
 void ecp_nistz256_point_double(P256_POINT *r, const P256_POINT *a);
 void ecp_nistz256_point_add(P256_POINT *r,
@@ -757,12 +749,12 @@ __owur static int ecp_nistz256_windowed_mul(const EC_GROUP *group,
 }
 
 /* Coordinates of G, for which we have precomputed tables */
-const static BN_ULONG def_xG[P256_LIMBS] = {
+static const BN_ULONG def_xG[P256_LIMBS] = {
     TOBN(0x79e730d4, 0x18a9143c), TOBN(0x75ba95fc, 0x5fedb601),
     TOBN(0x79fb732b, 0x77622510), TOBN(0x18905f76, 0xa53755c6)
 };
 
-const static BN_ULONG def_yG[P256_LIMBS] = {
+static const BN_ULONG def_yG[P256_LIMBS] = {
     TOBN(0xddf25357, 0xce95560a), TOBN(0x8b4ab8e4, 0xba19e45c),
     TOBN(0xd2e88688, 0xdd21f325), TOBN(0x8571ff18, 0x25885d85)
 };
@@ -1467,7 +1459,7 @@ NISTZ256_PRE_COMP *EC_nistz256_pre_comp_dup(NISTZ256_PRE_COMP *p)
 {
     int i;
     if (p != NULL)
-        CRYPTO_atomic_add(&p->references, 1, &i, p->lock);
+        CRYPTO_UP_REF(&p->references, &i, p->lock);
     return p;
 }
 
@@ -1478,7 +1470,7 @@ void EC_nistz256_pre_comp_free(NISTZ256_PRE_COMP *pre)
     if (pre == NULL)
         return;
 
-    CRYPTO_atomic_add(&pre->references, -1, &i, pre->lock);
+    CRYPTO_DOWN_REF(&pre->references, &i, pre->lock);
     REF_PRINT_COUNT("EC_nistz256", x);
     if (i > 0)
         return;

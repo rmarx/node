@@ -27,7 +27,11 @@ static long nullf_callback_ctrl(BIO *h, int cmd, bio_info_cb *fp);
 static const BIO_METHOD methods_nullf = {
     BIO_TYPE_NULL_FILTER,
     "NULL filter",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     nullf_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     nullf_read,
     nullf_puts,
     nullf_gets,
@@ -47,7 +51,7 @@ static int nullf_new(BIO *bi)
     bi->init = 1;
     bi->ptr = NULL;
     bi->flags = 0;
-    return (1);
+    return 1;
 }
 
 static int nullf_free(BIO *a)
@@ -59,7 +63,7 @@ static int nullf_free(BIO *a)
     a->init=0;
     a->flags=0;
     */
-    return (1);
+    return 1;
 }
 
 static int nullf_read(BIO *b, char *out, int outl)

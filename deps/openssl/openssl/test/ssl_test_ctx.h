@@ -38,7 +38,10 @@ typedef enum {
 typedef enum {
     SSL_TEST_SERVERNAME_CB_NONE = 0,  /* Default */
     SSL_TEST_SERVERNAME_IGNORE_MISMATCH,
-    SSL_TEST_SERVERNAME_REJECT_MISMATCH
+    SSL_TEST_SERVERNAME_REJECT_MISMATCH,
+    SSL_TEST_SERVERNAME_CLIENT_HELLO_IGNORE_MISMATCH,
+    SSL_TEST_SERVERNAME_CLIENT_HELLO_REJECT_MISMATCH,
+    SSL_TEST_SERVERNAME_CLIENT_HELLO_NO_V12
 } ssl_servername_callback_t;
 
 typedef enum {
@@ -49,6 +52,17 @@ typedef enum {
 } ssl_session_ticket_t;
 
 typedef enum {
+    SSL_TEST_COMPRESSION_NO = 0, /* Default */
+    SSL_TEST_COMPRESSION_YES
+} ssl_compression_t;
+
+typedef enum {
+    SSL_TEST_SESSION_ID_IGNORE = 0, /* Default */
+    SSL_TEST_SESSION_ID_YES,
+    SSL_TEST_SESSION_ID_NO
+} ssl_session_id_t;
+
+typedef enum {
     SSL_TEST_METHOD_TLS = 0, /* Default */
     SSL_TEST_METHOD_DTLS
 } ssl_test_method_t;
@@ -57,7 +71,9 @@ typedef enum {
     SSL_TEST_HANDSHAKE_SIMPLE = 0, /* Default */
     SSL_TEST_HANDSHAKE_RESUME,
     SSL_TEST_HANDSHAKE_RENEG_SERVER,
-    SSL_TEST_HANDSHAKE_RENEG_CLIENT
+    SSL_TEST_HANDSHAKE_RENEG_CLIENT,
+    SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER,
+    SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT
 } ssl_handshake_mode_t;
 
 typedef enum {
@@ -71,6 +87,7 @@ typedef enum {
     SSL_TEST_CERT_STATUS_GOOD_RESPONSE,
     SSL_TEST_CERT_STATUS_BAD_RESPONSE
 } ssl_cert_status_t;
+
 /*
  * Server/client settings that aren't supported by the SSL CONF library,
  * such as callbacks.
@@ -86,6 +103,8 @@ typedef struct {
     ssl_ct_validation_t ct_validation;
     /* Ciphersuites to set on a renegotiation */
     char *reneg_ciphers;
+    char *srp_user;
+    char *srp_password;
 } SSL_TEST_CLIENT_CONF;
 
 typedef struct {
@@ -98,6 +117,9 @@ typedef struct {
     int broken_session_ticket;
     /* Should we send a CertStatus message? */
     ssl_cert_status_t cert_status;
+    /* An SRP user known to the server. */
+    char *srp_user;
+    char *srp_password;
 } SSL_TEST_SERVER_CONF;
 
 typedef struct {
@@ -121,6 +143,8 @@ typedef struct {
     int app_data_size;
     /* Maximum send fragment size. */
     int max_fragment_size;
+    /* KeyUpdate type */
+    int key_update_type;
 
     /*
      * Extra server/client configurations. Per-handshake.
@@ -156,6 +180,7 @@ typedef struct {
      */
     ssl_servername_t expected_servername;
     ssl_session_ticket_t session_ticket_expected;
+    int compression_expected;
     /* The expected NPN/ALPN protocol to negotiate. */
     char *expected_npn_protocol;
     char *expected_alpn_protocol;
@@ -163,6 +188,26 @@ typedef struct {
     int resumption_expected;
     /* Expected temporary key type */
     int expected_tmp_key_type;
+    /* Expected server certificate key type */
+    int expected_server_cert_type;
+    /* Expected server signing hash */
+    int expected_server_sign_hash;
+    /* Expected server signature type */
+    int expected_server_sign_type;
+    /* Expected server CA names */
+    STACK_OF(X509_NAME) *expected_server_ca_names;
+    /* Expected client certificate key type */
+    int expected_client_cert_type;
+    /* Expected client signing hash */
+    int expected_client_sign_hash;
+    /* Expected client signature type */
+    int expected_client_sign_type;
+    /* Expected CA names for client auth */
+    STACK_OF(X509_NAME) *expected_client_ca_names;
+    /* Whether to use SCTP for the transport */
+    int use_sctp;
+    /* Whether to expect a session id from the server */
+    ssl_session_id_t session_id_expected;
 } SSL_TEST_CTX;
 
 const char *ssl_test_result_name(ssl_test_result_t result);
@@ -173,6 +218,7 @@ const char *ssl_servername_name(ssl_servername_t server);
 const char *ssl_servername_callback_name(ssl_servername_callback_t
                                          servername_callback);
 const char *ssl_session_ticket_name(ssl_session_ticket_t server);
+const char *ssl_session_id_name(ssl_session_id_t server);
 const char *ssl_test_method_name(ssl_test_method_t method);
 const char *ssl_handshake_mode_name(ssl_handshake_mode_t mode);
 const char *ssl_ct_validation_name(ssl_ct_validation_t mode);

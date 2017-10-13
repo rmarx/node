@@ -9,10 +9,10 @@
       'OPENSSL_PIC',
     ],
     'openssl_cflags_solaris-x86-gcc': [
-      '-Wall -DL_ENDIAN -DOPENSSL_NO_INLINE_ASM -O3 -fomit-frame-pointer -pthread -DFILIO_H',
+      '-Wall -DL_ENDIAN -O3 -fomit-frame-pointer -pthread -DFILIO_H',
     ],
     'openssl_ex_libs_solaris-x86-gcc': [
-      '-lresolv -lsocket -lnsl -ldl',
+      '-lsocket -lnsl -ldl',
     ],
     'openssl_cli_srcs_solaris-x86-gcc': [
       'openssl/apps/app_rand.c',
@@ -62,6 +62,7 @@
       'openssl/apps/speed.c',
       'openssl/apps/spkac.c',
       'openssl/apps/srp.c',
+      'openssl/apps/storeutl.c',
       'openssl/apps/ts.c',
       'openssl/apps/verify.c',
       'openssl/apps/version.c',

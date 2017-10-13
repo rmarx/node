@@ -22,9 +22,6 @@
 
 static int md_write(BIO *h, char const *buf, int num);
 static int md_read(BIO *h, char *buf, int size);
-/*
- * static int md_puts(BIO *h, const char *str);
- */
 static int md_gets(BIO *h, char *str, int size);
 static long md_ctrl(BIO *h, int cmd, long arg1, void *arg2);
 static int md_new(BIO *h);
@@ -33,7 +30,11 @@ static long md_callback_ctrl(BIO *h, int cmd, bio_info_cb *fp);
 
 static const BIO_METHOD methods_md = {
     BIO_TYPE_MD, "message digest",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     md_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     md_read,
     NULL,                       /* md_puts, */
     md_gets,

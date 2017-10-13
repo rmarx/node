@@ -22,7 +22,11 @@ static int null_free(BIO *data);
 static const BIO_METHOD null_method = {
     BIO_TYPE_NULL,
     "NULL",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     null_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     null_read,
     null_puts,
     null_gets,
@@ -42,14 +46,14 @@ static int null_new(BIO *bi)
     bi->init = 1;
     bi->num = 0;
     bi->ptr = (NULL);
-    return (1);
+    return 1;
 }
 
 static int null_free(BIO *a)
 {
     if (a == NULL)
         return (0);
-    return (1);
+    return 1;
 }
 
 static int null_read(BIO *b, char *out, int outl)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2000-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -7,6 +7,7 @@
  * https://www.openssl.org/source/license.html
  */
 
+#include "e_os.h"
 #include "dso_locl.h"
 
 #if defined(DSO_WIN32)
@@ -119,7 +120,7 @@ static int win32_load(DSO *dso)
     }
     /* Success */
     dso->loaded_filename = filename;
-    return (1);
+    return 1;
  err:
     /* Cleanup ! */
     OPENSSL_free(filename);
@@ -137,7 +138,7 @@ static int win32_unload(DSO *dso)
         return (0);
     }
     if (sk_void_num(dso->meth_data) < 1)
-        return (1);
+        return 1;
     p = sk_void_pop(dso->meth_data);
     if (p == NULL) {
         DSOerr(DSO_F_WIN32_UNLOAD, DSO_R_NULL_HANDLE);
@@ -153,7 +154,7 @@ static int win32_unload(DSO *dso)
     }
     /* Cleanup */
     OPENSSL_free(p);
-    return (1);
+    return 1;
 }
 
 static DSO_FUNC_TYPE win32_bind_func(DSO *dso, const char *symname)
@@ -209,9 +210,6 @@ static struct file_st *win32_splitter(DSO *dso, const char *filename,
 
     if (!filename) {
         DSOerr(DSO_F_WIN32_SPLITTER, DSO_R_NO_FILENAME);
-        /*
-         * goto err;
-         */
         return (NULL);
     }
 
@@ -237,9 +235,6 @@ static struct file_st *win32_splitter(DSO *dso, const char *filename,
         case ':':
             if (position != IN_DEVICE) {
                 DSOerr(DSO_F_WIN32_SPLITTER, DSO_R_INCORRECT_FILE_SYNTAX);
-                /*
-                 * goto err;
-                 */
                 OPENSSL_free(result);
                 return (NULL);
             }
@@ -403,19 +398,17 @@ static char *win32_merger(DSO *dso, const char *filespec1,
         return (NULL);
     }
     if (!filespec2) {
-        merged = OPENSSL_malloc(strlen(filespec1) + 1);
+        merged = OPENSSL_strdup(filespec1);
         if (merged == NULL) {
             DSOerr(DSO_F_WIN32_MERGER, ERR_R_MALLOC_FAILURE);
             return (NULL);
         }
-        strcpy(merged, filespec1);
     } else if (!filespec1) {
-        merged = OPENSSL_malloc(strlen(filespec2) + 1);
+        merged = OPENSSL_strdup(filespec2);
         if (merged == NULL) {
             DSOerr(DSO_F_WIN32_MERGER, ERR_R_MALLOC_FAILURE);
             return (NULL);
         }
-        strcpy(merged, filespec2);
     } else {
         filespec1_split = win32_splitter(dso, filespec1, 0);
         if (!filespec1_split) {

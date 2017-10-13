@@ -1,16 +1,11 @@
 /*
  * Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
- */
-
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- * Portions originally developed by SUN MICROSYSTEMS, INC., and
- * contributed to the OpenSSL project.
  */
 
 #include <stdio.h>
@@ -238,7 +233,7 @@ static int print_bin(BIO *fp, const char *name, const unsigned char *buf,
                      size_t len, int off)
 {
     size_t i;
-    char str[128];
+    char str[128 + 1 + 4];
 
     if (buf == NULL)
         return 1;

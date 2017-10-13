@@ -7,8 +7,10 @@
  * https://www.openssl.org/source/license.html
  */
 
+#include "e_os.h"
 #include "eng_int.h"
 #include <openssl/rand.h>
+#include "internal/refcount.h"
 
 CRYPTO_RWLOCK *global_engine_lock;
 
@@ -19,7 +21,7 @@ CRYPTO_ONCE engine_lock_init = CRYPTO_ONCE_STATIC_INIT;
 DEFINE_RUN_ONCE(do_engine_lock_init)
 {
     OPENSSL_init_crypto(0, NULL);
-    global_engine_lock = CRYPTO_THREAD_lock_new();
+    global_engine_lock = CRYPTO_THREAD_glock_new("global_engine");
     return global_engine_lock != NULL;
 }
 
@@ -66,16 +68,20 @@ void engine_set_all_null(ENGINE *e)
     e->flags = 0;
 }
 
-int engine_free_util(ENGINE *e, int locked)
+int engine_free_util(ENGINE *e, int not_locked)
 {
     int i;
 
     if (e == NULL)
         return 1;
-    if (locked)
+#ifdef HAVE_ATOMICS
+    CRYPTO_DOWN_REF(&e->struct_ref, &i, global_engine_lock);
+#else
+    if (not_locked)
         CRYPTO_atomic_add(&e->struct_ref, -1, &i, global_engine_lock);
     else
         i = --e->struct_ref;
+#endif
     engine_ref_debug(e, 0, -1)
     if (i > 0)
         return 1;
@@ -161,11 +167,6 @@ void engine_cleanup_int(void)
                                         engine_cleanup_cb_free);
         cleanup_stack = NULL;
     }
-    /*
-     * FIXME: This should be handled (somehow) through RAND, eg. by it
-     * registering a cleanup callback.
-     */
-    RAND_set_rand_method(NULL);
     CRYPTO_THREAD_lock_free(global_engine_lock);
 }
 

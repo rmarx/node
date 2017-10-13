@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,10 +18,10 @@ typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_INFORM, OPT_OUTFORM, OPT_PASSIN, OPT_PASSOUT, OPT_ENGINE,
     OPT_IN, OPT_OUT, OPT_PUBIN, OPT_PUBOUT, OPT_TEXT_PUB,
-    OPT_TEXT, OPT_NOOUT, OPT_MD, OPT_TRADITIONAL
+    OPT_TEXT, OPT_NOOUT, OPT_MD, OPT_TRADITIONAL, OPT_CHECK
 } OPTION_CHOICE;
 
-OPTIONS pkey_options[] = {
+const OPTIONS pkey_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"inform", OPT_INFORM, 'f', "Input format (DER or PEM)"},
     {"outform", OPT_OUTFORM, 'F', "Output format (DER or PEM)"},
@@ -41,6 +41,7 @@ OPTIONS pkey_options[] = {
 #ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 #endif
+    {"check", OPT_CHECK, '-', "Check key consistency"},
     {NULL}
 };
 
@@ -55,7 +56,7 @@ int pkey_main(int argc, char **argv)
     OPTION_CHOICE o;
     int informat = FORMAT_PEM, outformat = FORMAT_PEM;
     int pubin = 0, pubout = 0, pubtext = 0, text = 0, noout = 0, ret = 1;
-    int private = 0, traditional = 0;
+    int private = 0, traditional = 0, check = 0;
 
     prog = opt_init(argc, argv, pkey_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -110,6 +111,9 @@ int pkey_main(int argc, char **argv)
         case OPT_TRADITIONAL:
             traditional = 1;
             break;
+        case OPT_CHECK:
+            check = 1;
+            break;
         case OPT_MD:
             if (!opt_cipher(opt_unknown(), &cipher))
                 goto opthelp;
@@ -136,14 +140,46 @@ int pkey_main(int argc, char **argv)
         pkey = load_pubkey(infile, informat, 1, passin, e, "Public Key");
     else
         pkey = load_key(infile, informat, 1, passin, e, "key");
-    if (!pkey)
+    if (pkey == NULL)
         goto end;
+
+    if (check) {
+        int r;
+        EVP_PKEY_CTX *ctx;
+
+        ctx = EVP_PKEY_CTX_new(pkey, e);
+        if (ctx == NULL) {
+            ERR_print_errors(bio_err);
+            goto end;
+        }
+
+        r = EVP_PKEY_check(ctx);
+
+        if (r == 1) {
+            BIO_printf(out, "Key is valid\n");
+        } else {
+            /*
+             * Note: at least for RSA keys if this function returns
+             * -1, there will be no error reasons.
+             */
+            unsigned long err;
+
+            BIO_printf(out, "Key is invalid\n");
+
+            while ((err = ERR_peek_error()) != 0) {
+                BIO_printf(out, "Detailed error: %s\n",
+                           ERR_reason_error_string(err));
+                ERR_get_error(); /* remove err from error stack */
+            }
+        }
+        EVP_PKEY_CTX_free(ctx);
+    }
 
     if (!noout) {
         if (outformat == FORMAT_PEM) {
-            if (pubout)
+            if (pubout) {
                 PEM_write_bio_PUBKEY(out, pkey);
-            else {
+            } else {
                 assert(private);
                 if (traditional)
                     PEM_write_bio_PrivateKey_traditional(out, pkey, cipher,
@@ -154,9 +190,9 @@ int pkey_main(int argc, char **argv)
                                              NULL, 0, NULL, passout);
             }
         } else if (outformat == FORMAT_ASN1) {
-            if (pubout)
+            if (pubout) {
                 i2d_PUBKEY_bio(out, pkey);
-            else {
+            } else {
                 assert(private);
                 i2d_PrivateKey_bio(out, pkey);
             }
@@ -164,13 +200,12 @@ int pkey_main(int argc, char **argv)
             BIO_printf(bio_err, "Bad format specified for key\n");
             goto end;
         }
-
     }
 
     if (text) {
-        if (pubtext)
+        if (pubtext) {
             EVP_PKEY_print_public(out, pkey, 0, NULL);
-        else {
+        } else {
             assert(private);
             EVP_PKEY_print_private(out, pkey, 0, NULL);
         }
@@ -179,6 +214,8 @@ int pkey_main(int argc, char **argv)
     ret = 0;
 
  end:
+    if (ret != 0)
+        ERR_print_errors(bio_err);
     EVP_PKEY_free(pkey);
     release_engine(e);
     BIO_free_all(out);

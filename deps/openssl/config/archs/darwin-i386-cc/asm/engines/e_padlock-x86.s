@@ -1,4 +1,3 @@
-.file	"engines/asm/e_padlock-x86.s"
 .text
 .globl	_padlock_capability
 .align	4

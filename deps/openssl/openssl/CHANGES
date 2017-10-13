@@ -2,6 +2,187 @@
  OpenSSL CHANGES
  _______________
 
+ This is a high-level summary of the most important changes.
+ For a full list of changes, see the git commit log; for example,
+ https://github.com/openssl/openssl/commits/ and pick the appropriate
+ release branch.
+
+ Changes between 1.1.0f and 1.1.1 [xx XXX xxxx]
+
+  *) Reimplement -newreq-nodes and ERR_error_string_n; the
+     original author does not agree with the license change.
+     [Rich Salz]
+
+  *) Add ARIA AEAD TLS support.
+     [Jon Spillett]
+
+  *) Some macro definitions to support VS6 have been removed.  Visual
+     Studio 6 has not worked since 1.1.0
+     [Rich Salz]
+
+  *) Add ERR_clear_last_mark(), to allow callers to clear the last mark
+     without clearing the errors.
+     [Richard Levitte]
+
+  *) Add "atfork" functions.  If building on a system that without
+     pthreads, see doc/man3/OPENSSL_fork_prepare.pod for application
+     requirements.  The RAND facility now uses/requires this.
+     [Rich Salz]
+
+  *) Add SHA3.
+     [Andy Polyakov]
+
+  *) The UI API becomes a permanent and integral part of libcrypto, i.e.
+     not possible to disable entirely.  However, it's still possible to
+     disable the console reading UI method, UI_OpenSSL() (use UI_null()
+     as a fallback).
+
+     To disable, configure with 'no-ui-console'.  'no-ui' is still
+     possible to use as an alias.  Check at compile time with the
+     macro OPENSSL_NO_UI_CONSOLE.  The macro OPENSSL_NO_UI is still
+     possible to check and is an alias for OPENSSL_NO_UI_CONSOLE.
+     [Richard Levitte]
+
+  *) Add a STORE module, which implements a uniform and URI based reader of
+     stores that can contain keys, certificates, CRLs and numerous other
+     objects.  The main API is loosely based on a few stdio functions,
+     and includes OSSL_STORE_open, OSSL_STORE_load, OSSL_STORE_eof,
+     OSSL_STORE_error and OSSL_STORE_close.
+     The implementation uses backends called "loaders" to implement arbitrary
+     URI schemes.  There is one built in "loader" for the 'file' scheme.
+     [Richard Levitte]
+
+  *) Add devcrypto engine.  This has been implemented against cryptodev-linux,
+     then adjusted to work on FreeBSD 8.4 as well.
+     Enable by configuring with 'enable-devcryptoeng'.  This is done by default
+     on BSD implementations, as cryptodev.h is assumed to exist on all of them.
+     [Richard Levitte]
+
+  *) Module names can prefixed with OSSL_ or OPENSSL_.  This affects
+     util/mkerr.pl, which is adapted to allow those prefixes, leading to
+     error code calls like this:
+
+         OSSL_FOOerr(OSSL_FOO_F_SOMETHING, OSSL_FOO_R_WHATEVER);
+
+     With this change, we claim the namespaces OSSL and OPENSSL in a manner
+     that can be encoded in C.  For the foreseeable future, this will only
+     affect new modules.
+     [Richard Levitte and Tim Hudson]
+
+  *) Removed BSD cryptodev engine.
+     [Rich Salz]
+
+  *) Add a build target 'build_all_generated', to build all generated files
+     and only that.  This can be used to prepare everything that requires
+     things like perl for a system that lacks perl and then move everything
+     to that system and do the rest of the build there.
+     [Richard Levitte]
+
+  *) In the UI interface, make it possible to duplicate the user data.  This
+     can be used by engines that need to retain the data for a longer time
+     than just the call where this user data is passed.
+     [Richard Levitte]
+
+  *) Ignore the '-named_curve auto' value for compatibility of applications
+     with OpenSSL 1.0.2.
+     [Tomas Mraz <tmraz@fedoraproject.org>]
+
+  *) Fragmented SSL/TLS alerts are no longer accepted. An alert message is 2
+     bytes long. In theory it is permissible in SSLv3 - TLSv1.2 to fragment such
+     alerts across multiple records (some of which could be empty). In practice
+     it make no sense to send an empty alert record, or to fragment one. TLSv1.3
+     prohibts this altogether and other libraries (BoringSSL, NSS) do not
+     support this at all. Supporting it adds significant complexity to the
+     record layer, and its removal is unlikely to cause inter-operability
+     issues.
+     [Matt Caswell]
+
+  *) Add the ASN.1 types INT32, UINT32, INT64, UINT64 and variants prefixed
+     with Z.  These are meant to replace LONG and ZLONG and to be size safe.
+     The use of LONG and ZLONG is discouraged and scheduled for deprecation
+     in OpenSSL 1.2.0.
+     [Richard Levitte]
+
+  *) Add the 'z' and 'j' modifiers to BIO_printf() et al formatting string,
+     'z' is to be used for [s]size_t, and 'j' - with [u]int64_t.
+     [Richard Levitte, Andy Polyakov]
+
+  *) Add EC_KEY_get0_engine(), which does for EC_KEY what RSA_get0_engine()
+     does for RSA, etc.
+     [Richard Levitte]
+
+  *) Have 'config' recognise 64-bit mingw and choose 'mingw64' as the target
+     platform rather than 'mingw'.
+     [Richard Levitte]
+
+  *) The functions X509_STORE_add_cert and X509_STORE_add_crl return
+     success if they are asked to add an object which already exists
+     in the store. This change cascades to other functions which load
+     certificates and CRLs.
+     [Paul Dale]
+
+  *) x86_64 assembly pack: annotate code with DWARF CFI directives to
+     facilitate stack unwinding even from assembly subroutines.
+     [Andy Polyakov]
+
+  *) Remove VAX C specific definitions of OPENSSL_EXPORT, OPENSSL_EXTERN.
+     Also remove OPENSSL_GLOBAL entirely, as it became a no-op.
+     [Richard Levitte]
+
+  *) Remove the VMS-specific reimplementation of gmtime from crypto/o_times.c.
+     VMS C's RTL has a fully up to date gmtime() and gmtime_r() since V7.1,
+     which is the minimum version we support.
+     [Richard Levitte]
+
+  *) Certificate time validation (X509_cmp_time) enforces stricter
+     compliance with RFC 5280. Fractional seconds and timezone offsets
+     are no longer allowed.
+     [Emilia Käsper]
+
+  *) Add support for ARIA
+     [Paul Dale]
+
+  *) s_client will now send the Server Name Indication (SNI) extension by
+     default unless the new "-noservername" option is used. The server name is
+     based on the host provided to the "-connect" option unless overridden by
+     using "-servername".
+     [Matt Caswell]
+
+  *) Add support for SipHash
+     [Todd Short]
+
+  *) OpenSSL now fails if it receives an unrecognised record type in TLS1.0
+     or TLS1.1. Previously this only happened in SSLv3 and TLS1.2. This is to
+     prevent issues where no progress is being made and the peer continually
+     sends unrecognised record types, using up resources processing them.
+     [Matt Caswell]
+
+  *) 'openssl passwd' can now produce SHA256 and SHA512 based output,
+     using the algorithm defined in
+     https://www.akkadia.org/drepper/SHA-crypt.txt
+     [Richard Levitte]
+
+  *) Heartbeat support has been removed; the ABI is changed for now.
+     [Richard Levitte, Rich Salz]
+
+  *) Support for SSL_OP_NO_ENCRYPT_THEN_MAC in SSL_CONF_cmd.
+     [Emilia Käsper]
+
+  *) The RSA "null" method, which was partially supported to avoid patent
+     issues, has been replaced to always returns NULL.
+     [Rich Salz]
+
+ Changes between 1.1.0e and 1.1.0f [25 May 2017]
+
+  *) Have 'config' recognise 64-bit mingw and choose 'mingw64' as the target
+     platform rather than 'mingw'.
+     [Richard Levitte]
+
+  *) Remove the VMS-specific reimplementation of gmtime from crypto/o_times.c.
+     VMS C's RTL has a fully up to date gmtime() and gmtime_r() since V7.1,
+     which is the minimum version we support.
+     [Richard Levitte]
+
  Changes between 1.1.0d and 1.1.0e [16 Feb 2017]
 
   *) Encrypt-Then-Mac renegotiation crash
@@ -106,12 +287,6 @@
      (CVE-2016-7055)
      [Andy Polyakov]
 
-  *) OpenSSL now fails if it receives an unrecognised record type in TLS1.0
-     or TLS1.1. Previously this only happened in SSLv3 and TLS1.2. This is to
-     prevent issues where no progress is being made and the peer continually
-     sends unrecognised record types, using up resources processing them.
-     [Matt Caswell]
-
   *) Removed automatic addition of RPATH in shared libraries and executables,
      as this was a remainder from OpenSSL 1.0.x and isn't needed any more.
      [Richard Levitte]
@@ -173,7 +348,7 @@
      to service a connection. This could lead to a Denial of Service through
      memory exhaustion. However, the excessive message length check still takes
      place, and this would cause the connection to immediately fail. Assuming
-     that the application calls SSL_free() on the failed conneciton in a timely
+     that the application calls SSL_free() on the failed connection in a timely
      manner then the 21Mb of allocated memory will then be immediately freed
      again. Therefore the excessive memory allocation will be transitory in
      nature. This then means that there is only a security impact if:
@@ -421,7 +596,7 @@
   *) Add X25519 support.
      Add ASN.1 and EVP_PKEY methods for X25519. This includes support
      for public and private key encoding using the format documented in
-     draft-ietf-curdle-pkix-02. The coresponding EVP_PKEY method supports
+     draft-ietf-curdle-pkix-02. The corresponding EVP_PKEY method supports
      key generation and key derivation.
 
      TLS support complies with draft-ietf-tls-rfc4492bis-08 and uses
@@ -926,7 +1101,7 @@
      done while fixing the error code for the key-too-small case.
      [Annie Yousar <a.yousar@informatik.hu-berlin.de>]
 
-  *) CA.sh has been removmed; use CA.pl instead.
+  *) CA.sh has been removed; use CA.pl instead.
      [Rich Salz]
 
   *) Removed old DES API.
