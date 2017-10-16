@@ -8,7 +8,9 @@ if (!common.hasCrypto)
 const assert = require('assert');
 const https = require('https');
 const fs = require('fs');
-const SSL_OP_NO_TICKET = require('crypto').constants.SSL_OP_NO_TICKET;
+const cryptoConstants = require('crypto').constants;
+const SSL_OP_NO_TICKET = cryptoConstants.SSL_OP_NO_TICKET;
+const OPENSSL_VERSION_NUMBER = cryptoConstants.OPENSSL_VERSION_NUMBER;
 
 const options = {
   key: fs.readFileSync(`${common.fixturesDir}/keys/agent1-key.pem`),
@@ -45,7 +47,7 @@ function faultyServer(port) {
   https.createServer(options, function(req, res) {
     res.end('hello faulty');
   }).listen(port, function() {
-    forth(this);
+    second(this);
   });
 }
 
@@ -58,14 +60,25 @@ function second(server, session) {
     res.resume();
   });
 
-  // Let it fail
-  req.on('error', common.mustCall(function(err) {
-    assert(/wrong version number/.test(err.message));
+  if (OPENSSL_VERSION_NUMBER >= 0x10100000) {
+    // Although we have a TLS 1.2 session to offer to the TLS 1.0 server,
+    // connection to the TLS 1.0 server should work.
+    req.on('response', common.mustCall(function(res) {
+      // The test is now complete for OpenSSL 1.1.0.
+      server.close();
+    }));
+  } else {
+    // OpenSSL 1.0.x mistakenly locked versions based on the session it was
+    // offering. This causes this sequent request to fail. Let it fail, but
+    // test that this is mitigated on the next try by invalidating the session.
+    req.on('error', common.mustCall(function(err) {
+      assert(/wrong version number/.test(err.message));
 
-    req.on('close', function() {
-      third(server);
-    });
-  }));
+      req.on('close', function() {
+        third(server);
+      });
+    }));
+  }
   req.end();
 }
 
@@ -82,17 +95,3 @@ function third(server) {
   req.on('error', common.mustNotCall());
   req.end();
 }
-// Attempt to request using cached session but resumption gets faild
-// and it leads full handshake
-function forth(server) {
-    const req = https.request({
-      port: server.address().port,
-      rejectUnauthorized: false
-    }, function(res) {
-      res.resume();
-      assert(!req.socket.isSessionReused());
-      server.close();
-    });
-    req.on('error', common.mustNotCall());
-    req.end();
-  }

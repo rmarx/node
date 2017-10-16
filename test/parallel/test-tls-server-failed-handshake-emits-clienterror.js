@@ -21,7 +21,7 @@ const server = tls.createServer({})
     assert.ok(e instanceof Error,
               'Instance of Error should be passed to error handler');
     assert.ok(
-      /wrong version/.test(e.message),
+      /SSL routines:[^:]*:(unknown protocol|wrong version number)/.test(e.message),
       'Expecting SSL unknown protocol');
 
     server.close();

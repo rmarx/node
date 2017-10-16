@@ -132,12 +132,12 @@ const noCapitals = /^[^A-Z]+$/;
 assert(tlsCiphers.every((value) => noCapitals.test(value)));
 validateList(tlsCiphers);
 
-// Assert that we have sha and sha1 but not SHA and SHA1.
+// Assert that we have sha256 and sha1 but not SHA256 and SHA1.
 assert.notStrictEqual(0, crypto.getHashes().length);
 assert(crypto.getHashes().includes('sha1'));
-//assert(crypto.getHashes().includes('sha'));
+assert(crypto.getHashes().includes('sha256'));
 assert(!crypto.getHashes().includes('SHA1'));
-assert(!crypto.getHashes().includes('SHA'));
+assert(!crypto.getHashes().includes('SHA256'));
 assert(crypto.getHashes().includes('RSA-SHA1'));
 assert(!crypto.getHashes().includes('rsa-sha1'));
 validateList(crypto.getHashes());
