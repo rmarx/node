@@ -4150,6 +4150,37 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rc.ToLocalChecked());
 }
 
+SignBase::~SignBase() {
+  EVP_MD_CTX_free(mdctx_);
+}
+
+
+SignBase::Error SignBase::Init(const char* sign_type) {
+  CHECK_EQ(mdctx_, nullptr);
+  const EVP_MD* md = EVP_get_digestbyname(sign_type);
+  if (md == nullptr)
+    return kSignUnknownDigest;
+
+  mdctx_ = EVP_MD_CTX_new();
+  if (mdctx_ == nullptr ||
+      !EVP_DigestInit_ex(mdctx_, md, nullptr)) {
+    EVP_MD_CTX_free(mdctx_);
+    mdctx_ = nullptr;
+    return kSignInit;
+  }
+
+  return kSignOk;
+}
+
+
+SignBase::Error SignBase::Update(const char* data, int len) {
+  if (!mdctx_)
+    return kSignNotInitialised;
+  if (!EVP_DigestUpdate(mdctx_, data, len))
+    return kSignUpdate;
+  return kSignOk;
+}
+
 
 void SignBase::CheckThrow(SignBase::Error error) {
   HandleScope scope(env()->isolate());
@@ -4223,22 +4254,6 @@ void Sign::New(const FunctionCallbackInfo<Value>& args) {
   new Sign(env, args.This());
 }
 
-
-SignBase::Error Sign::SignInit(const char* sign_type) {
-  CHECK_EQ(initialised_, false);
-  const EVP_MD* md = EVP_get_digestbyname(sign_type);
-  if (md == nullptr)
-    return kSignUnknownDigest;
-
-  EVP_MD_CTX_init(mdctx_);
-  if (!EVP_DigestInit_ex(mdctx_, md, nullptr))
-    return kSignInit;
-  initialised_ = true;
-
-  return kSignOk;
-}
-
-
 void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
   Sign* sign;
   ASSIGN_OR_RETURN_UNWRAP(&sign, args.Holder());
@@ -4251,18 +4266,8 @@ void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_NOT_STRING(args[0], "Sign type");
 
   const node::Utf8Value sign_type(args.GetIsolate(), args[0]);
-  sign->CheckThrow(sign->SignInit(*sign_type));
+  sign->CheckThrow(sign->Init(*sign_type));
 }
-
-
-SignBase::Error Sign::SignUpdate(const char* data, int len) {
-  if (!initialised_)
-    return kSignNotInitialised;
-  if (!EVP_DigestUpdate(mdctx_, data, len))
-    return kSignUpdate;
-  return kSignOk;
-}
-
 
 void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
@@ -4278,11 +4283,11 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
     StringBytes::InlineDecoder decoder;
     if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
       return;
-    err = sign->SignUpdate(decoder.out(), decoder.size());
+    err = sign->Update(decoder.out(), decoder.size());
   } else {
     char* buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
-    err = sign->SignUpdate(buf, buflen);
+    err = sign->Update(buf, buflen);
   }
 
   sign->CheckThrow(err);
@@ -4326,7 +4331,7 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
                                 unsigned int* sig_len,
                                 int padding,
                                 int salt_len) {
-  if (!initialised_)
+  if (!mdctx_)
     return kSignNotInitialised;
 
   BIO* bp = nullptr;
@@ -4374,7 +4379,6 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
   if (Node_SignFinal(mdctx_, sig, sig_len, pkey, padding, salt_len))
     fatal = false;
 
-  initialised_ = false;
 
  exit:
   if (pkey != nullptr)
@@ -4383,6 +4387,7 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
     BIO_free_all(bp);
 
   EVP_MD_CTX_free(mdctx_);
+  mdctx_ = nullptr;
 
   if (fatal)
     return kSignPrivateKey;
@@ -4456,22 +4461,6 @@ void Verify::New(const FunctionCallbackInfo<Value>& args) {
   new Verify(env, args.This());
 }
 
-
-SignBase::Error Verify::VerifyInit(const char* verify_type) {
-  CHECK_EQ(initialised_, false);
-  const EVP_MD* md = EVP_get_digestbyname(verify_type);
-  if (md == nullptr)
-    return kSignUnknownDigest;
-
-  EVP_MD_CTX_init(mdctx_);
-  if (!EVP_DigestInit_ex(mdctx_, md, nullptr))
-    return kSignInit;
-  initialised_ = true;
-
-  return kSignOk;
-}
-
-
 void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
   Verify* verify;
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
@@ -4484,18 +4473,7 @@ void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_NOT_STRING(args[0], "Verify type");
 
   const node::Utf8Value verify_type(args.GetIsolate(), args[0]);
-  verify->CheckThrow(verify->VerifyInit(*verify_type));
-}
-
-
-SignBase::Error Verify::VerifyUpdate(const char* data, int len) {
-  if (!initialised_)
-    return kSignNotInitialised;
-
-  if (!EVP_DigestUpdate(mdctx_, data, len))
-    return kSignUpdate;
-
-  return kSignOk;
+  verify->CheckThrow(verify->Init(*verify_type));
 }
 
 
@@ -4513,11 +4491,11 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
     StringBytes::InlineDecoder decoder;
     if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
       return;
-    err = verify->VerifyUpdate(decoder.out(), decoder.size());
+    err = verify->Update(decoder.out(), decoder.size());
   } else {
     char* buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
-    err = verify->VerifyUpdate(buf, buflen);
+    err = verify->Update(buf, buflen);
   }
 
   verify->CheckThrow(err);
@@ -4531,7 +4509,7 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
                                     int padding,
                                     int saltlen,
                                     bool* verify_result) {
-  if (!initialised_)
+  if (!mdctx_)
     return kSignNotInitialised;
 
   EVP_PKEY* pkey = nullptr;
@@ -4609,7 +4587,7 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
     X509_free(x509);
 
   EVP_MD_CTX_free(mdctx_);
-  initialised_ = false;
+  mdctx_ = nullptr;
 
   if (fatal)
     return kSignPublicKey;
