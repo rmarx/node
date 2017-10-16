@@ -116,6 +116,8 @@ static int DH_set0_key(DH *dh, BIGNUM *pub_key, BIGNUM *priv_key) {
   return 1;
 }
 
+static const SSL_METHOD* TLS_method() { return SSLv23_method(); }
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void SSL_SESSION_get0_ticket(const SSL_SESSION *s,
                                     const unsigned char **tick, size_t *len) {
@@ -534,9 +536,8 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   Environment* env = sc->env();
 
-  const SSL_METHOD* method = SSLv23_method();
+  const SSL_METHOD* method = TLS_method();
 
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (args.Length() == 1 && args[0]->IsString()) {
     const node::Utf8Value sslmethod(env->isolate(), args[0]);
 
@@ -586,86 +587,6 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   }
 
   sc->ctx_ = SSL_CTX_new(method);
-
-  #else
-  int min_version = 0, max_version = 0;
-
-  if (args.Length() == 1 && args[0]->IsString()) {
-    const node::Utf8Value sslmethod(env->isolate(), args[0]);
-    if (strcmp(*sslmethod, "SSLv2_method") == 0) {
-      return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv2_server_method") == 0) {
-      return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv2_client_method") == 0) {
-      return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
-      return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
-      return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_client_method") == 0) {
-      return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv23_method") == 0) {
-      method = TLS_method();
-    } else if (strcmp(*sslmethod, "SSLv23_server_method") == 0) {
-      method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "SSLv23_client_method") == 0) {
-      method = TLS_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_method") == 0) {
-      method = TLS_method();
-      min_version = TLS1_VERSION;
-      max_version = TLS1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_server_method") == 0) {
-      method = TLS_server_method();
-      min_version = TLS1_VERSION;
-      max_version = TLS1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_client_method") == 0) {
-      method = TLS_client_method();
-      min_version = TLS1_VERSION;
-      max_version = TLS1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_1_method") == 0) {
-      method = TLS_method();
-      min_version = TLS1_1_VERSION;
-      max_version = TLS1_1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_1_server_method") == 0) {
-      method = TLS_server_method();
-      min_version = TLS1_1_VERSION;
-      max_version = TLS1_1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_1_client_method") == 0) {
-      method = TLS_client_method();
-      min_version = TLS1_1_VERSION;
-      max_version = TLS1_1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_2_method") == 0) {
-      method = TLS_method();
-      min_version = TLS1_2_VERSION;
-      max_version = TLS1_2_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_2_server_method") == 0) {
-      method = TLS_server_method();
-      min_version = TLS1_2_VERSION;
-      max_version = TLS1_2_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_2_client_method") == 0) {
-      method = TLS_client_method();
-      min_version = TLS1_2_VERSION;
-      max_version = TLS1_2_VERSION;
-    } else if (strcmp(*sslmethod, "TLS_method") == 0) {
-      method = TLS_method();
-    } else if (strcmp(*sslmethod, "TLS_server_method") == 0) {
-      method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLS_client_method") == 0) {
-      method = TLS_client_method();
-    } else {
-      return env->ThrowError("Unknown method");
-    }
-  }
-
-  sc->ctx_ = SSL_CTX_new(method);
-
-  if (min_version || max_version) {
-    SSL_CTX_set_min_proto_version(sc->ctx_, min_version);
-    SSL_CTX_set_max_proto_version(sc->ctx_, max_version);
-  }
-
-
-  #endif
   SSL_CTX_set_app_data(sc->ctx_, sc);
 
   // Disable SSLv2 in the case when method == SSLv23_method() and the
@@ -682,6 +603,19 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
                                  SSL_SESS_CACHE_NO_AUTO_CLEAR);
   SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<Connection>::GetSessionCallback);
   SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<Connection>::NewSessionCallback);
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+  // OpenSSL 1.1.0 changed the ticket key size, but the OpenSSL 1.0.x size was
+  // exposed in the public API. To retain compatibility, install a callback
+  // which restores the old algorithm.
+  if (RAND_bytes(sc->ticket_key_name_, sizeof(sc->ticket_key_name_)) <= 0 ||
+      RAND_bytes(sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_)) <= 0 ||
+      RAND_bytes(sc->ticket_key_aes_, sizeof(sc->ticket_key_aes_)) <= 0) {
+    return env->ThrowError("Error generating ticket keys");
+  }
+  SSL_CTX_set_tlsext_ticket_key_cb(sc->ctx_,
+                                   SecureContext::TicketCompatibilityCallback);
+#endif
 }
 
 
@@ -1150,9 +1084,10 @@ void SecureContext::SetECDHCurve(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_NOT_STRING(args[0], "ECDH curve name");
 
   node::Utf8Value curve(env->isolate(), args[0]);
-
-  SSL_CTX_set_options(sc->ctx_, SSL_OP_SINGLE_ECDH_USE);
-  SSL_CTX_set_ecdh_auto(sc->ctx_, 1);
+  #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    SSL_CTX_set_options(sc->ctx_, SSL_OP_SINGLE_ECDH_USE);
+    SSL_CTX_set_ecdh_auto(sc->ctx_, 1);
+  #endif
 
   if (strcmp(*curve, "auto") == 0)
     return;
@@ -1365,50 +1300,60 @@ void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
 
 
 void SecureContext::GetTicketKeys(const FunctionCallbackInfo<Value>& args) {
-#if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
-
-  SecureContext* wrap;
-  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-
-  size_t length = SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_, NULL, 0);
-  Local<Object> buff = Buffer::New(wrap->env(), length).ToLocalChecked();
-  if (SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_,
-                                     Buffer::Data(buff),
-                                     Buffer::Length(buff)) != 1) {
-    return wrap->env()->ThrowError("Failed to fetch tls ticket keys");
+  #if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
+  
+    SecureContext* wrap;
+    ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  
+    Local<Object> buff = Buffer::New(wrap->env(), 48).ToLocalChecked();
+  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    memcpy(Buffer::Data(buff), wrap->ticket_key_name_, 16);
+    memcpy(Buffer::Data(buff) + 16, wrap->ticket_key_hmac_, 16);
+    memcpy(Buffer::Data(buff) + 32, wrap->ticket_key_aes_, 16);
+  #else
+    if (SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_,
+                                       Buffer::Data(buff),
+                                       Buffer::Length(buff)) != 1) {
+      return wrap->env()->ThrowError("Failed to fetch tls ticket keys");
+    }
+  #endif
+  
+    args.GetReturnValue().Set(buff);
+  #endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
   }
-
-  args.GetReturnValue().Set(buff);
-#endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
-}
-
-
-void SecureContext::SetTicketKeys(const FunctionCallbackInfo<Value>& args) {
-#if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
-  SecureContext* wrap;
-  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  Environment* env = wrap->env();
-
-  if (args.Length() < 1) {
-    return env->ThrowTypeError("Ticket keys argument is mandatory");
+  
+  
+  void SecureContext::SetTicketKeys(const FunctionCallbackInfo<Value>& args) {
+  #if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
+    SecureContext* wrap;
+    ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+    Environment* env = wrap->env();
+  
+    if (args.Length() < 1) {
+      return env->ThrowTypeError("Ticket keys argument is mandatory");
+    }
+  
+    THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Ticket keys");
+  
+    if (Buffer::Length(args[0]) != 48) {
+      return env->ThrowTypeError("Ticket keys length must be 48 bytes");
+    }
+  
+  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    memcpy(wrap->ticket_key_name_, Buffer::Data(args[0]), 16);
+    memcpy(wrap->ticket_key_hmac_, Buffer::Data(args[0]) + 16, 16);
+    memcpy(wrap->ticket_key_aes_, Buffer::Data(args[0]) + 32, 16);
+  #else
+    if (SSL_CTX_set_tlsext_ticket_keys(wrap->ctx_,
+                                       Buffer::Data(args[0]),
+                                       Buffer::Length(args[0])) != 1) {
+      return env->ThrowError("Failed to fetch tls ticket keys");
+    }
+  #endif
+  
+    args.GetReturnValue().Set(true);
+  #endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
   }
-
-  THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Ticket keys");
-
-  size_t length = SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_, NULL, 0);
-  if (Buffer::Length(args[0]) != length) {
-    return env->ThrowTypeError("Ticket keys length incorrect");
-  }
-
-  if (SSL_CTX_set_tlsext_ticket_keys(wrap->ctx_,
-                                     Buffer::Data(args[0]),
-                                     Buffer::Length(args[0])) != 1) {
-    return env->ThrowError("Failed to fetch tls ticket keys");
-  }
-
-  args.GetReturnValue().Set(true);
-#endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
-}
 
 
 /*void SecureContext::SetFreeListLength(const FunctionCallbackInfo<Value>& args) {
@@ -1513,6 +1458,43 @@ int SecureContext::TicketKeyCallback(SSL* ssl,
 
   return r;
 }
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+int SecureContext::TicketCompatibilityCallback(SSL* ssl,
+                                               unsigned char* name,
+                                               unsigned char* iv,
+                                               EVP_CIPHER_CTX* ectx,
+                                               HMAC_CTX* hctx,
+                                               int enc) {
+  SecureContext* sc = static_cast<SecureContext*>(
+      SSL_CTX_get_app_data(SSL_get_SSL_CTX(ssl)));
+
+  if (enc) {
+    memcpy(name, sc->ticket_key_name_, sizeof(sc->ticket_key_name_));
+    if (RAND_bytes(iv, 16) <= 0 ||
+        EVP_EncryptInit_ex(ectx, EVP_aes_128_cbc(), nullptr,
+                           sc->ticket_key_aes_, iv) <= 0 ||
+        HMAC_Init_ex(hctx, sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_),
+                     EVP_sha256(), nullptr) <= 0) {
+      return -1;
+    }
+    return 1;
+  }
+
+  if (memcmp(name, sc->ticket_key_name_, sizeof(sc->ticket_key_name_)) != 0) {
+    // The ticket key name does not match. Discard the ticket.
+    return 0;
+  }
+
+  if (EVP_DecryptInit_ex(ectx, EVP_aes_128_cbc(), nullptr, sc->ticket_key_aes_,
+                         iv) <= 0 ||
+      HMAC_Init_ex(hctx, sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_),
+                   EVP_sha256(), nullptr) <= 0) {
+    return -1;
+  }
+  return 1;
+}
+#endif
 
 
 
@@ -2529,19 +2511,11 @@ int SSLWrap<Base>::SelectALPNCallback(SSL* s,
   int status = SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
                                      alpn_protos, alpn_protos_len, in, inlen);
 
-  switch (status) {
-    case OPENSSL_NPN_NO_OVERLAP:
-      // According to 3.2. Protocol Selection of RFC7301,
-      // fatal no_application_protocol alert shall be sent
-      // but current openssl does not support it yet. See
-      // https://rt.openssl.org/Ticket/Display.html?id=3463&user=guest&pass=guest
-      // Instead, we send a warning alert for now.
-      return SSL_TLSEXT_ERR_ALERT_WARNING;
-    case OPENSSL_NPN_NEGOTIATED:
-      return SSL_TLSEXT_ERR_OK;
-    default:
-      return SSL_TLSEXT_ERR_ALERT_FATAL;
-  }
+  // According to 3.2. Protocol Selection of RFC7301, fatal
+  // no_application_protocol alert shall be sent but OpenSSL 1.0.2 does not
+  // support it yet. See
+  // https://rt.openssl.org/Ticket/Display.html?id=3463&user=guest&pass=guest
+  return status == OPENSSL_NPN_NEGOTIATED ? SSL_TLSEXT_ERR_OK : SSL_TLSEXT_ERR_NOACK;
 }
 #endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
 
@@ -4157,6 +4131,14 @@ SignBase::~SignBase() {
 
 SignBase::Error SignBase::Init(const char* sign_type) {
   CHECK_EQ(mdctx_, nullptr);
+  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    // Historically, "dss1" and "DSS1" were DSA aliases for SHA-1
+    // exposed through the public API.
+    if (strcmp(sign_type, "dss1") == 0 ||
+        strcmp(sign_type, "DSS1") == 0) {
+      sign_type = "SHA1";
+    }
+  #endif
   const EVP_MD* md = EVP_get_digestbyname(sign_type);
   if (md == nullptr)
     return kSignUnknownDigest;
@@ -5922,12 +5904,7 @@ void RandomBytesBuffer(const FunctionCallbackInfo<Value>& args) {
 void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    SSL_CTX* ctx = SSL_CTX_new(TLSv1_server_method());
-  #else
-    SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
-  #endif
-
+  SSL_CTX* ctx = SSL_CTX_new(TLS_method());
   if (ctx == nullptr) {
     return env->ThrowError("SSL_CTX_new() failed.");
   }
@@ -5942,8 +5919,9 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
   STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(ssl);
 
   for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); ++i) {
-    const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
-    arr->Set(i, OneByteString(args.GetIsolate(), SSL_CIPHER_get_name(cipher)));
+    //https://github.com/nodejs/node/pull/16130/commits/25683a6ced7e1e6e7be9105a7e6c585799bc454c
+    //const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
+    arr->Set(i, OneByteString(args.GetIsolate(), "TLSv1/SSLv3"));
   }
 
   SSL_free(ssl);
@@ -5951,7 +5929,6 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
 
   args.GetReturnValue().Set(arr);
 }
-
 
 class CipherPushContext {
  public:
