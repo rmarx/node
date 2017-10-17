@@ -8,13 +8,13 @@ ARCHS = aix-gcc aix64-gcc BSD-x86_64 \
 darwin64-x86_64-cc darwin-i386-cc linux-aarch64 \
 linux-armv4 linux-elf linux-x32 linux-x86_64 linux-ppc \
 linux-ppc64 linux-ppc64le linux32-s390x linux64-s390x \
-solaris-x86-gcc solaris64-x86_64-gcc VC-WIN64A VC-WIN32
+solaris-x86-gcc solaris64-x86_64-gcc #VC-WIN64A VC-WIN32
 
 CONFIGURE = ./Configure
 # no-comp, no-ssl3: default openssl config options
 # no-shared: openssl-cli needs static link
 # no-afalgeng: old Linux kernel(e.g. Ubuntu 12) does not suport it
-COPTS = no-shared no-comp no-ssl3 no-afalgeng
+COPTS = no-shared no-comp no-ssl3 no-afalgeng enable-tls1_3
 
 GITIGNORE = $(OPSSL_SRC)/.gitignore
 GENERATE = ./generate.pl
