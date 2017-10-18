@@ -474,7 +474,6 @@ class CipherBase : public BaseObject {
         kind_(kind),
         auth_tag_len_(0) {
     MakeWeak<CipherBase>(this);
-    ctx_ = EVP_CIPHER_CTX_new();
   }
 
  private:
@@ -551,7 +550,6 @@ class SignBase : public BaseObject {
   SignBase(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
         mdctx_(nullptr) {
-          mdctx_ = EVP_MD_CTX_new();
   }
 
   ~SignBase() override;
