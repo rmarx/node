@@ -145,12 +145,14 @@ class SecureContext : public BaseObject {
                                EVP_CIPHER_CTX* ectx,
                                HMAC_CTX* hctx,
                                int enc);
-  int TicketCompatibilityCallback(SSL* ssl,
-                                unsigned char* name,
-                                unsigned char* iv,
-                                EVP_CIPHER_CTX* ectx,
-                                HMAC_CTX* hctx,
-                                int enc);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+  static int TicketCompatibilityCallback(SSL* ssl,
+                                         unsigned char* name,
+                                         unsigned char* iv,
+                                         EVP_CIPHER_CTX* ectx,
+                                         HMAC_CTX* hctx,
+                                         int enc);
+#endif
 
   SecureContext(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
@@ -687,7 +689,7 @@ class DiffieHellman : public BaseObject {
   static void GetField(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* err_if_null);
   static void SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what);
   static void GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM** num);
-  static void SetKeyValue(Diffiehellman* dh, FieldType field, BIGNUM* num)
+  static void SetKeyValue(DiffieHellman* dh, FieldType field, BIGNUM* num);
   bool VerifyContext();
 
   bool initialised_;
