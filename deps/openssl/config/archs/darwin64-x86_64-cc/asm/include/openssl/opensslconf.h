@@ -94,9 +94,6 @@ extern "C" {
 #ifndef OPENSSL_NO_TLS13DOWNGRADE
 # define OPENSSL_NO_TLS13DOWNGRADE
 #endif
-#ifndef OPENSSL_NO_TLS1_3
-# define OPENSSL_NO_TLS1_3
-#endif
 #ifndef OPENSSL_NO_UBSAN
 # define OPENSSL_NO_UBSAN
 #endif
