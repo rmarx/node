@@ -23,7 +23,7 @@ COPY ./scripts/ /scripts/
 RUN   chmod 600 /scripts/github_key_file && \
       echo "IdentityFile /scripts/github_key_file\n" >> /etc/ssh/ssh_config && \
       echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config && \
-      git clone --depth 1 git@github.com:kevin-kp/node.git /node
+      git clone --depth 1 -b fix_tests git@github.com:kevin-kp/node.git /node
 
 ############################################
 # run only when you have to upgrade openssl

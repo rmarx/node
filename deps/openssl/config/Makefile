@@ -14,7 +14,7 @@ CONFIGURE = ./Configure
 # no-comp, no-ssl3: default openssl config options
 # no-shared: openssl-cli needs static link
 # no-afalgeng: old Linux kernel(e.g. Ubuntu 12) does not suport it
-COPTS = no-shared no-comp no-ssl3 no-afalgeng enable-tls1_3
+COPTS = no-shared no-comp no-ssl3 no-afalgeng
 
 GITIGNORE = $(OPSSL_SRC)/.gitignore
 GENERATE = ./generate.pl

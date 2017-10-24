@@ -41,7 +41,7 @@ function onlistening() {
 
 function checkDestroyedWriteWraps(n, stage) {
   const as = hooks.activitiesOfTypes('WRITEWRAP');
-  assert.strictEqual(as.length, n, `${n} WRITEWRAPs when ${stage}`);
+  assert.strictEqual(as.length, n, `${n} != ${as.length} WRITEWRAPs when ${stage}`);
 
   function checkValidWriteWrap(w) {
     assert.strictEqual(w.type, 'WRITEWRAP');

@@ -26,14 +26,14 @@ COPY ./ /node
 #
 # go to openssl folder
 
-WORKDIR /node/deps/openssl/config
+#WORKDIR /node/deps/openssl/config
 
 #run makefile
 
-RUN \
-	make \
-	&& make Makefile_VC-WIN32 \
-	&& make Makefile_VC-WIN64A
+#RUN \
+#	make \
+#	&& make Makefile_VC-WIN32 \
+#	&& make Makefile_VC-WIN64A
 
 ##################
 # END upgrade

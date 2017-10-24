@@ -42,6 +42,7 @@ set enable_vtune_arg=
 set configure_flags=
 set build_addons=
 set dll=
+set openssl_no_asm=
 set enable_static=
 set build_addons_napi=
 set test_node_inspect=
@@ -112,6 +113,7 @@ if /i "%1"=="download-all"  set download_arg="--download=all"&goto arg-ok
 if /i "%1"=="ignore-flaky"  set test_args=%test_args% --flaky-tests=dontcare&goto arg-ok
 if /i "%1"=="enable-vtune"  set enable_vtune_arg=1&goto arg-ok
 if /i "%1"=="dll"           set dll=1&goto arg-ok
+if /i "%1"=="openssl-no-asm"   set openssl_no_asm=1&goto arg-ok
 if /i "%1"=="static"        set enable_static=1&goto arg-ok
 if /i "%1"=="no-NODE-OPTIONS"	set no_NODE_OPTIONS=1&goto arg-ok
 if /i "%1"=="debug-http2"   set debug_http2=1&goto arg-ok
@@ -152,6 +154,7 @@ if defined release_urlbase set configure_flags=%configure_flags% --release-urlba
 if defined download_arg set configure_flags=%configure_flags% %download_arg%
 if defined enable_vtune_arg set configure_flags=%configure_flags% --enable-vtune-profiling
 if defined dll set configure_flags=%configure_flags% --shared
+if defined openssl_no_asm set configure_flags=%configure_flags% --openssl-no-asm
 if defined enable_static set configure_flags=%configure_flags% --enable-static
 if defined no_NODE_OPTIONS set configure_flags=%configure_flags% --without-node-options
 
@@ -529,7 +532,7 @@ echo Failed to create vc project files.
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [test/test-ci/test-all/test-uv/test-inspector/test-internet/test-pummel/test-simple/test-message/test-async-hooks/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [clean] [noprojgen] [small-icu/full-icu/without-intl] [nobuild] [sign] [x86/x64] [vs2015/vs2017] [download-all] [enable-vtune] [lint/lint-ci] [no-NODE-OPTIONS] [link-module path-to-module]
+echo vcbuild.bat [debug/release] [msi] [test/test-ci/test-all/test-uv/test-inspector/test-internet/test-pummel/test-simple/test-message/test-async-hooks/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [clean] [noprojgen] [small-icu/full-icu/without-intl] [nobuild] [sign] [x86/x64] [vs2015/vs2017] [download-all] [enable-vtune] [openssl-no-asm] [lint/lint-ci] [no-NODE-OPTIONS] [link-module path-to-module]
 echo Examples:
 echo   vcbuild.bat                          : builds release build
 echo   vcbuild.bat debug                    : builds debug build

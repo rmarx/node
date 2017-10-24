@@ -1337,7 +1337,7 @@ void SecureContext::GetTicketKeys(const FunctionCallbackInfo<Value>& args) {
     THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Ticket keys");
   
     if (Buffer::Length(args[0]) != 48) {
-      return env->ThrowTypeError("Ticket keys length must be 48 bytes");
+      return env->ThrowTypeError("Ticket keys length incorrect");
     }
   
   #if OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -3671,7 +3671,7 @@ void CipherBase::InitIv(const FunctionCallbackInfo<Value>& args) {
 
 bool CipherBase::IsAuthenticatedMode() const {
   // Check if this cipher operates in an AEAD mode that we support.
-  CHECK_EQ(ctx_, nullptr);
+  CHECK_NE(ctx_, nullptr);
   const EVP_CIPHER* const cipher = EVP_CIPHER_CTX_cipher(ctx_);
   int mode = EVP_CIPHER_mode(cipher);
   return mode == EVP_CIPH_GCM_MODE;
@@ -5914,8 +5914,9 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
 
   for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); ++i) {
     //https://github.com/nodejs/node/pull/16130/commits/25683a6ced7e1e6e7be9105a7e6c585799bc454c
-    //const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
-    arr->Set(i, OneByteString(args.GetIsolate(), "TLSv1/SSLv3"));
+    //arr->Set(i, OneByteString(args.GetIsolate(), "TLSv1/SSLv3"));
+    const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
+    arr->Set(i, OneByteString(args.GetIsolate(), SSL_CIPHER_get_name(cipher)));
   }
 
   SSL_free(ssl);
@@ -5925,28 +5926,28 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
 }
 
 class CipherPushContext {
- public:
-  explicit CipherPushContext(Environment* env)
-      : arr(Array::New(env->isolate())),
-        env_(env) {
-  }
+public:
+ explicit CipherPushContext(Environment* env)
+     : arr(Array::New(env->isolate())),
+       env_(env) {
+ }
 
-  inline Environment* env() const { return env_; }
+ inline Environment* env() const { return env_; }
 
-  Local<Array> arr;
+ Local<Array> arr;
 
- private:
-  Environment* env_;
+private:
+ Environment* env_;
 };
 
 
 template <class TypeName>
 static void array_push_back(const TypeName* md,
-                            const char* from,
-                            const char* to,
-                            void* arg) {
-  CipherPushContext* ctx = static_cast<CipherPushContext*>(arg);
-  ctx->arr->Set(ctx->arr->Length(), OneByteString(ctx->env()->isolate(), from));
+                           const char* from,
+                           const char* to,
+                           void* arg) {
+ CipherPushContext* ctx = static_cast<CipherPushContext*>(arg);
+ ctx->arr->Set(ctx->arr->Length(), OneByteString(ctx->env()->isolate(), from));
 }
 
 
