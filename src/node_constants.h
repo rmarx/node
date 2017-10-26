@@ -41,7 +41,10 @@
 #define RSA_PSS_SALTLEN_AUTO -2
 #endif
 
-#define DEFAULT_CIPHER_LIST_CORE "ECDHE-RSA-AES128-GCM-SHA256:"     \
+#define DEFAULT_CIPHER_LIST_CORE "TLS_AES_128_GCM_SHA256:"          \
+                                 "TLS_AES_256_GCM_SHA384:"          \
+                                 "TLS_CHACHA20_POLY1305_SHA256:"    \
+                                 "ECDHE-RSA-AES128-GCM-SHA256:"     \
                                  "ECDHE-ECDSA-AES128-GCM-SHA256:"   \
                                  "ECDHE-RSA-AES256-GCM-SHA384:"     \
                                  "ECDHE-ECDSA-AES256-GCM-SHA384:"   \

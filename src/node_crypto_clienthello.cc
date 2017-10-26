@@ -85,10 +85,11 @@ void ClientHelloParser::ParseHeader(const uint8_t* data, size_t avail) {
   // (3,1) TLS v1.0
   // (3,2) TLS v1.1
   // (3,3) TLS v1.2
+  // (3,4) TLS v1.3
   //
   if (data[body_offset_ + 4] != 0x03 ||
       data[body_offset_ + 5] < 0x01 ||
-      data[body_offset_ + 5] > 0x03) {
+      data[body_offset_ + 5] > 0x04) {
     goto fail;
   }
 
