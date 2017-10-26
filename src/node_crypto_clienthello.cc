@@ -171,6 +171,14 @@ void ClientHelloParser::ParseExtension(const uint16_t type,
       tls_ticket_size_ = len;
       tls_ticket_ = data + len;
       break;
+    case kKeyShare:
+      // TODO: can be multiple key shares
+      uint16_t client_key_share_length = (data[0] << 8) + data[1];
+      if (client_key_share_length > 3) {
+        uint16_t group = (data[2] << 8) + data[3];
+        key_share_size = (data[4] << 8) + data[5];
+        key_share_ = data + 6;
+      }
     default:
       // Ignore
       break;
