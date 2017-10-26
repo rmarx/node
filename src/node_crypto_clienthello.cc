@@ -180,6 +180,7 @@ void ClientHelloParser::ParseExtension(const uint16_t type,
         key_share_size_ = (data[4] << 8) + data[5];
         key_share_ = data + 6;
       }
+      break;
     default:
       // Ignore
       break;
