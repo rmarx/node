@@ -60,53 +60,55 @@ function onsecureConnection() {
   // TODO(thlorenz) which callback did the server wrap execute that already
   // finished as well?
   checkInvocations(svr, { init: 1, before: 1, after: 1 },
-                   'server: when server has secure connection');
+    'server: when server has secure connection');
 
   checkInvocations(client, { init: 1, before: 2, after: 1 },
-                   'client: when server has secure connection');
+    'client: when server has secure connection');
 }
 
 function onsecureConnect() {
-  //
-  // Client connected to server
-  //
-  checkInvocations(svr, { init: 1, before: 2, after: 1 },
-                   'server: when client connected');
-  checkInvocations(client, { init: 1, before: 2, after: 2 },
-                   'client: when client connected');
+  setTimeout(function () {
+    //
+    // Client connected to server
+    //
+    checkInvocations(svr, { init: 1, before: 2, after: 1 },
+      'server: when client connected');
+    checkInvocations(client, { init: 1, before: 2, after: 2 },
+      'client: when client connected');
 
-  //
-  // Destroying client socket
-  //
-  this.destroy();
-  checkInvocations(svr, { init: 1, before: 2, after: 1 },
-                   'server: when destroying client');
-  checkInvocations(client, { init: 1, before: 2, after: 2 },
-                   'client: when destroying client');
+    //
+    // Destroying client socket
+    //
+    this.destroy();
+    checkInvocations(svr, { init: 1, before: 2, after: 1 },
+      'server: when destroying client');
+    checkInvocations(client, { init: 1, before: 2, after: 2 },
+      'client: when destroying client');
 
-  tick(5, tick1);
-  function tick1() {
-    checkInvocations(svr, { init: 1, before: 2, after: 2 },
-                     'server: when client destroyed');
-    // TODO: why is client not destroyed here even after 5 ticks?
-    // or could it be that it isn't actually destroyed until
-    // the server is closed?
-    if (client.before.length < 3) {
-      tick(5, tick1);
-      return;
+    tick(5, tick1);
+    function tick1() {
+      checkInvocations(svr, { init: 1, before: 2, after: 2 },
+        'server: when client destroyed');
+      // TODO: why is client not destroyed here even after 5 ticks?
+      // or could it be that it isn't actually destroyed until
+      // the server is closed?
+      if (client.before.length < 3) {
+        tick(5, tick1);
+        return;
+      }
+      checkInvocations(client, { init: 1, before: 3, after: 3 },
+        'client: when client destroyed');
+      //
+      // Closing server
+      //
+      server.close(common.mustCall(onserverClosed));
+      // No changes to invocations until server actually closed below
+      checkInvocations(svr, { init: 1, before: 2, after: 2 },
+        'server: when closing server');
+      checkInvocations(client, { init: 1, before: 3, after: 3 },
+        'client: when closing server');
     }
-    checkInvocations(client, { init: 1, before: 3, after: 3 },
-                     'client: when client destroyed');
-    //
-    // Closing server
-    //
-    server.close(common.mustCall(onserverClosed));
-    // No changes to invocations until server actually closed below
-    checkInvocations(svr, { init: 1, before: 2, after: 2 },
-                     'server: when closing server');
-    checkInvocations(client, { init: 1, before: 3, after: 3 },
-                     'client: when closing server');
-  }
+  }, 1000);
 }
 
 function onserverClosed() {
@@ -115,9 +117,9 @@ function onserverClosed() {
   //
   tick(1E4, common.mustCall(() => {
     checkInvocations(svr, { init: 1, before: 2, after: 2 },
-                     'server: when server closed');
+      'server: when server closed');
     checkInvocations(client, { init: 1, before: 3, after: 3 },
-                     'client: when server closed');
+      'client: when server closed');
   }));
 }
 
@@ -128,7 +130,7 @@ function onexit() {
   hooks.sanityCheck('TLSWRAP');
 
   checkInvocations(svr, { init: 1, before: 2, after: 2 },
-                   'server: when process exits');
+    'server: when process exits');
   checkInvocations(client, { init: 1, before: 3, after: 3 },
-                   'client: when process exits');
+    'client: when process exits');
 }

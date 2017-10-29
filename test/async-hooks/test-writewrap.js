@@ -61,23 +61,25 @@ function onsecureConnection() {
 }
 
 function onsecureConnect() {
-  //
-  // Client connected to server
-  //
-  checkDestroyedWriteWraps(4, 'client connected');
+  setTimeout(function () {
+    //
+    // Client connected to server
+    //
+    checkDestroyedWriteWraps(4, 'client connected');
 
-  //
-  // Destroying client socket
-  //
-  this.destroy();
+    //
+    // Destroying client socket
+    //
+    this.destroy();
 
-  checkDestroyedWriteWraps(4, 'client destroyed');
+    checkDestroyedWriteWraps(4, 'client destroyed');
 
-  //
-  // Closing server
-  //
-  server.close(common.mustCall(onserverClosed));
-  checkDestroyedWriteWraps(4, 'server closing');
+    //
+    // Closing server
+    //
+    server.close(common.mustCall(onserverClosed));
+    checkDestroyedWriteWraps(4, 'server closing');
+  }, 1000);
 }
 
 function onserverClosed() {

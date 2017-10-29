@@ -36,14 +36,18 @@ function onlistening() {
     .on('secureConnect', common.mustCall(onsecureConnect));
 }
 
-function onsecureConnection() {}
+function onsecureConnection() {
+  console.log("connection established");
+}
 
 function onsecureConnect() {
-  // Destroying client socket
-  this.destroy();
-
-  // Closing server
-  server.close(common.mustCall(onserverClosed));
+  setTimeout(() => {
+    // Destroying client socket
+    this.destroy();
+  
+    // Closing server
+    server.close(common.mustCall(onserverClosed));
+  }, 1000);
 }
 
 function onserverClosed() {}
