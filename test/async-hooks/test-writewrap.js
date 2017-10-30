@@ -61,7 +61,7 @@ function onsecureConnection() {
 }
 
 function onsecureConnect() {
-  setTimeout(function () {
+  setTimeout(() => {
     //
     // Client connected to server
     //
