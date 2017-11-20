@@ -298,9 +298,9 @@ void TLSWrap::EncOut() {
   if (ssl_ == nullptr)
     return;
 
-  // No data to write
   if (BIO_pending(enc_out_) == 0) {
-    if (clear_in_->Length() == 0)
+    // second time we get in here, state_string is SSL_OK. First time is TWST and callbacks should NOT be called then!
+    if (clear_in_->Length() == 0 && !SSL_in_init(ssl_)) 
       InvokeQueued(0);
     return;
   }
