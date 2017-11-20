@@ -433,6 +433,11 @@ void TLSWrap::ClearOut() {
   for (;;) {
     read = SSL_read(ssl_, out, sizeof(out));
 
+    // when handshake data is found, SSL_read should be called again for possible application data in tls 1.3
+    if(read == -1 && BIO_should_retry(enc_in_)) {
+      read = SSL_read(ssl_, out, sizeof(out));
+    }
+
     if (read <= 0)
       break;
 
