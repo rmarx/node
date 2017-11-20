@@ -605,6 +605,12 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   SSL_CTX_set_options(sc->ctx_, SSL_OP_NO_SSLv2);
   SSL_CTX_set_options(sc->ctx_, SSL_OP_NO_SSLv3);
 
+   // enable logging
+  std::ofstream myfile;
+  myfile.open ("keylogs.txt",std::ofstream::out | std::ofstream::trunc);
+  myfile.close();
+  SSL_CTX_set_keylog_callback(sc->ctx_, SecureContext::KeylogCallback);
+
   // SSL session cache configuration
   SSL_CTX_set_session_cache_mode(sc->ctx_,
                                  SSL_SESS_CACHE_SERVER |
@@ -645,6 +651,13 @@ static BIO* LoadBIO(Environment* env, Local<Value> v) {
   return nullptr;
 }
 
+void SecureContext::KeylogCallback(const SSL *ssl, const char *line) {
+  std::ofstream myfile;
+  myfile.open ("keylogs.txt", std::ios::app);
+  myfile << line;
+  myfile << "\n";
+  myfile.close();
+}
 
 void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);

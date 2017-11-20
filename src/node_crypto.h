@@ -112,6 +112,7 @@ class SecureContext : public BaseObject {
   #endif
 
  protected:
+  static void KeylogCallback(const SSL *ssl, const char *line);
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetKey(const v8::FunctionCallbackInfo<v8::Value>& args);
