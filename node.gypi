@@ -109,7 +109,9 @@
         'src/node_crypto_bio.h',
         'src/node_crypto_clienthello.h',
         'src/tls_wrap.cc',
-        'src/tls_wrap.h'
+        'src/tls_wrap.h',
+        'src/qtls_wrap.cc',
+        'src/qtls_wrap.h'
       ],
       'conditions': [
         ['openssl_fips != ""', {
