@@ -67,6 +67,7 @@
       'lib/sys.js',
       'lib/timers.js',
       'lib/tls.js',
+      'lib/qtls_wrap.js',
       'lib/_tls_common.js',
       'lib/_tls_legacy.js',
       'lib/_tls_wrap.js',
