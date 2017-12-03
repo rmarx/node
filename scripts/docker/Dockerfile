@@ -51,4 +51,4 @@ RUN 				\
 	&& make -j2 	\
 	&& make install
 
-CMD ["./rebuild.sh"]
+CMD ["./scripts/rebuild.sh"]
