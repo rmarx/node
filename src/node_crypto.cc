@@ -27,6 +27,7 @@
 #include "node_crypto_groups.h"
 #include "node_mutex.h"
 #include "tls_wrap.h"  // TLSWrap
+#include "qtls_wrap.h" // QTLSWrap
 
 #include "async-wrap.h"
 #include "async-wrap-inl.h"
@@ -309,6 +310,48 @@ template int SSLWrap<TLSWrap>::SelectALPNCallback(
     unsigned int inlen,
     void* arg);
 #endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
+
+
+template void SSLWrap<QTLSWrap>::AddMethods(Environment* env,
+                                           Local<FunctionTemplate> t); // THIS
+template void SSLWrap<QTLSWrap>::SetSNIContext(SecureContext* sc);
+template int SSLWrap<QTLSWrap>::SetCACerts(SecureContext* sc);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+template SSL_SESSION* SSLWrap<QTLSWrap>::GetSessionCallback(
+    SSL* s,
+    unsigned char* key,
+    int len,
+    int* copy);
+#else
+template SSL_SESSION* SSLWrap<QTLSWrap>::GetSessionCallback(
+    SSL* s,
+    const unsigned char* key,
+    int len,
+    int* copy);
+#endif
+template int SSLWrap<QTLSWrap>::NewSessionCallback(SSL* s,
+                                                  SSL_SESSION* sess);
+template void SSLWrap<QTLSWrap>::OnClientHello(
+    void* arg,
+    const ClientHelloParser::ClientHello& hello);
+
+template int SSLWrap<QTLSWrap>::TLSExtStatusCallback(SSL* s, void* arg);
+
+template void SSLWrap<QTLSWrap>::DestroySSL(); // THIS
+template int SSLWrap<QTLSWrap>::SSLCertCallback(SSL* s, void* arg); // THIS
+template void SSLWrap<QTLSWrap>::WaitForCertCb(CertCb cb, void* arg);
+
+#ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
+template int SSLWrap<QTLSWrap>::SelectALPNCallback(
+    SSL* s,
+    const unsigned char** out,
+    unsigned char* outlen,
+    const unsigned char* in,
+    unsigned int inlen,
+    void* arg);
+#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
+
+
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static Mutex* mutexes;
