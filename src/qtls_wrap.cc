@@ -51,7 +51,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   // example: env->SetProtoMethod(t, "receive", Receive);
   env->SetProtoMethod(t, "start", Start);
 
-  SSLWrap<TLSWrap>::AddMethods(env, t);
+  SSLWrap<QTLSWrap>::AddMethods(env, t);
 
   env->set_qtls_wrap_constructor_function(t->GetFunction());
 
@@ -75,8 +75,8 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   CHECK_NE(sc, nullptr);
 
   // We've our own session callbacks
-  SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<TLSWrap>::GetSessionCallback);
-  SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<TLSWrap>::NewSessionCallback);
+  SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
+  SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
 
   InitSSL();
 }
@@ -97,7 +97,7 @@ void QTLSWrap::InitSSL()
   SSL_CTX_set_min_proto_version(_sc->_ctx, TLS1_3_VERSION);
   SSL_CTX_set_max_proto_version(_sc->_ctx, TLS1_3_VERSION);
 
-  SSL_set_cert_cb(ssl_, SSLWrap<TLSWrap>::SSLCertCallback, this);
+  SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
   SSL_CTX_add_custom_ext(_sc->_ctx, 26,
                          SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |

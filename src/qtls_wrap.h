@@ -23,7 +23,7 @@ namespace crypto
 }
 
 class QTLSWrap : public AsyncWrap,
-                 public crypto::SSLWrap<TLSWrap>
+                 public crypto::SSLWrap<QTLSWrap>
 {
 
 public:
