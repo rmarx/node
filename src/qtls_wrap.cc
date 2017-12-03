@@ -27,6 +27,12 @@ using v8::Object;
 using v8::String;
 using v8::Value;
 
+QTLSWrap::~QTLSWrap() {
+  this->sc_ = nullptr;
+  this->enc_in_ = nullptr;
+  this->enc_out_ = nullptr;
+}
+
 void QTLSWrap::Initialize(Local<Object> target,
                           Local<Value> unused,
                           Local<Context> context)
@@ -53,7 +59,7 @@ void QTLSWrap::Initialize(Local<Object> target,
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
-  env->set_qtls_wrap_constructor_function(t->GetFunction());
+  //env->set_qtls_wrap_constructor_function(t->GetFunction());
 
   target->Set(qtlsWrapString, t->GetFunction());
 }
@@ -64,7 +70,7 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
                     ->NewInstance(env->context())
                     .ToLocalChecked(),
                 AsyncWrap::PROVIDER_QTLSWRAP),
-      SSLWrap<TLSWrap>(env, sc, kind),
+      SSLWrap<QTLSWrap>(env, sc, kind),
       sc_(sc),
       started_(false)
 {
@@ -93,13 +99,13 @@ void QTLSWrap::InitSSL()
 
   SSL_set_app_data(ssl_, this);
   SSL_set_info_callback(ssl_, SSLInfoCallback);
-  SSL_CTX_set_mode(_sc->_ctx, SSL_MODE_RELEASE_BUFFERS);
-  SSL_CTX_set_min_proto_version(_sc->_ctx, TLS1_3_VERSION);
-  SSL_CTX_set_max_proto_version(_sc->_ctx, TLS1_3_VERSION);
+  SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_RELEASE_BUFFERS);
+  SSL_CTX_set_min_proto_version(sc_->ctx_, TLS1_3_VERSION);
+  SSL_CTX_set_max_proto_version(sc_->ctx_, TLS1_3_VERSION);
 
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
-  SSL_CTX_add_custom_ext(_sc->_ctx, 26,
+  SSL_CTX_add_custom_ext(sc_->ctx_, 26,
                          SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
                              SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
                          AddTransportParamsCallback, FreeTransportParamsCallback, nullptr,
@@ -120,6 +126,9 @@ void QTLSWrap::InitSSL()
     ABORT();
   }
 }
+void QTLSWrap::NewSessionDoneCb() {
+  // started cycle in tlswrap, but probably here nothing to do
+}
 
 ////////////////////////////////////////////////
 //            SSL Callback methods            //
@@ -130,6 +139,7 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                                          void *add_arg)
 {
   // add transport parameters
+  return 0;
 }
 
 void QTLSWrap::FreeTransportParamsCallback(SSL *ssl, unsigned int ext_type,
@@ -146,6 +156,7 @@ int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
 {
   // parse transport params
   // probably call callback from JS land
+  return 0;
 }
 
 void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
@@ -205,7 +216,7 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
 
   // Send ClientHello handshake
   CHECK(wrap->is_client());
-  int read = SSL_do_handshake(ssl_);
+  int read = SSL_do_handshake(wrap->ssl_);
   // read enc_out_ bio and return this data
 }
 
