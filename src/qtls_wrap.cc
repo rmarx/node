@@ -72,7 +72,9 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
                 AsyncWrap::PROVIDER_QTLSWRAP),
       SSLWrap<QTLSWrap>(env, sc, kind),
       sc_(sc),
-      started_(false)
+      started_(false),
+      transport_parameters(nullptr),
+      transport_parameters_length(0)
 {
   node::Wrap(object(), this);
   MakeWeak(this);
@@ -138,7 +140,16 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                                          size_t *outlen, X509 *x, size_t chainidx, int *al,
                                          void *add_arg)
 {
+  QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
+
   // add transport parameters
+  if(qtlsWrap->transport_parameters == nullptr) {
+    return 0;
+  }
+
+  *out = qtlsWrap->transport_parameters;
+  *outlen = qtlsWrap->transport_parameters_length;
+
   return 0;
 }
 
@@ -154,7 +165,15 @@ int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                                            size_t inlen, X509 *x, size_t chainidx, int *al,
                                            void *parse_arg)
 {
+  QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
   // parse transport params
+  // add transport parameters
+  if(qtlsWrap->transport_parameters != nullptr) {
+    return 0;
+  }
+
+  memcpy(qtlsWrap->transport_parameters, in, inlen);
+  qtlsWrap->transport_parameters_length = inlen;
   // probably call callback from JS land
   return 0;
 }
@@ -222,16 +241,23 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)
 {
-  Environment* env = Environment::GetCurrent(args);
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
   
   if (args.Length() < 1 || !args[0]->IsUint8Array())
   {
     return env->ThrowTypeError("Argument must be a buffer");
   }
 
-  const char* data = Buffer::Data(args[0]);
-  size_t length = Buffer::Length(args[0]);
-  //store data somewhere to write in addtransportparamscb
+  Local<Object> bufferObj = args[0]->ToObject();
+  unsigned char* data = (unsigned char*) Buffer::Data(bufferObj);
+  size_t length = Buffer::Length(bufferObj);
+  
+  //store data in variables to write in addtransportparamscb
+  wrap->transport_parameters = data;
+  wrap->transport_parameters_length = length;
 }
 
 } // namespace node

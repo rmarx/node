@@ -73,6 +73,9 @@ private:
   BIO *enc_in_;
   BIO *enc_out_;
   bool started_;
+
+  unsigned char* transport_parameters;
+  size_t transport_parameters_length;
 };
 
 } // namespace node
