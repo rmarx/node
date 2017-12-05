@@ -314,19 +314,19 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
   size_t count = arraysize(data);
   size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
 
-  /*if (args.Length() > 0 && args[0]->IsFunction())
+  if (args.Length() > 0 && args[0]->IsFunction())
   {
     Handle<v8::Function> function = v8::Handle<v8::Function>::Cast(args[0]);
     Local<Value> argv[] = {
         Integer::New(env->isolate(), write_size_),
-        Buffer::New(env, data, &write_size_).ToLocalChecked()};
+        Buffer::New(env, data[0], write_size_).ToLocalChecked()
+    };
 
     if (argv[1].IsEmpty())
       argv[1] = Undefined(env->isolate());
 
     function->Call(function, arraysize(argv), argv);
-    // read enc_out_ bio and return this data
-  }*/
+  }
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)
