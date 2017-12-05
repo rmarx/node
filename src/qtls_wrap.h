@@ -67,6 +67,7 @@ protected:
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
   crypto::SecureContext *sc_;

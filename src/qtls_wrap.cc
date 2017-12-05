@@ -57,6 +57,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   // example: env->SetProtoMethod(t, "receive", Receive);
   env->SetProtoMethod(t, "start", Start);
   env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
+  env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
@@ -259,6 +260,39 @@ void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &arg
   //store data in variables to write in addtransportparamscb
   wrap->transport_parameters = data;
   wrap->transport_parameters_length = length;
+}
+
+void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  QTLSWrap* wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  if (args.Length() < 2 || !args[0]->IsBoolean() || !args[1]->IsBoolean())
+    return env->ThrowTypeError("Bad arguments, expected two booleans");
+
+  if (wrap->ssl_ == nullptr)
+    return env->ThrowTypeError("SetVerifyMode after destroySSL");
+
+  int verify_mode;
+  if (wrap->is_server()) {
+    bool request_cert = args[0]->IsTrue();
+    if (!request_cert) {
+      // Note reject_unauthorized ignored.
+      verify_mode = SSL_VERIFY_NONE;
+    } else {
+      bool reject_unauthorized = args[1]->IsTrue();
+      verify_mode = SSL_VERIFY_PEER;
+      if (reject_unauthorized)
+        verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+    }
+  } else {
+    // Note request_cert and reject_unauthorized are ignored for clients.
+    verify_mode = SSL_VERIFY_NONE;
+  }
+
+  // Always allow a connection. We'll reject in javascript.
+  SSL_set_verify(wrap->ssl_, verify_mode, crypto::VerifyCallback);
 }
 
 } // namespace node
