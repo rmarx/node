@@ -47,14 +47,15 @@
 #include "StartComAndWoSignData.inc"
 
 #include <errno.h>
-#include <limits.h>  // INT_MAX
+#include <limits.h> // INT_MAX
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void DH_get0_pqg(const DH *dh, const BIGNUM **p, const BIGNUM **q,
-                        const BIGNUM **g) {
+                        const BIGNUM **g)
+{
   if (p != NULL)
     *p = dh->p;
   if (q != NULL)
@@ -64,7 +65,8 @@ static void DH_get0_pqg(const DH *dh, const BIGNUM **p, const BIGNUM **q,
 }
 
 static void RSA_get0_key(const RSA *r, const BIGNUM **n, const BIGNUM **e,
-                         const BIGNUM **d) {
+                         const BIGNUM **d)
+{
   if (n != NULL)
     *n = r->n;
   if (e != NULL)
@@ -73,19 +75,23 @@ static void RSA_get0_key(const RSA *r, const BIGNUM **n, const BIGNUM **e,
     *d = r->d;
 }
 
-static int DH_set0_pqg(DH *dh, BIGNUM *p, BIGNUM *q, BIGNUM *g) {
+static int DH_set0_pqg(DH *dh, BIGNUM *p, BIGNUM *q, BIGNUM *g)
+{
   if ((dh->p == NULL && p == NULL) || (dh->g == NULL && g == NULL))
     return 0;
 
-  if (p != NULL) {
+  if (p != NULL)
+  {
     BN_free(dh->p);
     dh->p = p;
   }
-  if (q != NULL) {
+  if (q != NULL)
+  {
     BN_free(dh->q);
     dh->q = q;
   }
-  if (g != NULL) {
+  if (g != NULL)
+  {
     BN_free(dh->g);
     dh->g = g;
   }
@@ -94,22 +100,26 @@ static int DH_set0_pqg(DH *dh, BIGNUM *p, BIGNUM *q, BIGNUM *g) {
 }
 
 static void DH_get0_key(const DH *dh, const BIGNUM **pub_key,
-                        const BIGNUM **priv_key) {
+                        const BIGNUM **priv_key)
+{
   if (pub_key != NULL)
     *pub_key = dh->pub_key;
   if (priv_key != NULL)
     *priv_key = dh->priv_key;
 }
 
-static int DH_set0_key(DH *dh, BIGNUM *pub_key, BIGNUM *priv_key) {
+static int DH_set0_key(DH *dh, BIGNUM *pub_key, BIGNUM *priv_key)
+{
   if (dh->pub_key == NULL && pub_key == NULL)
     return 0;
 
-  if (pub_key != NULL) {
+  if (pub_key != NULL)
+  {
     BN_free(dh->pub_key);
     dh->pub_key = pub_key;
   }
-  if (priv_key != NULL) {
+  if (priv_key != NULL)
+  {
     BN_free(dh->priv_key);
     dh->priv_key = priv_key;
   }
@@ -117,11 +127,12 @@ static int DH_set0_key(DH *dh, BIGNUM *pub_key, BIGNUM *priv_key) {
   return 1;
 }
 
-static const SSL_METHOD* TLS_method() { return SSLv23_method(); }
+static const SSL_METHOD *TLS_method() { return SSLv23_method(); }
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void SSL_SESSION_get0_ticket(const SSL_SESSION *s,
-                                    const unsigned char **tick, size_t *len) {
+                                    const unsigned char **tick, size_t *len)
+{
   *len = s->tlsext_ticklen;
   if (tick != NULL)
     *tick = s->tlsext_tick;
@@ -133,14 +144,17 @@ static void SSL_SESSION_get0_ticket(const SSL_SESSION *s,
 // It doesn't do exactly the same, but works.
 #define EVP_MD_CTX_reset(mdctx) EVP_MD_CTX_init(mdctx)
 
-MAC_CTX* HMAC_CTX_new() {
-  HMAC_CTX* ctx = Malloc<HMAC_CTX>(1);
+MAC_CTX *HMAC_CTX_new()
+{
+  HMAC_CTX *ctx = Malloc<HMAC_CTX>(1);
   HMAC_CTX_init(ctx);
   return ctx;
 }
 
-void HMAC_CTX_free(HMAC_CTX* ctx) {
-  if (ctx == nullptr) {
+void HMAC_CTX_free(HMAC_CTX *ctx)
+{
+  if (ctx == nullptr)
+  {
     return;
   }
   HMAC_CTX_cleanup(ctx);
@@ -152,41 +166,46 @@ void HMAC_CTX_free(HMAC_CTX* ctx) {
 
 #endif
 
-#define THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(val, prefix)                  \
-  do {                                                                         \
-    if (!Buffer::HasInstance(val) && !val->IsString()) {                       \
-      return env->ThrowTypeError(prefix " must be a string or a buffer");      \
-    }                                                                          \
+#define THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(val, prefix)             \
+  do                                                                      \
+  {                                                                       \
+    if (!Buffer::HasInstance(val) && !val->IsString())                    \
+    {                                                                     \
+      return env->ThrowTypeError(prefix " must be a string or a buffer"); \
+    }                                                                     \
   } while (0)
 
 #define THROW_AND_RETURN_IF_NOT_BUFFER(val, prefix)           \
-  do {                                                        \
-    if (!Buffer::HasInstance(val)) {                          \
+  do                                                          \
+  {                                                           \
+    if (!Buffer::HasInstance(val))                            \
+    {                                                         \
       return env->ThrowTypeError(prefix " must be a buffer"); \
     }                                                         \
   } while (0)
 
 #define THROW_AND_RETURN_IF_NOT_STRING(val, prefix)           \
-  do {                                                        \
-    if (!val->IsString()) {                                   \
+  do                                                          \
+  {                                                           \
+    if (!val->IsString())                                     \
+    {                                                         \
       return env->ThrowTypeError(prefix " must be a string"); \
     }                                                         \
   } while (0)
 
-static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
+static const char PUBLIC_KEY_PFX[] = "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
-static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
+static const char PUBRSA_KEY_PFX[] = "-----BEGIN RSA PUBLIC KEY-----";
 static const int PUBRSA_KEY_PFX_LEN = sizeof(PUBRSA_KEY_PFX) - 1;
-static const char CERTIFICATE_PFX[] =  "-----BEGIN CERTIFICATE-----";
+static const char CERTIFICATE_PFX[] = "-----BEGIN CERTIFICATE-----";
 static const int CERTIFICATE_PFX_LEN = sizeof(CERTIFICATE_PFX) - 1;
 
-static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
-                                 | ASN1_STRFLGS_UTF8_CONVERT
-                                 | XN_FLAG_SEP_MULTILINE
-                                 | XN_FLAG_FN_SN;
+static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL | ASN1_STRFLGS_UTF8_CONVERT | XN_FLAG_SEP_MULTILINE | XN_FLAG_FN_SN;
 
-namespace node {
-namespace crypto {
+namespace node
+{
+namespace crypto
+{
 
 using v8::AccessorSignature;
 using v8::Array;
@@ -216,7 +235,6 @@ using v8::ReadOnly;
 using v8::String;
 using v8::Value;
 
-
 // Subject DER of CNNIC ROOT CA and CNNIC EV ROOT CA are taken from
 // https://hg.mozilla.org/mozilla-central/file/98820360ab66/security/
 // certverifier/NSSCertDBTrustDomain.cpp#l672
@@ -225,9 +243,9 @@ static const uint8_t CNNIC_ROOT_CA_SUBJECT_DATA[] =
     "\x30\x32\x31\x0B\x30\x09\x06\x03\x55\x04\x06\x13\x02\x43\x4E\x31\x0E\x30"
     "\x0C\x06\x03\x55\x04\x0A\x13\x05\x43\x4E\x4E\x49\x43\x31\x13\x30\x11\x06"
     "\x03\x55\x04\x03\x13\x0A\x43\x4E\x4E\x49\x43\x20\x52\x4F\x4F\x54";
-static const uint8_t* cnnic_p = CNNIC_ROOT_CA_SUBJECT_DATA;
-static X509_NAME* cnnic_name =
-    d2i_X509_NAME(nullptr, &cnnic_p, sizeof(CNNIC_ROOT_CA_SUBJECT_DATA)-1);
+static const uint8_t *cnnic_p = CNNIC_ROOT_CA_SUBJECT_DATA;
+static X509_NAME *cnnic_name =
+    d2i_X509_NAME(nullptr, &cnnic_p, sizeof(CNNIC_ROOT_CA_SUBJECT_DATA) - 1);
 
 // C = CN, O = China Internet Network Information Center, CN = China
 // Internet Network Information Center EV Certificates Root
@@ -240,133 +258,133 @@ static const uint8_t CNNIC_EV_ROOT_CA_SUBJECT_DATA[] =
     "\x6E\x65\x74\x20\x4E\x65\x74\x77\x6F\x72\x6B\x20\x49\x6E\x66\x6F\x72\x6D"
     "\x61\x74\x69\x6F\x6E\x20\x43\x65\x6E\x74\x65\x72\x20\x45\x56\x20\x43\x65"
     "\x72\x74\x69\x66\x69\x63\x61\x74\x65\x73\x20\x52\x6F\x6F\x74";
-static const uint8_t* cnnic_ev_p = CNNIC_EV_ROOT_CA_SUBJECT_DATA;
+static const uint8_t *cnnic_ev_p = CNNIC_EV_ROOT_CA_SUBJECT_DATA;
 static X509_NAME *cnnic_ev_name =
     d2i_X509_NAME(nullptr, &cnnic_ev_p,
-                  sizeof(CNNIC_EV_ROOT_CA_SUBJECT_DATA)-1);
+                  sizeof(CNNIC_EV_ROOT_CA_SUBJECT_DATA) - 1);
 
-static const char* const root_certs[] = {
-#include "node_root_certs.h"  // NOLINT(build/include_order)
+static const char *const root_certs[] = {
+#include "node_root_certs.h" // NOLINT(build/include_order)
 };
 
-static std::string extra_root_certs_file;  // NOLINT(runtime/string)
+static std::string extra_root_certs_file; // NOLINT(runtime/string)
 
-static X509_STORE* root_cert_store;
+static X509_STORE *root_cert_store;
 
 // Just to generate static methods
-template void SSLWrap<TLSWrap>::AddMethods(Environment* env,
+template void SSLWrap<TLSWrap>::AddMethods(Environment *env,
                                            Local<FunctionTemplate> t);
-template void SSLWrap<TLSWrap>::InitNPN(SecureContext* sc);
-template void SSLWrap<TLSWrap>::SetSNIContext(SecureContext* sc);
-template int SSLWrap<TLSWrap>::SetCACerts(SecureContext* sc);
+template void SSLWrap<TLSWrap>::InitNPN(SecureContext *sc);
+template void SSLWrap<TLSWrap>::SetSNIContext(SecureContext *sc);
+template int SSLWrap<TLSWrap>::SetCACerts(SecureContext *sc);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-template SSL_SESSION* SSLWrap<TLSWrap>::GetSessionCallback(
-    SSL* s,
-    unsigned char* key,
+template SSL_SESSION *SSLWrap<TLSWrap>::GetSessionCallback(
+    SSL *s,
+    unsigned char *key,
     int len,
-    int* copy);
+    int *copy);
 #else
-template SSL_SESSION* SSLWrap<TLSWrap>::GetSessionCallback(
-    SSL* s,
-    const unsigned char* key,
+template SSL_SESSION *SSLWrap<TLSWrap>::GetSessionCallback(
+    SSL *s,
+    const unsigned char *key,
     int len,
-    int* copy);
+    int *copy);
 #endif
-template int SSLWrap<TLSWrap>::NewSessionCallback(SSL* s,
-                                                  SSL_SESSION* sess);
+template int SSLWrap<TLSWrap>::NewSessionCallback(SSL *s,
+                                                  SSL_SESSION *sess);
 template void SSLWrap<TLSWrap>::OnClientHello(
-    void* arg,
-    const ClientHelloParser::ClientHello& hello);
+    void *arg,
+    const ClientHelloParser::ClientHello &hello);
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
 template int SSLWrap<TLSWrap>::AdvertiseNextProtoCallback(
-    SSL* s,
-    const unsigned char** data,
-    unsigned int* len,
-    void* arg);
+    SSL *s,
+    const unsigned char **data,
+    unsigned int *len,
+    void *arg);
 template int SSLWrap<TLSWrap>::SelectNextProtoCallback(
-    SSL* s,
-    unsigned char** out,
-    unsigned char* outlen,
-    const unsigned char* in,
+    SSL *s,
+    unsigned char **out,
+    unsigned char *outlen,
+    const unsigned char *in,
     unsigned int inlen,
-    void* arg);
+    void *arg);
 #endif
 
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
-template int SSLWrap<TLSWrap>::TLSExtStatusCallback(SSL* s, void* arg);
+template int SSLWrap<TLSWrap>::TLSExtStatusCallback(SSL *s, void *arg);
 #endif
 
 template void SSLWrap<TLSWrap>::DestroySSL();
-template int SSLWrap<TLSWrap>::SSLCertCallback(SSL* s, void* arg);
-template void SSLWrap<TLSWrap>::WaitForCertCb(CertCb cb, void* arg);
+template int SSLWrap<TLSWrap>::SSLCertCallback(SSL *s, void *arg);
+template void SSLWrap<TLSWrap>::WaitForCertCb(CertCb cb, void *arg);
 
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
 template int SSLWrap<TLSWrap>::SelectALPNCallback(
-    SSL* s,
-    const unsigned char** out,
-    unsigned char* outlen,
-    const unsigned char* in,
+    SSL *s,
+    const unsigned char **out,
+    unsigned char *outlen,
+    const unsigned char *in,
     unsigned int inlen,
-    void* arg);
-#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
+    void *arg);
+#endif // TLSEXT_TYPE_application_layer_protocol_negotiation
 
-
-template void SSLWrap<QTLSWrap>::AddMethods(Environment* env,
-                                           Local<FunctionTemplate> t); // THIS
-template void SSLWrap<QTLSWrap>::SetSNIContext(SecureContext* sc);
-template int SSLWrap<QTLSWrap>::SetCACerts(SecureContext* sc);
+template void SSLWrap<QTLSWrap>::AddMethods(Environment *env,
+                                            Local<FunctionTemplate> t); // THIS
+template void SSLWrap<QTLSWrap>::SetSNIContext(SecureContext *sc);
+template int SSLWrap<QTLSWrap>::SetCACerts(SecureContext *sc);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-template SSL_SESSION* SSLWrap<QTLSWrap>::GetSessionCallback(
-    SSL* s,
-    unsigned char* key,
+template SSL_SESSION *SSLWrap<QTLSWrap>::GetSessionCallback(
+    SSL *s,
+    unsigned char *key,
     int len,
-    int* copy);
+    int *copy);
 #else
-template SSL_SESSION* SSLWrap<QTLSWrap>::GetSessionCallback(
-    SSL* s,
-    const unsigned char* key,
+template SSL_SESSION *SSLWrap<QTLSWrap>::GetSessionCallback(
+    SSL *s,
+    const unsigned char *key,
     int len,
-    int* copy);
+    int *copy);
 #endif
-template int SSLWrap<QTLSWrap>::NewSessionCallback(SSL* s,
-                                                  SSL_SESSION* sess);
+template int SSLWrap<QTLSWrap>::NewSessionCallback(SSL *s,
+                                                   SSL_SESSION *sess);
 template void SSLWrap<QTLSWrap>::OnClientHello(
-    void* arg,
-    const ClientHelloParser::ClientHello& hello);
+    void *arg,
+    const ClientHelloParser::ClientHello &hello);
 
-template int SSLWrap<QTLSWrap>::TLSExtStatusCallback(SSL* s, void* arg);
+template int SSLWrap<QTLSWrap>::TLSExtStatusCallback(SSL *s, void *arg);
 
-template void SSLWrap<QTLSWrap>::DestroySSL(); // THIS
-template int SSLWrap<QTLSWrap>::SSLCertCallback(SSL* s, void* arg); // THIS
-template void SSLWrap<QTLSWrap>::WaitForCertCb(CertCb cb, void* arg);
+template void SSLWrap<QTLSWrap>::DestroySSL();                      // THIS
+template int SSLWrap<QTLSWrap>::SSLCertCallback(SSL *s, void *arg); // THIS
+template void SSLWrap<QTLSWrap>::WaitForCertCb(CertCb cb, void *arg);
 
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
 template int SSLWrap<QTLSWrap>::SelectALPNCallback(
-    SSL* s,
-    const unsigned char** out,
-    unsigned char* outlen,
-    const unsigned char* in,
+    SSL *s,
+    const unsigned char **out,
+    unsigned char *outlen,
+    const unsigned char *in,
     unsigned int inlen,
-    void* arg);
-#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
-
-
+    void *arg);
+#endif // TLSEXT_TYPE_application_layer_protocol_negotiation
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-static Mutex* mutexes;
+static Mutex *mutexes;
 
-static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
-  static_assert(sizeof(uv_thread_t) <= sizeof(void*),
+static void crypto_threadid_cb(CRYPTO_THREADID *tid)
+{
+  static_assert(sizeof(uv_thread_t) <= sizeof(void *),
                 "uv_thread_t does not fit in a pointer");
-  CRYPTO_THREADID_set_pointer(tid, reinterpret_cast<void*>(uv_thread_self()));
+  CRYPTO_THREADID_set_pointer(tid, reinterpret_cast<void *>(uv_thread_self()));
 }
 
-static void crypto_lock_init(void) {
+static void crypto_lock_init(void)
+{
   mutexes = new Mutex[CRYPTO_num_locks()];
 }
 
-static void crypto_lock_cb(int mode, int n, const char* file, int line) {
+static void crypto_lock_cb(int mode, int n, const char *file, int line)
+{
   CHECK(!(mode & CRYPTO_LOCK) ^ !(mode & CRYPTO_UNLOCK));
   CHECK(!(mode & CRYPTO_READ) ^ !(mode & CRYPTO_WRITE));
 
@@ -378,11 +396,12 @@ static void crypto_lock_cb(int mode, int n, const char* file, int line) {
 }
 #endif
 
-
-static int PasswordCallback(char *buf, int size, int rwflag, void *u) {
-  if (u) {
+static int PasswordCallback(char *buf, int size, int rwflag, void *u)
+{
+  if (u)
+  {
     size_t buflen = static_cast<size_t>(size);
-    size_t len = strlen(static_cast<const char*>(u));
+    size_t len = strlen(static_cast<const char *>(u));
     len = len > buflen ? buflen : len;
     memcpy(buf, u, len);
     return len;
@@ -391,55 +410,62 @@ static int PasswordCallback(char *buf, int size, int rwflag, void *u) {
   return 0;
 }
 
-
 // This callback is used to avoid the default passphrase callback in OpenSSL
 // which will typically prompt for the passphrase. The prompting is designed
 // for the OpenSSL CLI, but works poorly for Node.js because it involves
 // synchronous interaction with the controlling terminal, something we never
 // want, and use this function to avoid it.
-static int NoPasswordCallback(char *buf, int size, int rwflag, void *u) {
+static int NoPasswordCallback(char *buf, int size, int rwflag, void *u)
+{
   return 0;
 }
 
-
-void ThrowCryptoError(Environment* env,
-                      unsigned long err,  // NOLINT(runtime/int)
-                      const char* default_message = nullptr) {
+void ThrowCryptoError(Environment *env,
+                      unsigned long err, // NOLINT(runtime/int)
+                      const char *default_message = nullptr)
+{
   HandleScope scope(env->isolate());
   Local<String> message;
 
-  if (err != 0 || default_message == nullptr) {
-    char errmsg[128] = { 0 };
+  if (err != 0 || default_message == nullptr)
+  {
+    char errmsg[128] = {0};
     ERR_error_string_n(err, errmsg, sizeof(errmsg));
     message = String::NewFromUtf8(env->isolate(), errmsg,
                                   v8::NewStringType::kNormal)
-                                      .ToLocalChecked();
-  } else {
+                  .ToLocalChecked();
+  }
+  else
+  {
     message = String::NewFromUtf8(env->isolate(), default_message,
                                   v8::NewStringType::kNormal)
-                                      .ToLocalChecked();
+                  .ToLocalChecked();
   }
 
   Local<Value> exception_v = Exception::Error(message);
   CHECK(!exception_v.IsEmpty());
   Local<Object> exception = exception_v.As<Object>();
-  ERR_STATE* es = ERR_get_state();
+  ERR_STATE *es = ERR_get_state();
 
-  if (es->bottom != es->top) {
+  if (es->bottom != es->top)
+  {
     Local<Array> error_stack = Array::New(env->isolate());
     int top = es->top;
 
     // Build the error_stack array to be added to opensslErrorStack property.
-    for (unsigned int i = 0; es->bottom != es->top;) {
-      unsigned long err_buf = es->err_buffer[es->top];  // NOLINT(runtime/int)
+    for (unsigned int i = 0; es->bottom != es->top;)
+    {
+      unsigned long err_buf = es->err_buffer[es->top]; // NOLINT(runtime/int)
       // Only add error string if there is valid err_buffer.
-      if (err_buf) {
+      if (err_buf)
+      {
         char tmp_str[256];
         ERR_error_string_n(err_buf, tmp_str, sizeof(tmp_str));
         error_stack->Set(env->context(), i,
-                        String::NewFromUtf8(env->isolate(), tmp_str,
-                                              v8::NewStringType::kNormal)
-                                                  .ToLocalChecked()).FromJust();
+                         String::NewFromUtf8(env->isolate(), tmp_str,
+                                             v8::NewStringType::kNormal)
+                             .ToLocalChecked())
+            .FromJust();
         // Only increment if we added to error_stack.
         i++;
       }
@@ -448,7 +474,7 @@ void ThrowCryptoError(Environment* env,
       // arithmetic to loop back around in the case where bottom is after top.
       // Using ERR_NUM_ERRORS  macro defined in openssl.
       es->top = (((es->top - 1) % ERR_NUM_ERRORS) + ERR_NUM_ERRORS) %
-          ERR_NUM_ERRORS;
+                ERR_NUM_ERRORS;
     }
 
     // Restore top.
@@ -466,7 +492,6 @@ void ThrowCryptoError(Environment* env,
 
   env->isolate()->ThrowException(exception);
 }
-
 
 // Ensure that OpenSSL has enough entropy (at least 256 bits) for its PRNG.
 // The entropy pool starts out empty and needs to fill up before the PRNG
@@ -488,10 +513,12 @@ void ThrowCryptoError(Environment* env,
 // The only time when /dev/urandom may conceivably block is right after boot,
 // when the whole system is still low on entropy.  That's not something we can
 // do anything about.
-inline void CheckEntropy() {
-  for (;;) {
+inline void CheckEntropy()
+{
+  for (;;)
+  {
     int status = RAND_status();
-    CHECK_GE(status, 0);  // Cannot fail.
+    CHECK_GE(status, 0); // Cannot fail.
     if (status != 0)
       break;
 
@@ -501,8 +528,8 @@ inline void CheckEntropy() {
   }
 }
 
-
-bool EntropySource(unsigned char* buffer, size_t length) {
+bool EntropySource(unsigned char *buffer, size_t length)
+{
   // Ensure that OpenSSL's PRNG is properly seeded.
   CheckEntropy();
   // RAND_bytes() can return 0 to indicate that the entropy data is not truly
@@ -511,8 +538,8 @@ bool EntropySource(unsigned char* buffer, size_t length) {
   return RAND_bytes(buffer, length) != -1;
 }
 
-
-void SecureContext::Initialize(Environment* env, Local<Object> target) {
+void SecureContext::Initialize(Environment *env, Local<Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(SecureContext::New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
   Local<String> secureContextString =
@@ -567,73 +594,117 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   env->set_secure_context_constructor_template(t);
 }
 
-
-void SecureContext::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SecureContext::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   new SecureContext(env, args.This());
 }
 
-
-void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::Init(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
-  Environment* env = sc->env();
+  Environment *env = sc->env();
 
-  const SSL_METHOD* method = TLS_method();
+  const SSL_METHOD *method = TLS_method();
 
-  if (args.Length() == 1 && args[0]->IsString()) {
+  if (args.Length() == 1 && args[0]->IsString())
+  {
     const node::Utf8Value sslmethod(env->isolate(), args[0]);
 
     // Note that SSLv2 and SSLv3 are disallowed but SSLv2_method and friends
     // are still accepted.  They are OpenSSL's way of saying that all known
     // protocols are supported unless explicitly disabled (which we do below
     // for SSLv2 and SSLv3.)
-    if (strcmp(*sslmethod, "SSLv2_method") == 0) {
+    if (strcmp(*sslmethod, "SSLv2_method") == 0)
+    {
       return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv2_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv2_server_method") == 0)
+    {
       return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv2_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv2_client_method") == 0)
+    {
       return env->ThrowError("SSLv2 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv3_method") == 0)
+    {
       return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv3_server_method") == 0)
+    {
       return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv3_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv3_client_method") == 0)
+    {
       return env->ThrowError("SSLv3 methods disabled");
-    } else if (strcmp(*sslmethod, "SSLv23_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv23_method") == 0)
+    {
       method = SSLv23_method();
-    } else if (strcmp(*sslmethod, "SSLv23_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv23_server_method") == 0)
+    {
       method = SSLv23_server_method();
-    } else if (strcmp(*sslmethod, "SSLv23_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "SSLv23_client_method") == 0)
+    {
       method = SSLv23_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_method") == 0)
+    {
       method = TLSv1_method();
-    } else if (strcmp(*sslmethod, "TLSv1_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_server_method") == 0)
+    {
       method = TLSv1_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_client_method") == 0)
+    {
       method = TLSv1_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_1_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_1_method") == 0)
+    {
       method = TLSv1_1_method();
-    } else if (strcmp(*sslmethod, "TLSv1_1_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_1_server_method") == 0)
+    {
       method = TLSv1_1_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_1_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_1_client_method") == 0)
+    {
       method = TLSv1_1_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_2_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_2_method") == 0)
+    {
       method = TLSv1_2_method();
-    } else if (strcmp(*sslmethod, "TLSv1_2_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_2_server_method") == 0)
+    {
       method = TLSv1_2_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_2_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLSv1_2_client_method") == 0)
+    {
       method = TLSv1_2_client_method();
-    } else if(strcmp(*sslmethod, "TLS_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLS_method") == 0)
+    {
       // Should be using TLS1.3
       method = TLS_method();
-    } else if (strcmp(*sslmethod, "TLS_server_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLS_server_method") == 0)
+    {
       // Should be using TLS1.3
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLS_client_method") == 0) {
+    }
+    else if (strcmp(*sslmethod, "TLS_client_method") == 0)
+    {
       // Should be using TLS1.3
       method = TLS_client_method();
-    } else {
+    }
+    else
+    {
       return env->ThrowError("Unknown method");
     }
   }
@@ -648,19 +719,25 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   SSL_CTX_set_options(sc->ctx_, SSL_OP_NO_SSLv2);
   SSL_CTX_set_options(sc->ctx_, SSL_OP_NO_SSLv3);
 
-   // enable logging
+  // enable logging
   std::ofstream myfile;
-  myfile.open ("keylogs.txt",std::ofstream::out | std::ofstream::trunc);
+  myfile.open("keylogs.txt", std::ofstream::out | std::ofstream::trunc);
   myfile.close();
   SSL_CTX_set_keylog_callback(sc->ctx_, SecureContext::KeylogCallback);
 
   // SSL session cache configuration
   SSL_CTX_set_session_cache_mode(sc->ctx_,
                                  SSL_SESS_CACHE_SERVER |
-                                 SSL_SESS_CACHE_NO_INTERNAL |
-                                 SSL_SESS_CACHE_NO_AUTO_CLEAR);
+                                     SSL_SESS_CACHE_NO_INTERNAL |
+                                     SSL_SESS_CACHE_NO_AUTO_CLEAR);
   SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<Connection>::GetSessionCallback);
   SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<Connection>::NewSessionCallback);
+
+  SSL_CTX_add_custom_ext(sc->ctx_, 26,
+                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
+                             SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
+                         QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
+                         QTLSWrap::ParseTransportParamsCallback, nullptr);
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
   // OpenSSL 1.1.0 changed the ticket key size, but the OpenSSL 1.0.x size was
@@ -668,7 +745,8 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   // which restores the old algorithm.
   if (RAND_bytes(sc->ticket_key_name_, sizeof(sc->ticket_key_name_)) <= 0 ||
       RAND_bytes(sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_)) <= 0 ||
-      RAND_bytes(sc->ticket_key_aes_, sizeof(sc->ticket_key_aes_)) <= 0) {
+      RAND_bytes(sc->ticket_key_aes_, sizeof(sc->ticket_key_aes_)) <= 0)
+  {
     return env->ThrowError("Error generating ticket keys");
   }
   SSL_CTX_set_tlsext_ticket_key_cb(sc->ctx_,
@@ -676,48 +754,55 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
 #endif
 }
 
-
 // Takes a string or buffer and loads it into a BIO.
 // Caller responsible for BIO_free_all-ing the returned object.
-static BIO* LoadBIO(Environment* env, Local<Value> v) {
+static BIO *LoadBIO(Environment *env, Local<Value> v)
+{
   HandleScope scope(env->isolate());
 
-  if (v->IsString()) {
+  if (v->IsString())
+  {
     const node::Utf8Value s(env->isolate(), v);
     return NodeBIO::NewFixed(*s, s.length());
   }
 
-  if (Buffer::HasInstance(v)) {
+  if (Buffer::HasInstance(v))
+  {
     return NodeBIO::NewFixed(Buffer::Data(v), Buffer::Length(v));
   }
 
   return nullptr;
 }
 
-void SecureContext::KeylogCallback(const SSL *ssl, const char *line) {
+void SecureContext::KeylogCallback(const SSL *ssl, const char *line)
+{
   std::ofstream myfile;
-  myfile.open ("keylogs.txt", std::ios::app);
+  myfile.open("keylogs.txt", std::ios::app);
   myfile << line;
   myfile << "\n";
   myfile.close();
 }
 
-void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SecureContext::SetKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
 
   unsigned int len = args.Length();
-  if (len < 1) {
+  if (len < 1)
+  {
     return env->ThrowError("Private key argument is mandatory");
   }
 
-  if (len > 2) {
+  if (len > 2)
+  {
     return env->ThrowError("Only private key and pass phrase are expected");
   }
 
-  if (len == 2) {
+  if (len == 2)
+  {
     if (args[1]->IsUndefined() || args[1]->IsNull())
       len = 1;
     else
@@ -730,15 +815,17 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value passphrase(env->isolate(), args[1]);
 
-  EVP_PKEY* key = PEM_read_bio_PrivateKey(bio,
+  EVP_PKEY *key = PEM_read_bio_PrivateKey(bio,
                                           nullptr,
                                           PasswordCallback,
                                           len == 1 ? nullptr : *passphrase);
 
-  if (!key) {
+  if (!key)
+  {
     BIO_free_all(bio);
-    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
-    if (!err) {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
+    if (!err)
+    {
       return env->ThrowError("PEM_read_bio_PrivateKey");
     }
     return ThrowCryptoError(env, err);
@@ -748,51 +835,55 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
   EVP_PKEY_free(key);
   BIO_free_all(bio);
 
-  if (!rv) {
-    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
+  if (!rv)
+  {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
     if (!err)
       return env->ThrowError("SSL_CTX_use_PrivateKey");
     return ThrowCryptoError(env, err);
   }
 }
 
+int SSL_CTX_get_issuer(SSL_CTX *ctx, X509 *cert, X509 **issuer)
+{
 
-int SSL_CTX_get_issuer(SSL_CTX* ctx, X509* cert, X509** issuer) {
-  
-    X509_STORE* store = SSL_CTX_get_cert_store(ctx);
-    X509_STORE_CTX* store_ctx = X509_STORE_CTX_new();
-    int ret = store_ctx != nullptr &&
-              X509_STORE_CTX_init(store_ctx, store, nullptr, nullptr) == 1 &&
-              X509_STORE_CTX_get1_issuer(issuer, store_ctx, cert) == 1;
-    X509_STORE_CTX_free(store_ctx);
-    return ret;
-  }
+  X509_STORE *store = SSL_CTX_get_cert_store(ctx);
+  X509_STORE_CTX *store_ctx = X509_STORE_CTX_new();
+  int ret = store_ctx != nullptr &&
+            X509_STORE_CTX_init(store_ctx, store, nullptr, nullptr) == 1 &&
+            X509_STORE_CTX_get1_issuer(issuer, store_ctx, cert) == 1;
+  X509_STORE_CTX_free(store_ctx);
+  return ret;
+}
 
-
-int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
-                                  X509* x,
-                                  STACK_OF(X509)* extra_certs,
-                                  X509** cert,
-                                  X509** issuer) {
+int SSL_CTX_use_certificate_chain(SSL_CTX *ctx,
+                                  X509 *x,
+                                  STACK_OF(X509) * extra_certs,
+                                  X509 **cert,
+                                  X509 **issuer)
+{
   CHECK_EQ(*issuer, nullptr);
   CHECK_EQ(*cert, nullptr);
 
   int ret = SSL_CTX_use_certificate(ctx, x);
 
-  if (ret) {
+  if (ret)
+  {
     // If we could set up our certificate, now proceed to
     // the CA certificates.
     int r;
 
     SSL_CTX_clear_extra_chain_certs(ctx);
 
-    for (int i = 0; i < sk_X509_num(extra_certs); i++) {
-      X509* ca = sk_X509_value(extra_certs, i);
+    for (int i = 0; i < sk_X509_num(extra_certs); i++)
+    {
+      X509 *ca = sk_X509_value(extra_certs, i);
 
       // NOTE: Increments reference count on `ca`
       r = SSL_CTX_add1_chain_cert(ctx, ca);
 
-      if (!r) {
+      if (!r)
+      {
         ret = 0;
         *issuer = nullptr;
         goto end;
@@ -811,24 +902,30 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
   }
 
   // Try getting issuer from a cert store
-  if (ret) {
-    if (*issuer == nullptr) {
+  if (ret)
+  {
+    if (*issuer == nullptr)
+    {
       ret = SSL_CTX_get_issuer(ctx, x, issuer);
       ret = ret < 0 ? 0 : 1;
       // NOTE: get_cert_store doesn't increment reference count,
       // no need to free `store`
-    } else {
+    }
+    else
+    {
       // Increment issuer reference count
       *issuer = X509_dup(*issuer);
-      if (*issuer == nullptr) {
+      if (*issuer == nullptr)
+      {
         ret = 0;
         goto end;
       }
     }
   }
 
- end:
-  if (ret && x != nullptr) {
+end:
+  if (ret && x != nullptr)
+  {
     *cert = X509_dup(x);
     if (*cert == nullptr)
       ret = 0;
@@ -836,17 +933,17 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
   return ret;
 }
 
-
 // Read a file that contains our certificate in "PEM" format,
 // possibly followed by a sequence of CA certificates that should be
 // sent to the peer in the Certificate message.
 //
 // Taken from OpenSSL - edited for style.
-int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
-                                  BIO* in,
-                                  X509** cert,
-                                  X509** issuer) {
-  X509* x = nullptr;
+int SSL_CTX_use_certificate_chain(SSL_CTX *ctx,
+                                  BIO *in,
+                                  X509 **cert,
+                                  X509 **issuer)
+{
+  X509 *x = nullptr;
 
   // Just to ensure that `ERR_peek_last_error` below will return only errors
   // that we are interested in
@@ -854,24 +951,27 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
 
   x = PEM_read_bio_X509_AUX(in, nullptr, NoPasswordCallback, nullptr);
 
-  if (x == nullptr) {
+  if (x == nullptr)
+  {
     return 0;
   }
 
-  X509* extra = nullptr;
+  X509 *extra = nullptr;
   int ret = 0;
-  unsigned long err = 0;  // NOLINT(runtime/int)
+  unsigned long err = 0; // NOLINT(runtime/int)
 
   // Read extra certs
-  STACK_OF(X509)* extra_certs = sk_X509_new_null();
-  if (extra_certs == nullptr) {
+  STACK_OF(X509) *extra_certs = sk_X509_new_null();
+  if (extra_certs == nullptr)
+  {
     goto done;
   }
 
   while ((extra = PEM_read_bio_X509(in,
                                     nullptr,
                                     NoPasswordCallback,
-                                    nullptr))) {
+                                    nullptr)))
+  {
     if (sk_X509_push(extra_certs, extra))
       continue;
 
@@ -883,9 +983,12 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
   // When the while loop ends, it's usually just EOF.
   err = ERR_peek_last_error();
   if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
-      ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
+      ERR_GET_REASON(err) == PEM_R_NO_START_LINE)
+  {
     ERR_clear_error();
-  } else  {
+  }
+  else
+  {
     // some real error
     goto done;
   }
@@ -894,7 +997,7 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
   if (!ret)
     goto done;
 
- done:
+done:
   if (extra_certs != nullptr)
     sk_X509_pop_free(extra_certs, X509_free);
   if (extra != nullptr)
@@ -905,27 +1008,30 @@ int SSL_CTX_use_certificate_chain(SSL_CTX* ctx,
   return ret;
 }
 
+void SecureContext::SetCert(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void SecureContext::SetCert(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowTypeError("Certificate argument is mandatory");
   }
 
-  BIO* bio = LoadBIO(env, args[0]);
+  BIO *bio = LoadBIO(env, args[0]);
   if (!bio)
     return;
 
   // Free previous certs
-  if (sc->issuer_ != nullptr) {
+  if (sc->issuer_ != nullptr)
+  {
     X509_free(sc->issuer_);
     sc->issuer_ = nullptr;
   }
-  if (sc->cert_ != nullptr) {
+  if (sc->cert_ != nullptr)
+  {
     X509_free(sc->cert_);
     sc->cert_ = nullptr;
   }
@@ -937,36 +1043,42 @@ void SecureContext::SetCert(const FunctionCallbackInfo<Value>& args) {
 
   BIO_free_all(bio);
 
-  if (!rv) {
-    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
-    if (!err) {
+  if (!rv)
+  {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
+    if (!err)
+    {
       return env->ThrowError("SSL_CTX_use_certificate_chain");
     }
     return ThrowCryptoError(env, err);
   }
 }
 
-
 #if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(OPENSSL_IS_BORINGSSL)
 // This section contains OpenSSL 1.1.0 functions reimplemented for OpenSSL
 // 1.0.2 so that the following code can be written without lots of #if lines.
 
-static int X509_STORE_up_ref(X509_STORE* store) {
+static int X509_STORE_up_ref(X509_STORE *store)
+{
   CRYPTO_add(&store->references, 1, CRYPTO_LOCK_X509_STORE);
   return 1;
 }
 
-static int X509_up_ref(X509* cert) {
+static int X509_up_ref(X509 *cert)
+{
   CRYPTO_add(&cert->references, 1, CRYPTO_LOCK_X509);
   return 1;
 }
-#endif  // OPENSSL_VERSION_NUMBER < 0x10100000L && !OPENSSL_IS_BORINGSSL
+#endif // OPENSSL_VERSION_NUMBER < 0x10100000L && !OPENSSL_IS_BORINGSSL
 
-static X509_STORE* NewRootCertStore() {
-  static std::vector<X509*> root_certs_vector;
-  if (root_certs_vector.empty()) {
-    for (size_t i = 0; i < arraysize(root_certs); i++) {
-      BIO* bp = NodeBIO::NewFixed(root_certs[i], strlen(root_certs[i]));
+static X509_STORE *NewRootCertStore()
+{
+  static std::vector<X509 *> root_certs_vector;
+  if (root_certs_vector.empty())
+  {
+    for (size_t i = 0; i < arraysize(root_certs); i++)
+    {
+      BIO *bp = NodeBIO::NewFixed(root_certs[i], strlen(root_certs[i]));
       X509 *x509 = PEM_read_bio_X509(bp, nullptr, NoPasswordCallback, nullptr);
       BIO_free(bp);
 
@@ -977,11 +1089,15 @@ static X509_STORE* NewRootCertStore() {
     }
   }
 
-  X509_STORE* store = X509_STORE_new();
-  if (ssl_openssl_cert_store) {
+  X509_STORE *store = X509_STORE_new();
+  if (ssl_openssl_cert_store)
+  {
     X509_STORE_set_default_paths(store);
-  } else {
-    for (X509 *cert : root_certs_vector) {
+  }
+  else
+  {
+    for (X509 *cert : root_certs_vector)
+    {
       X509_up_ref(cert);
       X509_STORE_add_cert(store, cert);
     }
@@ -990,27 +1106,31 @@ static X509_STORE* NewRootCertStore() {
   return store;
 }
 
+void SecureContext::AddCACert(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void SecureContext::AddCACert(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   ClearErrorOnReturn clear_error_on_return;
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowTypeError("CA certificate argument is mandatory");
   }
 
-  BIO* bio = LoadBIO(env, args[0]);
-  if (!bio) {
+  BIO *bio = LoadBIO(env, args[0]);
+  if (!bio)
+  {
     return;
   }
 
-  X509_STORE* cert_store = SSL_CTX_get_cert_store(sc->ctx_);
-  while (X509* x509 =
-             PEM_read_bio_X509(bio, nullptr, NoPasswordCallback, nullptr)) {
-    if (cert_store == root_cert_store) {
+  X509_STORE *cert_store = SSL_CTX_get_cert_store(sc->ctx_);
+  while (X509 *x509 =
+             PEM_read_bio_X509(bio, nullptr, NoPasswordCallback, nullptr))
+  {
+    if (cert_store == root_cert_store)
+    {
       cert_store = NewRootCertStore();
       SSL_CTX_set_cert_store(sc->ctx_, cert_store);
     }
@@ -1022,14 +1142,15 @@ void SecureContext::AddCACert(const FunctionCallbackInfo<Value>& args) {
   BIO_free_all(bio);
 }
 
+void SecureContext::AddCRL(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void SecureContext::AddCRL(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowTypeError("CRL argument is mandatory");
   }
 
@@ -1039,16 +1160,18 @@ void SecureContext::AddCRL(const FunctionCallbackInfo<Value>& args) {
   if (!bio)
     return;
 
-  X509_CRL* crl =
+  X509_CRL *crl =
       PEM_read_bio_X509_CRL(bio, nullptr, NoPasswordCallback, nullptr);
 
-  if (crl == nullptr) {
+  if (crl == nullptr)
+  {
     BIO_free_all(bio);
     return env->ThrowError("Failed to parse CRL");
   }
 
-  X509_STORE* cert_store = SSL_CTX_get_cert_store(sc->ctx_);
-  if (cert_store == root_cert_store) {
+  X509_STORE *cert_store = SSL_CTX_get_cert_store(sc->ctx_);
+  if (cert_store == root_cert_store)
+  {
     cert_store = NewRootCertStore();
     SSL_CTX_set_cert_store(sc->ctx_, cert_store);
   }
@@ -1061,53 +1184,60 @@ void SecureContext::AddCRL(const FunctionCallbackInfo<Value>& args) {
   X509_CRL_free(crl);
 }
 
-
-void UseExtraCaCerts(const std::string& file) {
+void UseExtraCaCerts(const std::string &file)
+{
   extra_root_certs_file = file;
 }
 
-
-static unsigned long AddCertsFromFile(  // NOLINT(runtime/int)
-    X509_STORE* store,
-    const char* file) {
+static unsigned long AddCertsFromFile( // NOLINT(runtime/int)
+    X509_STORE *store,
+    const char *file)
+{
   ERR_clear_error();
   MarkPopErrorOnReturn mark_pop_error_on_return;
 
-  BIO* bio = BIO_new_file(file, "r");
-  if (!bio) {
+  BIO *bio = BIO_new_file(file, "r");
+  if (!bio)
+  {
     return ERR_get_error();
   }
 
-  while (X509* x509 =
-      PEM_read_bio_X509(bio, nullptr, NoPasswordCallback, nullptr)) {
+  while (X509 *x509 =
+             PEM_read_bio_X509(bio, nullptr, NoPasswordCallback, nullptr))
+  {
     X509_STORE_add_cert(store, x509);
     X509_free(x509);
   }
   BIO_free_all(bio);
 
-  unsigned long err = ERR_peek_error();  // NOLINT(runtime/int)
+  unsigned long err = ERR_peek_error(); // NOLINT(runtime/int)
   // Ignore error if its EOF/no start line found.
   if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
-      ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
+      ERR_GET_REASON(err) == PEM_R_NO_START_LINE)
+  {
     return 0;
   }
 
   return err;
 }
 
-void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   ClearErrorOnReturn clear_error_on_return;
 
-  if (!root_cert_store) {
+  if (!root_cert_store)
+  {
     root_cert_store = NewRootCertStore();
 
-    if (!extra_root_certs_file.empty()) {
-      unsigned long err = AddCertsFromFile(  // NOLINT(runtime/int)
-                                           root_cert_store,
-                                           extra_root_certs_file.c_str());
-      if (err) {
+    if (!extra_root_certs_file.empty())
+    {
+      unsigned long err = AddCertsFromFile( // NOLINT(runtime/int)
+          root_cert_store,
+          extra_root_certs_file.c_str());
+      if (err)
+      {
         ProcessEmitWarning(sc->env(),
                            "Ignoring extra certs from `%s`, load failed: %s\n",
                            extra_root_certs_file.c_str(),
@@ -1121,14 +1251,15 @@ void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value>& args) {
   SSL_CTX_set_cert_store(sc->ctx_, root_cert_store);
 }
 
-
-void SecureContext::SetCiphers(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::SetCiphers(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
-  Environment* env = sc->env();
+  Environment *env = sc->env();
   ClearErrorOnReturn clear_error_on_return;
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowTypeError("Ciphers argument is mandatory");
   }
 
@@ -1138,11 +1269,11 @@ void SecureContext::SetCiphers(const FunctionCallbackInfo<Value>& args) {
   SSL_CTX_set_cipher_list(sc->ctx_, *ciphers);
 }
 
-
-void SecureContext::SetECDHCurve(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::SetECDHCurve(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
-  Environment* env = sc->env();
+  Environment *env = sc->env();
 
   if (args.Length() != 1)
     return env->ThrowTypeError("ECDH curve name argument is mandatory");
@@ -1150,10 +1281,10 @@ void SecureContext::SetECDHCurve(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_NOT_STRING(args[0], "ECDH curve name");
 
   node::Utf8Value curve(env->isolate(), args[0]);
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    SSL_CTX_set_options(sc->ctx_, SSL_OP_SINGLE_ECDH_USE);
-    SSL_CTX_set_ecdh_auto(sc->ctx_, 1);
-  #endif
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  SSL_CTX_set_options(sc->ctx_, SSL_OP_SINGLE_ECDH_USE);
+  SSL_CTX_set_ecdh_auto(sc->ctx_, 1);
+#endif
 
   if (strcmp(*curve, "auto") == 0)
     return;
@@ -1162,11 +1293,11 @@ void SecureContext::SetECDHCurve(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Failed to set ECDH curve");
 }
 
-
-void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::SetDHParam(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.This());
-  Environment* env = sc->env();
+  Environment *env = sc->env();
   ClearErrorOnReturn clear_error_on_return;
 
   // Auto DH is not supported in openssl 1.0.1, so dhparam needs
@@ -1175,11 +1306,11 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowTypeError("DH argument is mandatory");
 
   // Invalid dhparam is silently discarded and DHE is no longer used.
-  BIO* bio = LoadBIO(env, args[0]);
+  BIO *bio = LoadBIO(env, args[0]);
   if (!bio)
     return;
 
-  DH* dh = PEM_read_bio_DHparams(bio, nullptr, nullptr, nullptr);
+  DH *dh = PEM_read_bio_DHparams(bio, nullptr, nullptr, nullptr);
   BIO_free_all(bio);
 
   if (dh == nullptr)
@@ -1188,9 +1319,12 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
   const BIGNUM *p;
   DH_get0_pqg(dh, &p, NULL, NULL);
   const int size = BN_num_bits(p);
-  if (size < 1024) {
+  if (size < 1024)
+  {
     return env->ThrowError("DH parameter is less than 1024 bits");
-  } else if (size < 2048) {
+  }
+  else if (size < 2048)
+  {
     args.GetReturnValue().Set(FIXED_ONE_BYTE_STRING(
         env->isolate(), "DH parameter is less than 2048 bits"));
   }
@@ -1203,51 +1337,56 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowTypeError("Error setting temp DH parameter");
 }
 
-
-void SecureContext::SetOptions(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::SetOptions(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
 
-  if (args.Length() != 1 || !args[0]->IntegerValue()) {
+  if (args.Length() != 1 || !args[0]->IntegerValue())
+  {
     return sc->env()->ThrowTypeError("Options must be an integer value");
   }
 
   SSL_CTX_set_options(
       sc->ctx_,
-      static_cast<long>(args[0]->IntegerValue()));  // NOLINT(runtime/int)
+      static_cast<long>(args[0]->IntegerValue())); // NOLINT(runtime/int)
 }
 
-
 void SecureContext::SetSessionIdContext(
-    const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+    const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
-  Environment* env = sc->env();
+  Environment *env = sc->env();
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowTypeError("Session ID context argument is mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_STRING(args[0], "Session ID context");
 
   const node::Utf8Value sessionIdContext(args.GetIsolate(), args[0]);
-  const unsigned char* sid_ctx =
-      reinterpret_cast<const unsigned char*>(*sessionIdContext);
+  const unsigned char *sid_ctx =
+      reinterpret_cast<const unsigned char *>(*sessionIdContext);
   unsigned int sid_ctx_len = sessionIdContext.length();
 
   int r = SSL_CTX_set_session_id_context(sc->ctx_, sid_ctx, sid_ctx_len);
   if (r == 1)
     return;
 
-  BIO* bio;
-  BUF_MEM* mem;
+  BIO *bio;
+  BUF_MEM *mem;
   Local<String> message;
 
   bio = BIO_new(BIO_s_mem());
-  if (bio == nullptr) {
+  if (bio == nullptr)
+  {
     message = FIXED_ONE_BYTE_STRING(args.GetIsolate(),
                                     "SSL_CTX_set_session_id_context error");
-  } else {
+  }
+  else
+  {
     ERR_print_errors(bio);
     BIO_get_mem_ptr(bio, &mem);
     message = OneByteString(args.GetIsolate(), mem->data, mem->length);
@@ -1257,12 +1396,13 @@ void SecureContext::SetSessionIdContext(
   args.GetIsolate()->ThrowException(Exception::TypeError(message));
 }
 
-
-void SecureContext::SetSessionTimeout(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::SetSessionTimeout(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
 
-  if (args.Length() != 1 || !args[0]->IsInt32()) {
+  if (args.Length() != 1 || !args[0]->IsInt32())
+  {
     return sc->env()->ThrowTypeError(
         "Session timeout must be a 32-bit integer");
   }
@@ -1271,40 +1411,43 @@ void SecureContext::SetSessionTimeout(const FunctionCallbackInfo<Value>& args) {
   SSL_CTX_set_timeout(sc->ctx_, sessionTimeout);
 }
 
-
-void SecureContext::Close(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* sc;
+void SecureContext::Close(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   sc->FreeCTXMem();
 }
 
-
 // Takes .pfx or .p12 and password in string or buffer format
-void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  BIO* in = nullptr;
-  PKCS12* p12 = nullptr;
-  EVP_PKEY* pkey = nullptr;
-  X509* cert = nullptr;
-  STACK_OF(X509)* extra_certs = nullptr;
-  char* pass = nullptr;
+  BIO *in = nullptr;
+  PKCS12 *p12 = nullptr;
+  EVP_PKEY *pkey = nullptr;
+  X509 *cert = nullptr;
+  STACK_OF(X509) *extra_certs = nullptr;
+  char *pass = nullptr;
   bool ret = false;
 
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   ClearErrorOnReturn clear_error_on_return;
 
-  if (args.Length() < 1) {
+  if (args.Length() < 1)
+  {
     return env->ThrowTypeError("PFX certificate argument is mandatory");
   }
 
   in = LoadBIO(env, args[0]);
-  if (in == nullptr) {
+  if (in == nullptr)
+  {
     return env->ThrowError("Unable to load BIO");
   }
 
-  if (args.Length() >= 2) {
+  if (args.Length() >= 2)
+  {
     THROW_AND_RETURN_IF_NOT_BUFFER(args[1], "Pass phrase");
     size_t passlen = Buffer::Length(args[1]);
     pass = new char[passlen + 1];
@@ -1313,16 +1456,18 @@ void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
   }
 
   // Free previous certs
-  if (sc->issuer_ != nullptr) {
+  if (sc->issuer_ != nullptr)
+  {
     X509_free(sc->issuer_);
     sc->issuer_ = nullptr;
   }
-  if (sc->cert_ != nullptr) {
+  if (sc->cert_ != nullptr)
+  {
     X509_free(sc->cert_);
     sc->cert_ = nullptr;
   }
 
-  X509_STORE* cert_store = SSL_CTX_get_cert_store(sc->ctx_);
+  X509_STORE *cert_store = SSL_CTX_get_cert_store(sc->ctx_);
 
   if (d2i_PKCS12_bio(in, &p12) &&
       PKCS12_parse(p12, pass, &pkey, &cert, &extra_certs) &&
@@ -1331,12 +1476,15 @@ void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
                                     extra_certs,
                                     &sc->cert_,
                                     &sc->issuer_) &&
-      SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
+      SSL_CTX_use_PrivateKey(sc->ctx_, pkey))
+  {
     // Add CA certs too
-    for (int i = 0; i < sk_X509_num(extra_certs); i++) {
-      X509* ca = sk_X509_value(extra_certs, i);
+    for (int i = 0; i < sk_X509_num(extra_certs); i++)
+    {
+      X509 *ca = sk_X509_value(extra_certs, i);
 
-      if (cert_store == root_cert_store) {
+      if (cert_store == root_cert_store)
+      {
         cert_store = NewRootCertStore();
         SSL_CTX_set_cert_store(sc->ctx_, cert_store);
       }
@@ -1357,70 +1505,74 @@ void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
   BIO_free_all(in);
   delete[] pass;
 
-  if (!ret) {
-    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
-    const char* str = ERR_reason_error_string(err);
+  if (!ret)
+  {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
+    const char *str = ERR_reason_error_string(err);
     return env->ThrowError(str);
   }
 }
 
+void SecureContext::GetTicketKeys(const FunctionCallbackInfo<Value> &args)
+{
+#if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
 
-void SecureContext::GetTicketKeys(const FunctionCallbackInfo<Value>& args) {
-  #if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
-  
-    SecureContext* wrap;
-    ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  
-    Local<Object> buff = Buffer::New(wrap->env(), 48).ToLocalChecked();
-  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-    memcpy(Buffer::Data(buff), wrap->ticket_key_name_, 16);
-    memcpy(Buffer::Data(buff) + 16, wrap->ticket_key_hmac_, 16);
-    memcpy(Buffer::Data(buff) + 32, wrap->ticket_key_aes_, 16);
-  #else
-    if (SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_,
-                                       Buffer::Data(buff),
-                                       Buffer::Length(buff)) != 1) {
-      return wrap->env()->ThrowError("Failed to fetch tls ticket keys");
-    }
-  #endif
-  
-    args.GetReturnValue().Set(buff);
-  #endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
+  SecureContext *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  Local<Object> buff = Buffer::New(wrap->env(), 48).ToLocalChecked();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+  memcpy(Buffer::Data(buff), wrap->ticket_key_name_, 16);
+  memcpy(Buffer::Data(buff) + 16, wrap->ticket_key_hmac_, 16);
+  memcpy(Buffer::Data(buff) + 32, wrap->ticket_key_aes_, 16);
+#else
+  if (SSL_CTX_get_tlsext_ticket_keys(wrap->ctx_,
+                                     Buffer::Data(buff),
+                                     Buffer::Length(buff)) != 1)
+  {
+    return wrap->env()->ThrowError("Failed to fetch tls ticket keys");
   }
-  
-  
-  void SecureContext::SetTicketKeys(const FunctionCallbackInfo<Value>& args) {
-  #if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
-    SecureContext* wrap;
-    ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-    Environment* env = wrap->env();
-  
-    if (args.Length() < 1) {
-      return env->ThrowTypeError("Ticket keys argument is mandatory");
-    }
-  
-    THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Ticket keys");
-  
-    if (Buffer::Length(args[0]) != 48) {
-      return env->ThrowTypeError("Ticket keys length incorrect");
-    }
-  
-  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-    memcpy(wrap->ticket_key_name_, Buffer::Data(args[0]), 16);
-    memcpy(wrap->ticket_key_hmac_, Buffer::Data(args[0]) + 16, 16);
-    memcpy(wrap->ticket_key_aes_, Buffer::Data(args[0]) + 32, 16);
-  #else
-    if (SSL_CTX_set_tlsext_ticket_keys(wrap->ctx_,
-                                       Buffer::Data(args[0]),
-                                       Buffer::Length(args[0])) != 1) {
-      return env->ThrowError("Failed to fetch tls ticket keys");
-    }
-  #endif
-  
-    args.GetReturnValue().Set(true);
-  #endif  // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
+#endif
+
+  args.GetReturnValue().Set(buff);
+#endif // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
+}
+
+void SecureContext::SetTicketKeys(const FunctionCallbackInfo<Value> &args)
+{
+#if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_get_tlsext_ticket_keys)
+  SecureContext *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  Environment *env = wrap->env();
+
+  if (args.Length() < 1)
+  {
+    return env->ThrowTypeError("Ticket keys argument is mandatory");
   }
 
+  THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Ticket keys");
+
+  if (Buffer::Length(args[0]) != 48)
+  {
+    return env->ThrowTypeError("Ticket keys length incorrect");
+  }
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+  memcpy(wrap->ticket_key_name_, Buffer::Data(args[0]), 16);
+  memcpy(wrap->ticket_key_hmac_, Buffer::Data(args[0]) + 16, 16);
+  memcpy(wrap->ticket_key_aes_, Buffer::Data(args[0]) + 32, 16);
+#else
+  if (SSL_CTX_set_tlsext_ticket_keys(wrap->ctx_,
+                                     Buffer::Data(args[0]),
+                                     Buffer::Length(args[0])) != 1)
+  {
+    return env->ThrowError("Failed to fetch tls ticket keys");
+  }
+#endif
+
+  args.GetReturnValue().Set(true);
+#endif // !def(OPENSSL_NO_TLSEXT) && def(SSL_CTX_get_tlsext_ticket_keys)
+}
 
 /*void SecureContext::SetFreeListLength(const FunctionCallbackInfo<Value>& args) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(OPENSSL_IS_BORINGSSL)
@@ -1433,49 +1585,51 @@ void SecureContext::GetTicketKeys(const FunctionCallbackInfo<Value>& args) {
 #endif
 }*/
 
-
 // Currently, EnableTicketKeyCallback and TicketKeyCallback are only present for
 // the regression test in test/parallel/test-https-resume-after-renew.js.
 void SecureContext::EnableTicketKeyCallback(
-    const FunctionCallbackInfo<Value>& args) {
-  SecureContext* wrap;
+    const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
   SSL_CTX_set_tlsext_ticket_key_cb(wrap->ctx_, TicketKeyCallback);
 }
 
-
-int SecureContext::TicketKeyCallback(SSL* ssl,
-                                     unsigned char* name,
-                                     unsigned char* iv,
-                                     EVP_CIPHER_CTX* ectx,
-                                     HMAC_CTX* hctx,
-                                     int enc) {
+int SecureContext::TicketKeyCallback(SSL *ssl,
+                                     unsigned char *name,
+                                     unsigned char *iv,
+                                     EVP_CIPHER_CTX *ectx,
+                                     HMAC_CTX *hctx,
+                                     int enc)
+{
   static const int kTicketPartSize = 16;
 
-  SecureContext* sc = static_cast<SecureContext*>(
+  SecureContext *sc = static_cast<SecureContext *>(
       SSL_CTX_get_app_data(SSL_get_SSL_CTX(ssl)));
 
-  Environment* env = sc->env();
+  Environment *env = sc->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   Local<Value> argv[] = {
-    Buffer::Copy(env,
-                 reinterpret_cast<char*>(name),
-                 kTicketPartSize).ToLocalChecked(),
-    Buffer::Copy(env,
-                 reinterpret_cast<char*>(iv),
-                 kTicketPartSize).ToLocalChecked(),
-    Boolean::New(env->isolate(), enc != 0)
-  };
+      Buffer::Copy(env,
+                   reinterpret_cast<char *>(name),
+                   kTicketPartSize)
+          .ToLocalChecked(),
+      Buffer::Copy(env,
+                   reinterpret_cast<char *>(iv),
+                   kTicketPartSize)
+          .ToLocalChecked(),
+      Boolean::New(env->isolate(), enc != 0)};
 
   Local<Value> ret = node::MakeCallback(env->isolate(),
                                         sc->object(),
                                         env->ticketkeycallback_string(),
                                         arraysize(argv),
                                         argv,
-                                        {0, 0}).ToLocalChecked();
+                                        {0, 0})
+                         .ToLocalChecked();
   Local<Array> arr = ret.As<Array>();
 
   int r = arr->Get(kTicketKeyReturnIndex)->Int32Value();
@@ -1487,12 +1641,14 @@ int SecureContext::TicketKeyCallback(SSL* ssl,
   if (Buffer::Length(aes) != kTicketPartSize)
     return -1;
 
-  if (enc) {
+  if (enc)
+  {
     Local<Value> name_val = arr->Get(kTicketKeyNameIndex);
     Local<Value> iv_val = arr->Get(kTicketKeyIVIndex);
 
     if (Buffer::Length(name_val) != kTicketPartSize ||
-        Buffer::Length(iv_val) != kTicketPartSize) {
+        Buffer::Length(iv_val) != kTicketPartSize)
+    {
       return -1;
     }
 
@@ -1506,15 +1662,18 @@ int SecureContext::TicketKeyCallback(SSL* ssl,
                EVP_sha256(),
                nullptr);
 
-  const unsigned char* aes_key =
-      reinterpret_cast<unsigned char*>(Buffer::Data(aes));
-  if (enc) {
+  const unsigned char *aes_key =
+      reinterpret_cast<unsigned char *>(Buffer::Data(aes));
+  if (enc)
+  {
     EVP_EncryptInit_ex(ectx,
                        EVP_aes_128_cbc(),
                        nullptr,
                        aes_key,
                        iv);
-  } else {
+  }
+  else
+  {
     EVP_DecryptInit_ex(ectx,
                        EVP_aes_128_cbc(),
                        nullptr,
@@ -1526,28 +1685,32 @@ int SecureContext::TicketKeyCallback(SSL* ssl,
 }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-int SecureContext::TicketCompatibilityCallback(SSL* ssl,
-                                               unsigned char* name,
-                                               unsigned char* iv,
-                                               EVP_CIPHER_CTX* ectx,
-                                               HMAC_CTX* hctx,
-                                               int enc) {
-  SecureContext* sc = static_cast<SecureContext*>(
+int SecureContext::TicketCompatibilityCallback(SSL *ssl,
+                                               unsigned char *name,
+                                               unsigned char *iv,
+                                               EVP_CIPHER_CTX *ectx,
+                                               HMAC_CTX *hctx,
+                                               int enc)
+{
+  SecureContext *sc = static_cast<SecureContext *>(
       SSL_CTX_get_app_data(SSL_get_SSL_CTX(ssl)));
 
-  if (enc) {
+  if (enc)
+  {
     memcpy(name, sc->ticket_key_name_, sizeof(sc->ticket_key_name_));
     if (RAND_bytes(iv, 16) <= 0 ||
         EVP_EncryptInit_ex(ectx, EVP_aes_128_cbc(), nullptr,
                            sc->ticket_key_aes_, iv) <= 0 ||
         HMAC_Init_ex(hctx, sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_),
-                     EVP_sha256(), nullptr) <= 0) {
+                     EVP_sha256(), nullptr) <= 0)
+    {
       return -1;
     }
     return 1;
   }
 
-  if (memcmp(name, sc->ticket_key_name_, sizeof(sc->ticket_key_name_)) != 0) {
+  if (memcmp(name, sc->ticket_key_name_, sizeof(sc->ticket_key_name_)) != 0)
+  {
     // The ticket key name does not match. Discard the ticket.
     return 0;
   }
@@ -1555,31 +1718,30 @@ int SecureContext::TicketCompatibilityCallback(SSL* ssl,
   if (EVP_DecryptInit_ex(ectx, EVP_aes_128_cbc(), nullptr, sc->ticket_key_aes_,
                          iv) <= 0 ||
       HMAC_Init_ex(hctx, sc->ticket_key_hmac_, sizeof(sc->ticket_key_hmac_),
-                   EVP_sha256(), nullptr) <= 0) {
+                   EVP_sha256(), nullptr) <= 0)
+  {
     return -1;
   }
   return 1;
 }
 #endif
 
-
-
-
 void SecureContext::CtxGetter(Local<String> property,
-                              const PropertyCallbackInfo<Value>& info) {
-  SecureContext* sc;
+                              const PropertyCallbackInfo<Value> &info)
+{
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, info.This());
   Local<External> ext = External::New(info.GetIsolate(), sc->ctx_);
   info.GetReturnValue().Set(ext);
 }
 
-
 template <bool primary>
-void SecureContext::GetCertificate(const FunctionCallbackInfo<Value>& args) {
-  SecureContext* wrap;
+void SecureContext::GetCertificate(const FunctionCallbackInfo<Value> &args)
+{
+  SecureContext *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  Environment* env = wrap->env();
-  X509* cert;
+  Environment *env = wrap->env();
+  X509 *cert;
 
   if (primary)
     cert = wrap->cert_;
@@ -1590,16 +1752,16 @@ void SecureContext::GetCertificate(const FunctionCallbackInfo<Value>& args) {
 
   int size = i2d_X509(cert, nullptr);
   Local<Object> buff = Buffer::New(env, size).ToLocalChecked();
-  unsigned char* serialized = reinterpret_cast<unsigned char*>(
+  unsigned char *serialized = reinterpret_cast<unsigned char *>(
       Buffer::Data(buff));
   i2d_X509(cert, &serialized);
 
   args.GetReturnValue().Set(buff);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::AddMethods(Environment* env, Local<FunctionTemplate> t) {
+void SSLWrap<Base>::AddMethods(Environment *env, Local<FunctionTemplate> t)
+{
   HandleScope scope(env->isolate());
 
   env->SetProtoMethod(t, "getPeerCertificate", GetPeerCertificate);
@@ -1623,11 +1785,11 @@ void SSLWrap<Base>::AddMethods(Environment* env, Local<FunctionTemplate> t) {
 
 #ifdef SSL_set_max_send_fragment
   env->SetProtoMethod(t, "setMaxSendFragment", SetMaxSendFragment);
-#endif  // SSL_set_max_send_fragment
+#endif // SSL_set_max_send_fragment
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
   env->SetProtoMethod(t, "getNegotiatedProtocol", GetNegotiatedProto);
-#endif  // OPENSSL_NO_NEXTPROTONEG
+#endif // OPENSSL_NO_NEXTPROTONEG
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
   env->SetProtoMethod(t, "setNPNProtocols", SetNPNProtocols);
@@ -1646,9 +1808,9 @@ void SSLWrap<Base>::AddMethods(Environment* env, Local<FunctionTemplate> t) {
       AccessorSignature::New(env->isolate(), t));
 }
 
-
 template <class Base>
-void SSLWrap<Base>::InitNPN(SecureContext* sc) {
+void SSLWrap<Base>::InitNPN(SecureContext *sc)
+{
 #ifndef OPENSSL_NO_NEXTPROTONEG
   // Server should advertise NPN protocols
   SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
@@ -1657,43 +1819,44 @@ void SSLWrap<Base>::InitNPN(SecureContext* sc) {
   // Client should select protocol from list of advertised
   // If server supports NPN
   SSL_CTX_set_next_proto_select_cb(sc->ctx_, SelectNextProtoCallback, nullptr);
-#endif  // OPENSSL_NO_NEXTPROTONEG
+#endif // OPENSSL_NO_NEXTPROTONEG
 
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
   // OCSP stapling
   SSL_CTX_set_tlsext_status_cb(sc->ctx_, TLSExtStatusCallback);
   SSL_CTX_set_tlsext_status_arg(sc->ctx_, nullptr);
-#endif  // NODE__HAVE_TLSEXT_STATUS_CB
+#endif // NODE__HAVE_TLSEXT_STATUS_CB
 }
-
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 template <class Base>
-SSL_SESSION* SSLWrap<Base>::GetSessionCallback(SSL* s,
-                                               unsigned char* key,
+SSL_SESSION *SSLWrap<Base>::GetSessionCallback(SSL *s,
+                                               unsigned char *key,
                                                int len,
-                                               int* copy) {
+                                               int *copy)
+{
 #else
 template <class Base>
-SSL_SESSION* SSLWrap<Base>::GetSessionCallback(SSL* s,
-                                               const unsigned char* key,
+SSL_SESSION *SSLWrap<Base>::GetSessionCallback(SSL *s,
+                                               const unsigned char *key,
                                                int len,
-                                               int* copy) {
+                                               int *copy)
+{
 #endif
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
 
   *copy = 0;
-  SSL_SESSION* sess = w->next_sess_;
+  SSL_SESSION *sess = w->next_sess_;
   w->next_sess_ = nullptr;
 
   return sess;
 }
 
-
 template <class Base>
-int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
-  Environment* env = w->ssl_env();
+int SSLWrap<Base>::NewSessionCallback(SSL *s, SSL_SESSION *sess)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
+  Environment *env = w->ssl_env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
@@ -1707,43 +1870,48 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
 
   // Serialize session
   Local<Object> buff = Buffer::New(env, size).ToLocalChecked();
-  unsigned char* serialized = reinterpret_cast<unsigned char*>(
+  unsigned char *serialized = reinterpret_cast<unsigned char *>(
       Buffer::Data(buff));
   memset(serialized, 0, size);
   i2d_SSL_SESSION(sess, &serialized);
 
   unsigned int session_id_length;
-  const unsigned char* session_id = SSL_SESSION_get_id(sess,
+  const unsigned char *session_id = SSL_SESSION_get_id(sess,
                                                        &session_id_length);
   Local<Object> session = Buffer::Copy(
-      env,
-      reinterpret_cast<const char*>(session_id),
-      session_id_length).ToLocalChecked();
-  Local<Value> argv[] = { session, buff };
+                              env,
+                              reinterpret_cast<const char *>(session_id),
+                              session_id_length)
+                              .ToLocalChecked();
+  Local<Value> argv[] = {session, buff};
   w->new_session_wait_ = true;
   w->MakeCallback(env->onnewsession_string(), arraysize(argv), argv);
 
   return 0;
 }
 
-
 template <class Base>
-void SSLWrap<Base>::OnClientHello(void* arg,
-                                  const ClientHelloParser::ClientHello& hello) {
-  Base* w = static_cast<Base*>(arg);
-  Environment* env = w->ssl_env();
+void SSLWrap<Base>::OnClientHello(void *arg,
+                                  const ClientHelloParser::ClientHello &hello)
+{
+  Base *w = static_cast<Base *>(arg);
+  Environment *env = w->ssl_env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   Local<Object> hello_obj = Object::New(env->isolate());
   Local<Object> buff = Buffer::Copy(
-      env,
-      reinterpret_cast<const char*>(hello.session_id()),
-      hello.session_size()).ToLocalChecked();
+                           env,
+                           reinterpret_cast<const char *>(hello.session_id()),
+                           hello.session_size())
+                           .ToLocalChecked();
   hello_obj->Set(env->session_id_string(), buff);
-  if (hello.servername() == nullptr) {
+  if (hello.servername() == nullptr)
+  {
     hello_obj->Set(env->servername_string(), String::Empty(env->isolate()));
-  } else {
+  }
+  else
+  {
     Local<String> servername = OneByteString(env->isolate(),
                                              hello.servername(),
                                              hello.servername_size());
@@ -1754,35 +1922,39 @@ void SSLWrap<Base>::OnClientHello(void* arg,
   hello_obj->Set(env->ocsp_request_string(),
                  Boolean::New(env->isolate(), hello.ocsp_request()));
 
-  Local<Value> argv[] = { hello_obj };
+  Local<Value> argv[] = {hello_obj};
   w->MakeCallback(env->onclienthello_string(), arraysize(argv), argv);
 }
 
-
-static bool SafeX509ExtPrint(BIO* out, X509_EXTENSION* ext) {
-  const X509V3_EXT_METHOD* method = X509V3_EXT_get(ext);
+static bool SafeX509ExtPrint(BIO *out, X509_EXTENSION *ext)
+{
+  const X509V3_EXT_METHOD *method = X509V3_EXT_get(ext);
 
   if (method != X509V3_EXT_get_nid(NID_subject_alt_name))
     return false;
 
-  GENERAL_NAMES* names = static_cast<GENERAL_NAMES*>(X509V3_EXT_d2i(ext));
+  GENERAL_NAMES *names = static_cast<GENERAL_NAMES *>(X509V3_EXT_d2i(ext));
   if (names == NULL)
     return false;
 
-  for (int i = 0; i < sk_GENERAL_NAME_num(names); i++) {
-    GENERAL_NAME* gen = sk_GENERAL_NAME_value(names, i);
+  for (int i = 0; i < sk_GENERAL_NAME_num(names); i++)
+  {
+    GENERAL_NAME *gen = sk_GENERAL_NAME_value(names, i);
 
     if (i != 0)
       BIO_write(out, ", ", 2);
 
-    if (gen->type == GEN_DNS) {
-      ASN1_IA5STRING* name = gen->d.dNSName;
+    if (gen->type == GEN_DNS)
+    {
+      ASN1_IA5STRING *name = gen->d.dNSName;
 
       BIO_write(out, "DNS:", 4);
       BIO_write(out, name->data, name->length);
-    } else {
-      STACK_OF(CONF_VALUE)* nval = i2v_GENERAL_NAME(
-          const_cast<X509V3_EXT_METHOD*>(method), gen, NULL);
+    }
+    else
+    {
+      STACK_OF(CONF_VALUE) *nval = i2v_GENERAL_NAME(
+          const_cast<X509V3_EXT_METHOD *>(method), gen, NULL);
       if (nval == NULL)
         return false;
       X509V3_EXT_val_prn(out, nval, 0, 0);
@@ -1794,50 +1966,54 @@ static bool SafeX509ExtPrint(BIO* out, X509_EXTENSION* ext) {
   return true;
 }
 
-
-static Local<Object> X509ToObject(Environment* env, X509* cert) {
+static Local<Object> X509ToObject(Environment *env, X509 *cert)
+{
   EscapableHandleScope scope(env->isolate());
 
   Local<Object> info = Object::New(env->isolate());
 
-  BIO* bio = BIO_new(BIO_s_mem());
-  BUF_MEM* mem;
+  BIO *bio = BIO_new(BIO_s_mem());
+  BUF_MEM *mem;
   if (X509_NAME_print_ex(bio,
                          X509_get_subject_name(cert),
                          0,
-                         X509_NAME_FLAGS) > 0) {
+                         X509_NAME_FLAGS) > 0)
+  {
     BIO_get_mem_ptr(bio, &mem);
     info->Set(env->subject_string(),
               String::NewFromUtf8(env->isolate(), mem->data,
                                   String::kNormalString, mem->length));
   }
-  (void) BIO_reset(bio);
+  (void)BIO_reset(bio);
 
-  X509_NAME* issuer_name = X509_get_issuer_name(cert);
-  if (X509_NAME_print_ex(bio, issuer_name, 0, X509_NAME_FLAGS) > 0) {
+  X509_NAME *issuer_name = X509_get_issuer_name(cert);
+  if (X509_NAME_print_ex(bio, issuer_name, 0, X509_NAME_FLAGS) > 0)
+  {
     BIO_get_mem_ptr(bio, &mem);
     info->Set(env->issuer_string(),
               String::NewFromUtf8(env->isolate(), mem->data,
                                   String::kNormalString, mem->length));
   }
-  (void) BIO_reset(bio);
+  (void)BIO_reset(bio);
 
-  int nids[] = { NID_subject_alt_name, NID_info_access };
-  Local<String> keys[] = { env->subjectaltname_string(),
-                           env->infoaccess_string() };
+  int nids[] = {NID_subject_alt_name, NID_info_access};
+  Local<String> keys[] = {env->subjectaltname_string(),
+                          env->infoaccess_string()};
   CHECK_EQ(arraysize(nids), arraysize(keys));
-  for (size_t i = 0; i < arraysize(nids); i++) {
+  for (size_t i = 0; i < arraysize(nids); i++)
+  {
     int index = X509_get_ext_by_NID(cert, nids[i], -1);
     if (index < 0)
       continue;
 
-    X509_EXTENSION* ext;
+    X509_EXTENSION *ext;
     int rv;
 
     ext = X509_get_ext(cert, index);
     CHECK_NE(ext, nullptr);
 
-    if (!SafeX509ExtPrint(bio, ext)) {
+    if (!SafeX509ExtPrint(bio, ext))
+    {
       rv = X509V3_EXT_print(bio, ext, 0, 0);
       CHECK_EQ(rv, 1);
     }
@@ -1847,45 +2023,51 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
               String::NewFromUtf8(env->isolate(), mem->data,
                                   String::kNormalString, mem->length));
 
-    (void) BIO_reset(bio);
+    (void)BIO_reset(bio);
   }
 
-  EVP_PKEY* pkey = X509_get_pubkey(cert);
-  RSA* rsa = nullptr;
+  EVP_PKEY *pkey = X509_get_pubkey(cert);
+  RSA *rsa = nullptr;
   if (pkey != nullptr)
     rsa = EVP_PKEY_get1_RSA(pkey);
 
-  if (rsa != nullptr) {
+  if (rsa != nullptr)
+  {
     //BN_print(bio, rsa->n);
-    const BIGNUM* n,* e;
+    const BIGNUM *n, *e;
     RSA_get0_key(rsa, &n, &e, NULL);
     BN_print(bio, n);
     BIO_get_mem_ptr(bio, &mem);
     info->Set(env->modulus_string(),
               String::NewFromUtf8(env->isolate(), mem->data,
                                   String::kNormalString, mem->length));
-    (void) BIO_reset(bio);
+    (void)BIO_reset(bio);
 
     uint64_t exponent_word = static_cast<uint64_t>(BN_get_word(e));
     uint32_t lo = static_cast<uint32_t>(exponent_word);
     uint32_t hi = static_cast<uint32_t>(exponent_word >> 32);
-    if (hi == 0) {
+    if (hi == 0)
+    {
       BIO_printf(bio, "0x%x", lo);
-    } else {
+    }
+    else
+    {
       BIO_printf(bio, "0x%x%08x", hi, lo);
     }
     BIO_get_mem_ptr(bio, &mem);
     info->Set(env->exponent_string(),
               String::NewFromUtf8(env->isolate(), mem->data,
                                   String::kNormalString, mem->length));
-    (void) BIO_reset(bio);
+    (void)BIO_reset(bio);
   }
 
-  if (pkey != nullptr) {
+  if (pkey != nullptr)
+  {
     EVP_PKEY_free(pkey);
     pkey = nullptr;
   }
-  if (rsa != nullptr) {
+  if (rsa != nullptr)
+  {
     RSA_free(rsa);
     rsa = nullptr;
   }
@@ -1895,7 +2077,7 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
   info->Set(env->valid_from_string(),
             String::NewFromUtf8(env->isolate(), mem->data,
                                 String::kNormalString, mem->length));
-  (void) BIO_reset(bio);
+  (void)BIO_reset(bio);
 
   ASN1_TIME_print(bio, X509_get_notAfter(cert));
   BIO_get_mem_ptr(bio, &mem);
@@ -1906,19 +2088,24 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
 
   unsigned int md_size, i;
   unsigned char md[EVP_MAX_MD_SIZE];
-  if (X509_digest(cert, EVP_sha1(), md, &md_size)) {
+  if (X509_digest(cert, EVP_sha1(), md, &md_size))
+  {
     const char hex[] = "0123456789ABCDEF";
     char fingerprint[EVP_MAX_MD_SIZE * 3];
 
-    for (i = 0; i < md_size; i++) {
-      fingerprint[3*i] = hex[(md[i] & 0xf0) >> 4];
-      fingerprint[(3*i)+1] = hex[(md[i] & 0x0f)];
-      fingerprint[(3*i)+2] = ':';
+    for (i = 0; i < md_size; i++)
+    {
+      fingerprint[3 * i] = hex[(md[i] & 0xf0) >> 4];
+      fingerprint[(3 * i) + 1] = hex[(md[i] & 0x0f)];
+      fingerprint[(3 * i) + 2] = ':';
     }
 
-    if (md_size > 0) {
-      fingerprint[(3*(md_size-1))+2] = '\0';
-    } else {
+    if (md_size > 0)
+    {
+      fingerprint[(3 * (md_size - 1)) + 2] = '\0';
+    }
+    else
+    {
       fingerprint[0] = '\0';
     }
 
@@ -1926,14 +2113,16 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
               OneByteString(env->isolate(), fingerprint));
   }
 
-  STACK_OF(ASN1_OBJECT)* eku = static_cast<STACK_OF(ASN1_OBJECT)*>(
+  STACK_OF(ASN1_OBJECT) *eku = static_cast<STACK_OF(ASN1_OBJECT) *>(
       X509_get_ext_d2i(cert, NID_ext_key_usage, nullptr, nullptr));
-  if (eku != nullptr) {
+  if (eku != nullptr)
+  {
     Local<Array> ext_key_usage = Array::New(env->isolate());
     char buf[256];
 
     int j = 0;
-    for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
+    for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++)
+    {
       if (OBJ_obj2txt(buf, sizeof(buf), sk_ASN1_OBJECT_value(eku, i), 1) >= 0)
         ext_key_usage->Set(j++, OneByteString(env->isolate(), buf));
     }
@@ -1942,9 +2131,12 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
     info->Set(env->ext_key_usage_string(), ext_key_usage);
   }
 
-  if (ASN1_INTEGER* serial_number = X509_get_serialNumber(cert)) {
-    if (BIGNUM* bn = ASN1_INTEGER_to_BN(serial_number, nullptr)) {
-      if (char* buf = BN_bn2hex(bn)) {
+  if (ASN1_INTEGER *serial_number = X509_get_serialNumber(cert))
+  {
+    if (BIGNUM *bn = ASN1_INTEGER_to_BN(serial_number, nullptr))
+    {
+      if (char *buf = BN_bn2hex(bn))
+      {
         info->Set(env->serial_number_string(),
                   OneByteString(env->isolate(), buf));
         OPENSSL_free(buf);
@@ -1956,7 +2148,7 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
   // Raw DER certificate
   int size = i2d_X509(cert, nullptr);
   Local<Object> buff = Buffer::New(env, size).ToLocalChecked();
-  unsigned char* serialized = reinterpret_cast<unsigned char*>(
+  unsigned char *serialized = reinterpret_cast<unsigned char *>(
       Buffer::Data(buff));
   i2d_X509(cert, &serialized);
   info->Set(env->raw_string(), buff);
@@ -1964,14 +2156,14 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
   return scope.Escape(info);
 }
 
-
 // TODO(indutny): Split it into multiple smaller functions
 template <class Base>
 void SSLWrap<Base>::GetPeerCertificate(
-    const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+    const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->ssl_env();
+  Environment *env = w->ssl_env();
 
   ClearErrorOnReturn clear_error_on_return;
 
@@ -1980,9 +2172,9 @@ void SSLWrap<Base>::GetPeerCertificate(
 
   // NOTE: This is because of the odd OpenSSL behavior. On client `cert_chain`
   // contains the `peer_certificate`, but on server it doesn't
-  X509* cert = w->is_server() ? SSL_get_peer_certificate(w->ssl_) : nullptr;
-  STACK_OF(X509)* ssl_certs = SSL_get_peer_cert_chain(w->ssl_);
-  STACK_OF(X509)* peer_certs = nullptr;
+  X509 *cert = w->is_server() ? SSL_get_peer_certificate(w->ssl_) : nullptr;
+  STACK_OF(X509) *ssl_certs = SSL_get_peer_cert_chain(w->ssl_);
+  STACK_OF(X509) *peer_certs = nullptr;
   if (cert == nullptr && ssl_certs == nullptr)
     goto done;
 
@@ -1990,7 +2182,8 @@ void SSLWrap<Base>::GetPeerCertificate(
     goto done;
 
   // Short result requested
-  if (args.Length() < 1 || !args[0]->IsTrue()) {
+  if (args.Length() < 1 || !args[0]->IsTrue())
+  {
     result = X509ToObject(env,
                           cert == nullptr ? sk_X509_value(ssl_certs, 0) : cert);
     goto done;
@@ -2000,7 +2193,8 @@ void SSLWrap<Base>::GetPeerCertificate(
   peer_certs = sk_X509_new(nullptr);
   if (cert != nullptr)
     sk_X509_push(peer_certs, cert);
-  for (int i = 0; i < sk_X509_num(ssl_certs); i++) {
+  for (int i = 0; i < sk_X509_num(ssl_certs); i++)
+  {
     cert = X509_dup(sk_X509_value(ssl_certs, i));
     if (cert == nullptr)
       goto done;
@@ -2015,10 +2209,12 @@ void SSLWrap<Base>::GetPeerCertificate(
 
   // Put issuer inside the object
   cert = sk_X509_delete(peer_certs, 0);
-  while (sk_X509_num(peer_certs) > 0) {
+  while (sk_X509_num(peer_certs) > 0)
+  {
     int i;
-    for (i = 0; i < sk_X509_num(peer_certs); i++) {
-      X509* ca = sk_X509_value(peer_certs, i);
+    for (i = 0; i < sk_X509_num(peer_certs); i++)
+    {
+      X509 *ca = sk_X509_value(peer_certs, i);
       if (X509_check_issued(ca, cert) != X509_V_OK)
         continue;
 
@@ -2040,8 +2236,9 @@ void SSLWrap<Base>::GetPeerCertificate(
   }
 
   // Last certificate should be self-signed
-  while (X509_check_issued(cert, cert) != X509_V_OK) {
-    X509* ca;
+  while (X509_check_issued(cert, cert) != X509_V_OK)
+  {
+    X509 *ca;
     if (SSL_CTX_get_issuer(SSL_get_SSL_CTX(w->ssl_), cert, &ca) <= 0)
       break;
 
@@ -2062,7 +2259,7 @@ void SSLWrap<Base>::GetPeerCertificate(
 
   CHECK_NE(cert, nullptr);
 
- done:
+done:
   if (cert != nullptr)
     X509_free(cert);
   if (peer_certs != nullptr)
@@ -2072,46 +2269,47 @@ void SSLWrap<Base>::GetPeerCertificate(
   args.GetReturnValue().Set(result);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::GetSession(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SSLWrap<Base>::GetSession(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
-  SSL_SESSION* sess = SSL_get_session(w->ssl_);
+  SSL_SESSION *sess = SSL_get_session(w->ssl_);
   if (sess == nullptr)
     return;
 
   int slen = i2d_SSL_SESSION(sess, nullptr);
   CHECK_GT(slen, 0);
 
-  char* sbuf = Malloc(slen);
-  unsigned char* p = reinterpret_cast<unsigned char*>(sbuf);
+  char *sbuf = Malloc(slen);
+  unsigned char *p = reinterpret_cast<unsigned char *>(sbuf);
   i2d_SSL_SESSION(sess, &p);
   args.GetReturnValue().Set(Buffer::New(env, sbuf, slen).ToLocalChecked());
 }
 
-
 template <class Base>
-void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
-  if (args.Length() < 1) {
+  if (args.Length() < 1)
+  {
     return env->ThrowError("Session argument is mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Session");
   size_t slen = Buffer::Length(args[0]);
-  char* sbuf = new char[slen];
+  char *sbuf = new char[slen];
   memcpy(sbuf, Buffer::Data(args[0]), slen);
 
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(sbuf);
-  SSL_SESSION* sess = d2i_SSL_SESSION(nullptr, &p, slen);
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(sbuf);
+  SSL_SESSION *sess = d2i_SSL_SESSION(nullptr, &p, slen);
 
   delete[] sbuf;
 
@@ -2125,18 +2323,19 @@ void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("SSL_set_session error");
 }
 
-
 template <class Base>
-void SSLWrap<Base>::LoadSession(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::LoadSession(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
-  if (args.Length() >= 1 && Buffer::HasInstance(args[0])) {
+  if (args.Length() >= 1 && Buffer::HasInstance(args[0]))
+  {
     ssize_t slen = Buffer::Length(args[0]);
-    char* sbuf = Buffer::Data(args[0]);
+    char *sbuf = Buffer::Data(args[0]);
 
-    const unsigned char* p = reinterpret_cast<unsigned char*>(sbuf);
-    SSL_SESSION* sess = d2i_SSL_SESSION(nullptr, &p, slen);
+    const unsigned char *p = reinterpret_cast<unsigned char *>(sbuf);
+    SSL_SESSION *sess = d2i_SSL_SESSION(nullptr, &p, slen);
 
     // Setup next session and move hello to the BIO buffer
     if (w->next_sess_ != nullptr)
@@ -2145,27 +2344,27 @@ void SSLWrap<Base>::LoadSession(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-
 template <class Base>
-void SSLWrap<Base>::IsSessionReused(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::IsSessionReused(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   bool yes = SSL_session_reused(w->ssl_);
   args.GetReturnValue().Set(yes);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::EndParser(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::EndParser(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   w->hello_parser_.End();
 }
 
-
 template <class Base>
-void SSLWrap<Base>::Renegotiate(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::Renegotiate(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
   ClearErrorOnReturn clear_error_on_return;
@@ -2174,24 +2373,24 @@ void SSLWrap<Base>::Renegotiate(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(yes);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::Shutdown(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::Shutdown(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
   int rv = SSL_shutdown(w->ssl_);
   args.GetReturnValue().Set(rv);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::GetTLSTicket(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::GetTLSTicket(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->ssl_env();
+  Environment *env = w->ssl_env();
 
-  SSL_SESSION* sess = SSL_get_session(w->ssl_);
+  SSL_SESSION *sess = SSL_get_session(w->ssl_);
   if (sess == nullptr)
     return;
 
@@ -2200,31 +2399,32 @@ void SSLWrap<Base>::GetTLSTicket(const FunctionCallbackInfo<Value>& args) {
   SSL_SESSION_get0_ticket(sess, &ticket, &length);
 
   if (ticket == nullptr)
-      return;
+    return;
 
   Local<Object> buff = Buffer::Copy(
-      env,reinterpret_cast<const char*>(ticket),length).ToLocalChecked();
+                           env, reinterpret_cast<const char *>(ticket), length)
+                           .ToLocalChecked();
 
   args.GetReturnValue().Set(buff);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::NewSessionDone(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::NewSessionDone(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   w->new_session_wait_ = false;
   w->NewSessionDoneCb();
 }
 
-
 template <class Base>
 void SSLWrap<Base>::SetOCSPResponse(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
+    const v8::FunctionCallbackInfo<v8::Value> &args)
+{
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->env();
+  Environment *env = w->env();
 
   if (args.Length() < 1)
     return env->ThrowTypeError("OCSP response argument is mandatory");
@@ -2232,28 +2432,28 @@ void SSLWrap<Base>::SetOCSPResponse(
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "OCSP response");
 
   w->ocsp_response_.Reset(args.GetIsolate(), args[0].As<Object>());
-#endif  // NODE__HAVE_TLSEXT_STATUS_CB
+#endif // NODE__HAVE_TLSEXT_STATUS_CB
 }
-
 
 template <class Base>
 void SSLWrap<Base>::RequestOCSP(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
+    const v8::FunctionCallbackInfo<v8::Value> &args)
+{
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
   SSL_set_tlsext_status_type(w->ssl_, TLSEXT_STATUSTYPE_ocsp);
-#endif  // NODE__HAVE_TLSEXT_STATUS_CB
+#endif // NODE__HAVE_TLSEXT_STATUS_CB
 }
-
 
 template <class Base>
 void SSLWrap<Base>::GetEphemeralKeyInfo(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  Base* w;
+    const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = Environment::GetCurrent(args);
+  Environment *env = Environment::GetCurrent(args);
 
   CHECK_NE(w->ssl_, nullptr);
 
@@ -2263,28 +2463,30 @@ void SSLWrap<Base>::GetEphemeralKeyInfo(
 
   Local<Object> info = Object::New(env->isolate());
 
-  EVP_PKEY* key;
+  EVP_PKEY *key;
 
-  if (SSL_get_server_tmp_key(w->ssl_, &key)) {
-    switch (EVP_PKEY_id(key)) {
-      case EVP_PKEY_DH:
-        info->Set(env->type_string(),
-                  FIXED_ONE_BYTE_STRING(env->isolate(), "DH"));
-        info->Set(env->size_string(),
-                  Integer::New(env->isolate(), EVP_PKEY_bits(key)));
-        break;
-      case EVP_PKEY_EC:
-        {
-          EC_KEY* ec = EVP_PKEY_get1_EC_KEY(key);
-          int nid = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
-          EC_KEY_free(ec);
-          info->Set(env->type_string(),
-                    FIXED_ONE_BYTE_STRING(env->isolate(), "ECDH"));
-          info->Set(env->name_string(),
-                    OneByteString(args.GetIsolate(), OBJ_nid2sn(nid)));
-          info->Set(env->size_string(),
-                    Integer::New(env->isolate(), EVP_PKEY_bits(key)));
-        }
+  if (SSL_get_server_tmp_key(w->ssl_, &key))
+  {
+    switch (EVP_PKEY_id(key))
+    {
+    case EVP_PKEY_DH:
+      info->Set(env->type_string(),
+                FIXED_ONE_BYTE_STRING(env->isolate(), "DH"));
+      info->Set(env->size_string(),
+                Integer::New(env->isolate(), EVP_PKEY_bits(key)));
+      break;
+    case EVP_PKEY_EC:
+    {
+      EC_KEY *ec = EVP_PKEY_get1_EC_KEY(key);
+      int nid = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
+      EC_KEY_free(ec);
+      info->Set(env->type_string(),
+                FIXED_ONE_BYTE_STRING(env->isolate(), "ECDH"));
+      info->Set(env->name_string(),
+                OneByteString(args.GetIsolate(), OBJ_nid2sn(nid)));
+      info->Set(env->size_string(),
+                Integer::New(env->isolate(), EVP_PKEY_bits(key)));
+    }
     }
     EVP_PKEY_free(key);
   }
@@ -2292,42 +2494,43 @@ void SSLWrap<Base>::GetEphemeralKeyInfo(
   return args.GetReturnValue().Set(info);
 }
 
-
 #ifdef SSL_set_max_send_fragment
 template <class Base>
 void SSLWrap<Base>::SetMaxSendFragment(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
+    const v8::FunctionCallbackInfo<v8::Value> &args)
+{
   CHECK(args.Length() >= 1 && args[0]->IsNumber());
 
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
   int rv = SSL_set_max_send_fragment(w->ssl_, args[0]->Int32Value());
   args.GetReturnValue().Set(rv);
 }
-#endif  // SSL_set_max_send_fragment
-
+#endif // SSL_set_max_send_fragment
 
 template <class Base>
-void SSLWrap<Base>::IsInitFinished(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::IsInitFinished(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   bool yes = SSL_is_init_finished(w->ssl_);
   args.GetReturnValue().Set(yes);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
   // XXX(bnoordhuis) The UNABLE_TO_GET_ISSUER_CERT error when there is no
   // peer certificate is questionable but it's compatible with what was
   // here before.
-  long x509_verify_error =  // NOLINT(runtime/int)
+  long x509_verify_error = // NOLINT(runtime/int)
       X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
-  if (X509* peer_cert = SSL_get_peer_certificate(w->ssl_)) {
+  if (X509 *peer_cert = SSL_get_peer_certificate(w->ssl_))
+  {
     X509_free(peer_cert);
     x509_verify_error = SSL_get_verify_result(w->ssl_);
   }
@@ -2338,10 +2541,14 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
   // XXX(bnoordhuis) X509_verify_cert_error_string() is not actually thread-safe
   // in the presence of invalid error codes.  Probably academical but something
   // to keep in mind if/when node ever grows multi-isolate capabilities.
-  const char* reason = X509_verify_cert_error_string(x509_verify_error);
-  const char* code = reason;
-#define CASE_X509_ERR(CODE) case X509_V_ERR_##CODE: code = #CODE; break;
-  switch (x509_verify_error) {
+  const char *reason = X509_verify_cert_error_string(x509_verify_error);
+  const char *code = reason;
+#define CASE_X509_ERR(CODE) \
+  case X509_V_ERR_##CODE:   \
+    code = #CODE;           \
+    break;
+  switch (x509_verify_error)
+  {
     CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT)
     CASE_X509_ERR(UNABLE_TO_GET_CRL)
     CASE_X509_ERR(UNABLE_TO_DECRYPT_CERT_SIGNATURE)
@@ -2372,7 +2579,7 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
   }
 #undef CASE_X509_ERR
 
-  Isolate* isolate = args.GetIsolate();
+  Isolate *isolate = args.GetIsolate();
   Local<String> reason_string = OneByteString(isolate, reason);
   Local<Value> exception_value = Exception::Error(reason_string);
   Local<Object> exception_object = exception_value->ToObject(isolate);
@@ -2380,148 +2587,159 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(exception_object);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::GetCurrentCipher(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::GetCurrentCipher(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->ssl_env();
+  Environment *env = w->ssl_env();
 
-  const SSL_CIPHER* c = SSL_get_current_cipher(w->ssl_);
+  const SSL_CIPHER *c = SSL_get_current_cipher(w->ssl_);
   if (c == nullptr)
     return;
 
   Local<Object> info = Object::New(env->isolate());
-  const char* cipher_name = SSL_CIPHER_get_name(c);
+  const char *cipher_name = SSL_CIPHER_get_name(c);
   info->Set(env->name_string(), OneByteString(args.GetIsolate(), cipher_name));
-  const char* cipher_version = SSL_CIPHER_get_version(c);
+  const char *cipher_version = SSL_CIPHER_get_version(c);
   info->Set(env->version_string(),
             OneByteString(args.GetIsolate(), cipher_version));
   args.GetReturnValue().Set(info);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::GetProtocol(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::GetProtocol(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
-  const char* tls_version = SSL_get_version(w->ssl_);
+  const char *tls_version = SSL_get_version(w->ssl_);
   args.GetReturnValue().Set(OneByteString(args.GetIsolate(), tls_version));
 }
 
-
 #ifndef OPENSSL_NO_NEXTPROTONEG
 template <class Base>
-int SSLWrap<Base>::AdvertiseNextProtoCallback(SSL* s,
-                                              const unsigned char** data,
-                                              unsigned int* len,
-                                              void* arg) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
-  Environment* env = w->env();
+int SSLWrap<Base>::AdvertiseNextProtoCallback(SSL *s,
+                                              const unsigned char **data,
+                                              unsigned int *len,
+                                              void *arg)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
+  Environment *env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   auto npn_buffer =
       w->object()->GetPrivate(
-          env->context(),
-          env->npn_buffer_private_symbol()).ToLocalChecked();
+                     env->context(),
+                     env->npn_buffer_private_symbol())
+          .ToLocalChecked();
 
-  if (npn_buffer->IsUndefined()) {
+  if (npn_buffer->IsUndefined())
+  {
     // No initialization - no NPN protocols
-    *data = reinterpret_cast<const unsigned char*>("");
+    *data = reinterpret_cast<const unsigned char *>("");
     *len = 0;
-  } else {
+  }
+  else
+  {
     CHECK(Buffer::HasInstance(npn_buffer));
-    *data = reinterpret_cast<const unsigned char*>(Buffer::Data(npn_buffer));
+    *data = reinterpret_cast<const unsigned char *>(Buffer::Data(npn_buffer));
     *len = Buffer::Length(npn_buffer);
   }
 
   return SSL_TLSEXT_ERR_OK;
 }
 
-
 template <class Base>
-int SSLWrap<Base>::SelectNextProtoCallback(SSL* s,
-                                           unsigned char** out,
-                                           unsigned char* outlen,
-                                           const unsigned char* in,
+int SSLWrap<Base>::SelectNextProtoCallback(SSL *s,
+                                           unsigned char **out,
+                                           unsigned char *outlen,
+                                           const unsigned char *in,
                                            unsigned int inlen,
-                                           void* arg) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
-  Environment* env = w->env();
+                                           void *arg)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
+  Environment *env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   auto npn_buffer =
       w->object()->GetPrivate(
-          env->context(),
-          env->npn_buffer_private_symbol()).ToLocalChecked();
+                     env->context(),
+                     env->npn_buffer_private_symbol())
+          .ToLocalChecked();
 
-  if (npn_buffer->IsUndefined()) {
+  if (npn_buffer->IsUndefined())
+  {
     // We should at least select one protocol
     // If server is using NPN
-    *out = reinterpret_cast<unsigned char*>(const_cast<char*>("http/1.1"));
+    *out = reinterpret_cast<unsigned char *>(const_cast<char *>("http/1.1"));
     *outlen = 8;
 
     // set status: unsupported
     CHECK(
         w->object()->SetPrivate(
-            env->context(),
-            env->selected_npn_buffer_private_symbol(),
-            False(env->isolate())).FromJust());
+                       env->context(),
+                       env->selected_npn_buffer_private_symbol(),
+                       False(env->isolate()))
+            .FromJust());
 
     return SSL_TLSEXT_ERR_OK;
   }
 
   CHECK(Buffer::HasInstance(npn_buffer));
-  const unsigned char* npn_protos =
-      reinterpret_cast<const unsigned char*>(Buffer::Data(npn_buffer));
+  const unsigned char *npn_protos =
+      reinterpret_cast<const unsigned char *>(Buffer::Data(npn_buffer));
   size_t len = Buffer::Length(npn_buffer);
 
   int status = SSL_select_next_proto(out, outlen, in, inlen, npn_protos, len);
   Local<Value> result;
-  switch (status) {
-    case OPENSSL_NPN_UNSUPPORTED:
-      result = Null(env->isolate());
-      break;
-    case OPENSSL_NPN_NEGOTIATED:
-      result = OneByteString(env->isolate(), *out, *outlen);
-      break;
-    case OPENSSL_NPN_NO_OVERLAP:
-      result = False(env->isolate());
-      break;
-    default:
-      break;
+  switch (status)
+  {
+  case OPENSSL_NPN_UNSUPPORTED:
+    result = Null(env->isolate());
+    break;
+  case OPENSSL_NPN_NEGOTIATED:
+    result = OneByteString(env->isolate(), *out, *outlen);
+    break;
+  case OPENSSL_NPN_NO_OVERLAP:
+    result = False(env->isolate());
+    break;
+  default:
+    break;
   }
 
   CHECK(
       w->object()->SetPrivate(
-          env->context(),
-          env->selected_npn_buffer_private_symbol(),
-          result).FromJust());
+                     env->context(),
+                     env->selected_npn_buffer_private_symbol(),
+                     result)
+          .FromJust());
 
   return SSL_TLSEXT_ERR_OK;
 }
 
-
 template <class Base>
 void SSLWrap<Base>::GetNegotiatedProto(
-    const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+    const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->env();
+  Environment *env = w->env();
 
-  if (w->is_client()) {
+  if (w->is_client())
+  {
     auto selected_npn_buffer =
         w->object()->GetPrivate(
-            env->context(),
-            env->selected_npn_buffer_private_symbol()).ToLocalChecked();
+                       env->context(),
+                       env->selected_npn_buffer_private_symbol())
+            .ToLocalChecked();
     args.GetReturnValue().Set(selected_npn_buffer);
     return;
   }
 
-  const unsigned char* npn_proto;
+  const unsigned char *npn_proto;
   unsigned int npn_proto_len;
 
   SSL_get0_next_proto_negotiated(w->ssl_, &npn_proto, &npn_proto_len);
@@ -2533,12 +2751,12 @@ void SSLWrap<Base>::GetNegotiatedProto(
       OneByteString(args.GetIsolate(), npn_proto, npn_proto_len));
 }
 
-
 template <class Base>
-void SSLWrap<Base>::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::SetNPNProtocols(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->env();
+  Environment *env = w->env();
 
   if (args.Length() < 1)
     return env->ThrowTypeError("NPN protocols argument is mandatory");
@@ -2547,34 +2765,37 @@ void SSLWrap<Base>::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
 
   CHECK(
       w->object()->SetPrivate(
-          env->context(),
-          env->npn_buffer_private_symbol(),
-          args[0]).FromJust());
+                     env->context(),
+                     env->npn_buffer_private_symbol(),
+                     args[0])
+          .FromJust());
 }
-#endif  // OPENSSL_NO_NEXTPROTONEG
+#endif // OPENSSL_NO_NEXTPROTONEG
 
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
 template <class Base>
-int SSLWrap<Base>::SelectALPNCallback(SSL* s,
-                                      const unsigned char** out,
-                                      unsigned char* outlen,
-                                      const unsigned char* in,
+int SSLWrap<Base>::SelectALPNCallback(SSL *s,
+                                      const unsigned char **out,
+                                      unsigned char *outlen,
+                                      const unsigned char *in,
                                       unsigned int inlen,
-                                      void* arg) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
-  Environment* env = w->env();
+                                      void *arg)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
+  Environment *env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   Local<Value> alpn_buffer =
       w->object()->GetPrivate(
-          env->context(),
-          env->alpn_buffer_private_symbol()).ToLocalChecked();
+                     env->context(),
+                     env->alpn_buffer_private_symbol())
+          .ToLocalChecked();
   CHECK(Buffer::HasInstance(alpn_buffer));
-  const unsigned char* alpn_protos =
-      reinterpret_cast<const unsigned char*>(Buffer::Data(alpn_buffer));
+  const unsigned char *alpn_protos =
+      reinterpret_cast<const unsigned char *>(Buffer::Data(alpn_buffer));
   unsigned alpn_protos_len = Buffer::Length(alpn_buffer);
-  int status = SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
+  int status = SSL_select_next_proto(const_cast<unsigned char **>(out), outlen,
                                      alpn_protos, alpn_protos_len, in, inlen);
 
   // According to 3.2. Protocol Selection of RFC7301, fatal
@@ -2583,17 +2804,17 @@ int SSLWrap<Base>::SelectALPNCallback(SSL* s,
   // https://rt.openssl.org/Ticket/Display.html?id=3463&user=guest&pass=guest
   return status == OPENSSL_NPN_NEGOTIATED ? SSL_TLSEXT_ERR_OK : SSL_TLSEXT_ERR_NOACK;
 }
-#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
-
+#endif // TLSEXT_TYPE_application_layer_protocol_negotiation
 
 template <class Base>
 void SSLWrap<Base>::GetALPNNegotiatedProto(
-    const FunctionCallbackInfo<v8::Value>& args) {
+    const FunctionCallbackInfo<v8::Value> &args)
+{
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
-  const unsigned char* alpn_proto;
+  const unsigned char *alpn_proto;
   unsigned int alpn_proto_len;
 
   SSL_get0_alpn_selected(w->ssl_, &alpn_proto, &alpn_proto_len);
@@ -2603,75 +2824,85 @@ void SSLWrap<Base>::GetALPNNegotiatedProto(
 
   args.GetReturnValue().Set(
       OneByteString(args.GetIsolate(), alpn_proto, alpn_proto_len));
-#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
+#endif // TLSEXT_TYPE_application_layer_protocol_negotiation
 }
-
 
 template <class Base>
 void SSLWrap<Base>::SetALPNProtocols(
-    const FunctionCallbackInfo<v8::Value>& args) {
+    const FunctionCallbackInfo<v8::Value> &args)
+{
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
-  Base* w;
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->env();
+  Environment *env = w->env();
   if (args.Length() < 1 || !Buffer::HasInstance(args[0]))
     return env->ThrowTypeError("Must give a Buffer as first argument");
 
-  if (w->is_client()) {
-    const unsigned char* alpn_protos =
-        reinterpret_cast<const unsigned char*>(Buffer::Data(args[0]));
+  if (w->is_client())
+  {
+    const unsigned char *alpn_protos =
+        reinterpret_cast<const unsigned char *>(Buffer::Data(args[0]));
     unsigned alpn_protos_len = Buffer::Length(args[0]);
     int r = SSL_set_alpn_protos(w->ssl_, alpn_protos, alpn_protos_len);
     CHECK_EQ(r, 0);
-  } else {
+  }
+  else
+  {
     CHECK(
         w->object()->SetPrivate(
-          env->context(),
-          env->alpn_buffer_private_symbol(),
-          args[0]).FromJust());
+                       env->context(),
+                       env->alpn_buffer_private_symbol(),
+                       args[0])
+            .FromJust());
     // Server should select ALPN protocol from list of advertised by client
     SSL_CTX_set_alpn_select_cb(SSL_get_SSL_CTX(w->ssl_), SelectALPNCallback,
                                nullptr);
   }
-#endif  // TLSEXT_TYPE_application_layer_protocol_negotiation
+#endif // TLSEXT_TYPE_application_layer_protocol_negotiation
 }
-
 
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
 template <class Base>
-int SSLWrap<Base>::TLSExtStatusCallback(SSL* s, void* arg) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
-  Environment* env = w->env();
+int SSLWrap<Base>::TLSExtStatusCallback(SSL *s, void *arg)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
+  Environment *env = w->env();
   HandleScope handle_scope(env->isolate());
 
-  if (w->is_client()) {
+  if (w->is_client())
+  {
     // Incoming response
-    const unsigned char* resp;
+    const unsigned char *resp;
     int len = SSL_get_tlsext_status_ocsp_resp(s, &resp);
     Local<Value> arg;
-    if (resp == nullptr) {
+    if (resp == nullptr)
+    {
       arg = Null(env->isolate());
-    } else {
+    }
+    else
+    {
       arg =
-          Buffer::Copy(env, reinterpret_cast<const char*>(resp), len)
-          .ToLocalChecked();
+          Buffer::Copy(env, reinterpret_cast<const char *>(resp), len)
+              .ToLocalChecked();
     }
 
     w->MakeCallback(env->onocspresponse_string(), 1, &arg);
 
     // Somehow, client is expecting different return value here
     return 1;
-  } else {
+  }
+  else
+  {
     // Outgoing response
     if (w->ocsp_response_.IsEmpty())
       return SSL_TLSEXT_ERR_NOACK;
 
     Local<Object> obj = PersistentToLocal(env->isolate(), w->ocsp_response_);
-    char* resp = Buffer::Data(obj);
+    char *resp = Buffer::Data(obj);
     size_t len = Buffer::Length(obj);
 
     // OpenSSL takes control of the pointer after accepting it
-    char* data = node::Malloc(len);
+    char *data = node::Malloc(len);
     memcpy(data, resp, len);
 
     if (!SSL_set_tlsext_status_ocsp_resp(s, data, len))
@@ -2681,19 +2912,19 @@ int SSLWrap<Base>::TLSExtStatusCallback(SSL* s, void* arg) {
     return SSL_TLSEXT_ERR_OK;
   }
 }
-#endif  // NODE__HAVE_TLSEXT_STATUS_CB
-
+#endif // NODE__HAVE_TLSEXT_STATUS_CB
 
 template <class Base>
-void SSLWrap<Base>::WaitForCertCb(CertCb cb, void* arg) {
+void SSLWrap<Base>::WaitForCertCb(CertCb cb, void *arg)
+{
   cert_cb_ = cb;
   cert_cb_arg_ = arg;
 }
 
-
 template <class Base>
-int SSLWrap<Base>::SSLCertCallback(SSL* s, void* arg) {
-  Base* w = static_cast<Base*>(SSL_get_app_data(s));
+int SSLWrap<Base>::SSLCertCallback(SSL *s, void *arg)
+{
+  Base *w = static_cast<Base *>(SSL_get_app_data(s));
 
   if (!w->is_server())
     return 1;
@@ -2704,17 +2935,20 @@ int SSLWrap<Base>::SSLCertCallback(SSL* s, void* arg) {
   if (w->cert_cb_running_)
     return -1;
 
-  Environment* env = w->env();
+  Environment *env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
   w->cert_cb_running_ = true;
 
   Local<Object> info = Object::New(env->isolate());
 
-  const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
-  if (servername == nullptr) {
+  const char *servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+  if (servername == nullptr)
+  {
     info->Set(env->servername_string(), String::Empty(env->isolate()));
-  } else {
+  }
+  else
+  {
     Local<String> str = OneByteString(env->isolate(), servername,
                                       strlen(servername));
     info->Set(env->servername_string(), str);
@@ -2727,7 +2961,7 @@ int SSLWrap<Base>::SSLCertCallback(SSL* s, void* arg) {
 
   info->Set(env->ocsp_request_string(), Boolean::New(env->isolate(), ocsp));
 
-  Local<Value> argv[] = { info };
+  Local<Value> argv[] = {info};
   w->MakeCallback(env->oncertcb_string(), arraysize(argv), argv);
 
   if (!w->cert_cb_running_)
@@ -2737,12 +2971,12 @@ int SSLWrap<Base>::SSLCertCallback(SSL* s, void* arg) {
   return -1;
 }
 
-
 template <class Base>
-void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
-  Base* w;
+void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value> &args)
+{
+  Base *w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  Environment* env = w->env();
+  Environment *env = w->env();
 
   CHECK(w->is_waiting_cert_cb() && w->cert_cb_running_);
 
@@ -2754,8 +2988,9 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
   if (!ctx->IsObject())
     goto fire_cb;
 
-  if (cons->HasInstance(ctx)) {
-    SecureContext* sc;
+  if (cons->HasInstance(ctx))
+  {
+    SecureContext *sc;
     ASSIGN_OR_RETURN_UNWRAP(&sc, ctx.As<Object>());
     w->sni_context_.Reset();
     w->sni_context_.Reset(env->isolate(), ctx);
@@ -2763,9 +2998,9 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
     int rv;
 
     // NOTE: reference count is not increased by this API methods
-    X509* x509 = SSL_CTX_get0_certificate(sc->ctx_);
-    EVP_PKEY* pkey = SSL_CTX_get0_privatekey(sc->ctx_);
-    STACK_OF(X509)* chain;
+    X509 *x509 = SSL_CTX_get0_certificate(sc->ctx_);
+    EVP_PKEY *pkey = SSL_CTX_get0_privatekey(sc->ctx_);
+    STACK_OF(X509) * chain;
 
     rv = SSL_CTX_get0_chain_certs(sc->ctx_, &chain);
     if (rv)
@@ -2776,22 +3011,25 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
       rv = SSL_set1_chain(w->ssl_, chain);
     if (rv)
       rv = w->SetCACerts(sc);
-    if (!rv) {
-      unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
+    if (!rv)
+    {
+      unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
       if (!err)
         return env->ThrowError("CertCbDone");
       return ThrowCryptoError(env, err);
     }
-  } else {
+  }
+  else
+  {
     // Failure: incorrect SNI context object
     Local<Value> err = Exception::TypeError(env->sni_context_err_string());
     w->MakeCallback(env->onerror_string(), 1, &err);
     return;
   }
 
- fire_cb:
+fire_cb:
   CertCb cb;
-  void* arg;
+  void *arg;
 
   cb = w->cert_cb_;
   arg = w->cert_cb_arg_;
@@ -2803,20 +3041,20 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
   cb(arg);
 }
 
-
 template <class Base>
 void SSLWrap<Base>::SSLGetter(Local<String> property,
-                              const PropertyCallbackInfo<Value>& info) {
-  Base* base;
+                              const PropertyCallbackInfo<Value> &info)
+{
+  Base *base;
   ASSIGN_OR_RETURN_UNWRAP(&base, info.This());
-  SSL* ssl = base->ssl_;
+  SSL *ssl = base->ssl_;
   Local<External> ext = External::New(info.GetIsolate(), ssl);
   info.GetReturnValue().Set(ext);
 }
 
-
 template <class Base>
-void SSLWrap<Base>::DestroySSL() {
+void SSLWrap<Base>::DestroySSL()
+{
   if (ssl_ == nullptr)
     return;
 
@@ -2824,23 +3062,23 @@ void SSLWrap<Base>::DestroySSL() {
   ssl_ = nullptr;
 }
 
-
 template <class Base>
-void SSLWrap<Base>::SetSNIContext(SecureContext* sc) {
+void SSLWrap<Base>::SetSNIContext(SecureContext *sc)
+{
   InitNPN(sc);
   CHECK_EQ(SSL_set_SSL_CTX(ssl_, sc->ctx_), sc->ctx_);
 
   SetCACerts(sc);
 }
 
-
 template <class Base>
-int SSLWrap<Base>::SetCACerts(SecureContext* sc) {
+int SSLWrap<Base>::SetCACerts(SecureContext *sc)
+{
   int err = SSL_set1_verify_cert_store(ssl_, SSL_CTX_get_cert_store(sc->ctx_));
   if (err != 1)
     return err;
 
-  STACK_OF(X509_NAME)* list = SSL_dup_CA_list(
+  STACK_OF(X509_NAME) *list = SSL_dup_CA_list(
       SSL_CTX_get_client_CA_list(sc->ctx_));
 
   // NOTE: `SSL_set_client_CA_list` takes the ownership of `list`
@@ -2848,45 +3086,47 @@ int SSLWrap<Base>::SetCACerts(SecureContext* sc) {
   return 1;
 }
 
-
-void Connection::OnClientHelloParseEnd(void* arg) {
-  Connection* conn = static_cast<Connection*>(arg);
+void Connection::OnClientHelloParseEnd(void *arg)
+{
+  Connection *conn = static_cast<Connection *>(arg);
 
   // Write all accumulated data
   int r = BIO_write(conn->bio_read_,
-                    reinterpret_cast<char*>(conn->hello_data_),
+                    reinterpret_cast<char *>(conn->hello_data_),
                     conn->hello_offset_);
   conn->HandleBIOError(conn->bio_read_, "BIO_write", r);
   conn->SetShutdownFlags();
 }
 
-
 #ifdef SSL_PRINT_DEBUG
-# define DEBUG_PRINT(...) fprintf (stderr, __VA_ARGS__)
+#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #else
-# define DEBUG_PRINT(...)
+#define DEBUG_PRINT(...)
 #endif
 
-
-int Connection::HandleBIOError(BIO *bio, const char* func, int rv) {
+int Connection::HandleBIOError(BIO *bio, const char *func, int rv)
+{
   if (rv >= 0)
     return rv;
 
   int retry = BIO_should_retry(bio);
-  (void) retry;  // unused if !defined(SSL_PRINT_DEBUG)
+  (void)retry; // unused if !defined(SSL_PRINT_DEBUG)
 
-  if (BIO_should_write(bio)) {
+  if (BIO_should_write(bio))
+  {
     DEBUG_PRINT("[%p] BIO: %s want write. should retry %d\n",
                 ssl_,
                 func,
                 retry);
     return 0;
-
-  } else if (BIO_should_read(bio)) {
+  }
+  else if (BIO_should_read(bio))
+  {
     DEBUG_PRINT("[%p] BIO: %s want read. should retry %d\n", ssl_, func, retry);
     return 0;
-
-  } else {
+  }
+  else
+  {
     char ssl_error_buf[512];
     ERR_error_string_n(rv, ssl_error_buf, sizeof(ssl_error_buf));
 
@@ -2907,11 +3147,11 @@ int Connection::HandleBIOError(BIO *bio, const char* func, int rv) {
   return 0;
 }
 
-
-int Connection::HandleSSLError(const char* func,
+int Connection::HandleSSLError(const char *func,
                                int rv,
                                ZeroStatus zs,
-                               SyscallStatus ss) {
+                               SyscallStatus ss)
+{
   ClearErrorOnReturn clear_error_on_return;
 
   if (rv > 0)
@@ -2921,35 +3161,42 @@ int Connection::HandleSSLError(const char* func,
 
   int err = SSL_get_error(ssl_, rv);
 
-  if (err == SSL_ERROR_NONE) {
+  if (err == SSL_ERROR_NONE)
+  {
     return 0;
-
-  } else if (err == SSL_ERROR_WANT_WRITE) {
+  }
+  else if (err == SSL_ERROR_WANT_WRITE)
+  {
     DEBUG_PRINT("[%p] SSL: %s want write\n", ssl_, func);
     return 0;
-
-  } else if (err == SSL_ERROR_WANT_READ) {
+  }
+  else if (err == SSL_ERROR_WANT_READ)
+  {
     DEBUG_PRINT("[%p] SSL: %s want read\n", ssl_, func);
     return 0;
-
-  } else if (err == SSL_ERROR_WANT_X509_LOOKUP) {
+  }
+  else if (err == SSL_ERROR_WANT_X509_LOOKUP)
+  {
     DEBUG_PRINT("[%p] SSL: %s want x509 lookup\n", ssl_, func);
     return 0;
-
-  } else if (err == SSL_ERROR_ZERO_RETURN) {
+  }
+  else if (err == SSL_ERROR_ZERO_RETURN)
+  {
     HandleScope scope(ssl_env()->isolate());
 
     Local<Value> exception =
         Exception::Error(ssl_env()->zero_return_string());
     object()->Set(ssl_env()->error_string(), exception);
     return rv;
-
-  } else if (err == SSL_ERROR_SYSCALL && ss == kIgnoreSyscall) {
+  }
+  else if (err == SSL_ERROR_SYSCALL && ss == kIgnoreSyscall)
+  {
     return 0;
-
-  } else {
+  }
+  else
+  {
     HandleScope scope(ssl_env()->isolate());
-    BUF_MEM* mem;
+    BUF_MEM *mem;
     BIO *bio;
 
     CHECK(err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL);
@@ -2960,13 +3207,14 @@ int Connection::HandleSSLError(const char* func,
     // into JavaScript. There is no test which demonstrates this problem.
     // https://github.com/joyent/node/issues/1719
     bio = BIO_new(BIO_s_mem());
-    if (bio != nullptr) {
+    if (bio != nullptr)
+    {
       ERR_print_errors(bio);
       BIO_get_mem_ptr(bio, &mem);
       Local<Value> exception = Exception::Error(
           OneByteString(ssl_env()->isolate(),
-            mem->data,
-            mem->length));
+                        mem->data,
+                        mem->length));
       object()->Set(ssl_env()->error_string(), exception);
       BIO_free_all(bio);
     }
@@ -2977,32 +3225,34 @@ int Connection::HandleSSLError(const char* func,
   return 0;
 }
 
-
-void Connection::SetShutdownFlags() {
+void Connection::SetShutdownFlags()
+{
   HandleScope scope(ssl_env()->isolate());
 
   int flags = SSL_get_shutdown(ssl_);
 
-  if (flags & SSL_SENT_SHUTDOWN) {
+  if (flags & SSL_SENT_SHUTDOWN)
+  {
     Local<String> sent_shutdown_key = ssl_env()->sent_shutdown_string();
     object()->Set(sent_shutdown_key, True(ssl_env()->isolate()));
   }
 
-  if (flags & SSL_RECEIVED_SHUTDOWN) {
+  if (flags & SSL_RECEIVED_SHUTDOWN)
+  {
     Local<String> received_shutdown_key = ssl_env()->received_shutdown_string();
     object()->Set(received_shutdown_key, True(ssl_env()->isolate()));
   }
 }
 
-
-void Connection::NewSessionDoneCb() {
+void Connection::NewSessionDoneCb()
+{
   HandleScope scope(env()->isolate());
 
   MakeCallback(env()->onnewsessiondone_string(), 0, nullptr);
 }
 
-
-void Connection::Initialize(Environment* env, Local<Object> target) {
+void Connection::Initialize(Environment *env, Local<Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(Connection::New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Connection"));
@@ -3019,43 +3269,44 @@ void Connection::Initialize(Environment* env, Local<Object> target) {
 
   SSLWrap<Connection>::AddMethods(env, t);
 
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   env->SetProtoMethod(t, "getServername", Connection::GetServername);
-  env->SetProtoMethod(t, "setSNICallback",  Connection::SetSNICallback);
+  env->SetProtoMethod(t, "setSNICallback", Connection::SetSNICallback);
 #endif
 
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Connection"),
               t->GetFunction());
 }
 
-
-inline int compar(const void* a, const void* b) {
+inline int compar(const void *a, const void *b)
+{
   return memcmp(a, b, CNNIC_WHITELIST_HASH_LEN);
 }
 
-
-inline int IsSelfSigned(X509* cert) {
+inline int IsSelfSigned(X509 *cert)
+{
   return X509_NAME_cmp(X509_get_subject_name(cert),
                        X509_get_issuer_name(cert)) == 0;
 }
 
-
-inline X509* FindRoot(STACK_OF(X509)* sk) {
-  for (int i = 0; i < sk_X509_num(sk); i++) {
-    X509* cert = sk_X509_value(sk, i);
+inline X509 *FindRoot(STACK_OF(X509) * sk)
+{
+  for (int i = 0; i < sk_X509_num(sk); i++)
+  {
+    X509 *cert = sk_X509_value(sk, i);
     if (IsSelfSigned(cert))
       return cert;
   }
   return nullptr;
 }
 
+inline bool CertIsStartComOrWoSign(X509_NAME *name)
+{
+  const unsigned char *startcom_wosign_data;
+  X509_NAME *startcom_wosign_name;
 
-inline bool CertIsStartComOrWoSign(X509_NAME* name) {
-  const unsigned char* startcom_wosign_data;
-  X509_NAME* startcom_wosign_name;
-
-  for (const auto& dn : StartComAndWoSignDNs) {
+  for (const auto &dn : StartComAndWoSignDNs)
+  {
     startcom_wosign_data = dn.data;
     startcom_wosign_name = d2i_X509_NAME(nullptr, &startcom_wosign_data,
                                          dn.len);
@@ -3070,7 +3321,8 @@ inline bool CertIsStartComOrWoSign(X509_NAME* name) {
 
 // Revoke the certificates issued by StartCom or WoSign that has
 // notBefore after 00:00:00 on October 21, 2016 (1477008000 in epoch).
-inline bool CheckStartComOrWoSign(X509_NAME* root_name, X509* cert) {
+inline bool CheckStartComOrWoSign(X509_NAME *root_name, X509 *cert)
+{
   if (!CertIsStartComOrWoSign(root_name))
     return true;
 
@@ -3081,32 +3333,34 @@ inline bool CheckStartComOrWoSign(X509_NAME* root_name, X509* cert) {
   return false;
 }
 
-
 // Whitelist check for certs issued by CNNIC, StartCom and WoSign. See
 // https://blog.mozilla.org/security/2015/04/02
 // /distrusting-new-cnnic-certificates/ and
 // https://blog.mozilla.org/security/2016/10/24/
 // distrusting-new-wosign-and-startcom-certificates
-inline CheckResult CheckWhitelistedServerCert(X509_STORE_CTX* ctx) {
+inline CheckResult CheckWhitelistedServerCert(X509_STORE_CTX *ctx)
+{
   unsigned char hash[CNNIC_WHITELIST_HASH_LEN];
   unsigned int hashlen = CNNIC_WHITELIST_HASH_LEN;
 
-  STACK_OF(X509)* chain = X509_STORE_CTX_get1_chain(ctx);
+  STACK_OF(X509) *chain = X509_STORE_CTX_get1_chain(ctx);
   CHECK_NE(chain, nullptr);
   CHECK_GT(sk_X509_num(chain), 0);
 
   // Take the last cert as root at the first time.
-  X509* root_cert = sk_X509_value(chain, sk_X509_num(chain)-1);
-  X509_NAME* root_name = X509_get_subject_name(root_cert);
+  X509 *root_cert = sk_X509_value(chain, sk_X509_num(chain) - 1);
+  X509_NAME *root_name = X509_get_subject_name(root_cert);
 
-  if (!IsSelfSigned(root_cert)) {
+  if (!IsSelfSigned(root_cert))
+  {
     root_cert = FindRoot(chain);
     CHECK_NE(root_cert, nullptr);
     root_name = X509_get_subject_name(root_cert);
   }
 
-  X509* leaf_cert = sk_X509_value(chain, 0);
-  if (!CheckStartComOrWoSign(root_name, leaf_cert)) {
+  X509 *leaf_cert = sk_X509_value(chain, 0);
+  if (!CheckStartComOrWoSign(root_name, leaf_cert))
+  {
     sk_X509_pop_free(chain, X509_free);
     return CHECK_CERT_REVOKED;
   }
@@ -3114,15 +3368,17 @@ inline CheckResult CheckWhitelistedServerCert(X509_STORE_CTX* ctx) {
   // When the cert is issued from either CNNNIC ROOT CA or CNNNIC EV
   // ROOT CA, check a hash of its leaf cert if it is in the whitelist.
   if (X509_NAME_cmp(root_name, cnnic_name) == 0 ||
-      X509_NAME_cmp(root_name, cnnic_ev_name) == 0) {
+      X509_NAME_cmp(root_name, cnnic_ev_name) == 0)
+  {
     int ret = X509_digest(leaf_cert, EVP_sha256(), hash,
                           &hashlen);
     CHECK(ret);
 
-    void* result = bsearch(hash, WhitelistedCNNICHashes,
+    void *result = bsearch(hash, WhitelistedCNNICHashes,
                            arraysize(WhitelistedCNNICHashes),
                            CNNIC_WHITELIST_HASH_LEN, compar);
-    if (result == nullptr) {
+    if (result == nullptr)
+    {
       sk_X509_pop_free(chain, X509_free);
       return CHECK_CERT_REVOKED;
     }
@@ -3132,15 +3388,15 @@ inline CheckResult CheckWhitelistedServerCert(X509_STORE_CTX* ctx) {
   return CHECK_OK;
 }
 
-
-inline int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
+inline int VerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
+{
   // Failure on verification of the cert is handled in
   // Connection::VerifyError.
   if (preverify_ok == 0 || X509_STORE_CTX_get_error(ctx) != X509_V_OK)
     return CHECK_OK;
 
   // Server does not need to check the whitelist.
-  SSL* ssl = static_cast<SSL*>(
+  SSL *ssl = static_cast<SSL *>(
       X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
 
   if (SSL_is_server(ssl))
@@ -3155,21 +3411,23 @@ inline int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
   return ret;
 }
 
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(s));
-  Environment* env = conn->env();
+int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void *arg)
+{
+  Connection *conn = static_cast<Connection *>(SSL_get_app_data(s));
+  Environment *env = conn->env();
   HandleScope scope(env->isolate());
 
-  const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+  const char *servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
 
-  if (servername) {
+  if (servername)
+  {
     conn->servername_.Reset(env->isolate(),
                             OneByteString(env->isolate(), servername));
 
     // Call the SNI callback and use its return value as context
-    if (!conn->sniObject_.IsEmpty()) {
+    if (!conn->sniObject_.IsEmpty())
+    {
       conn->sni_context_.Reset();
 
       Local<Object> sni_obj = PersistentToLocal(env->isolate(),
@@ -3185,12 +3443,15 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       // If ret is SecureContext
       Local<FunctionTemplate> secure_context_constructor_template =
           env->secure_context_constructor_template();
-      if (secure_context_constructor_template->HasInstance(ret)) {
+      if (secure_context_constructor_template->HasInstance(ret))
+      {
         conn->sni_context_.Reset(env->isolate(), ret);
-        SecureContext* sc;
+        SecureContext *sc;
         ASSIGN_OR_RETURN_UNWRAP(&sc, ret.As<Object>(), SSL_TLSEXT_ERR_NOACK);
         conn->SetSNIContext(sc);
-      } else {
+      }
+      else
+      {
         return SSL_TLSEXT_ERR_NOACK;
       }
     }
@@ -3200,22 +3461,24 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
 }
 #endif
 
-void Connection::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Connection::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  if (args.Length() < 1 || !args[0]->IsObject()) {
+  if (args.Length() < 1 || !args[0]->IsObject())
+  {
     env->ThrowError("First argument must be a tls module SecureContext");
     return;
   }
 
-  SecureContext* sc;
+  SecureContext *sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args[0].As<Object>());
 
   bool is_server = args[1]->BooleanValue();
 
   SSLWrap<Connection>::Kind kind =
       is_server ? SSLWrap<Connection>::kServer : SSLWrap<Connection>::kClient;
-  Connection* conn = new Connection(env, args.This(), sc, kind);
+  Connection *conn = new Connection(env, args.This(), sc, kind);
   conn->bio_read_ = NodeBIO::New();
   conn->bio_write_ = NodeBIO::New();
 
@@ -3229,9 +3492,12 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
   SSL_set_cert_cb(conn->ssl_, SSLWrap<Connection>::SSLCertCallback, conn);
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  if (is_server) {
+  if (is_server)
+  {
     SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
-  } else if (args[2]->IsString()) {
+  }
+  else if (args[2]->IsString())
+  {
     const node::Utf8Value servername(env->isolate(), args[2]);
     SSL_set_tlsext_host_name(conn->ssl_, *servername);
   }
@@ -3240,75 +3506,85 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
   SSL_set_bio(conn->ssl_, conn->bio_read_, conn->bio_write_);
 
 #ifdef SSL_MODE_RELEASE_BUFFERS
-  long mode = SSL_get_mode(conn->ssl_);  // NOLINT(runtime/int)
+  long mode = SSL_get_mode(conn->ssl_); // NOLINT(runtime/int)
   SSL_set_mode(conn->ssl_, mode | SSL_MODE_RELEASE_BUFFERS);
 #endif
 
-
   int verify_mode;
-  if (is_server) {
+  if (is_server)
+  {
     bool request_cert = args[2]->BooleanValue();
-    if (!request_cert) {
+    if (!request_cert)
+    {
       // Note reject_unauthorized ignored.
       verify_mode = SSL_VERIFY_NONE;
-    } else {
+    }
+    else
+    {
       bool reject_unauthorized = args[3]->BooleanValue();
       verify_mode = SSL_VERIFY_PEER;
       if (reject_unauthorized)
         verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     }
-  } else {
+  }
+  else
+  {
     // Note request_cert and reject_unauthorized are ignored for clients.
     verify_mode = SSL_VERIFY_NONE;
   }
 
-
   // Always allow a connection. We'll reject in javascript.
   SSL_set_verify(conn->ssl_, verify_mode, VerifyCallback);
 
-  if (is_server) {
+  if (is_server)
+  {
     SSL_set_accept_state(conn->ssl_);
-  } else {
+  }
+  else
+  {
     SSL_set_connect_state(conn->ssl_);
   }
 }
 
-
-void Connection::SSLInfoCallback(const SSL *ssl_, int where, int ret) {
+void Connection::SSLInfoCallback(const SSL *ssl_, int where, int ret)
+{
   if (!(where & (SSL_CB_HANDSHAKE_START | SSL_CB_HANDSHAKE_DONE)))
     return;
 
   // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
   // a non-const SSL* in OpenSSL <= 0.9.7e.
-  SSL* ssl = const_cast<SSL*>(ssl_);
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(ssl));
-  Environment* env = conn->env();
+  SSL *ssl = const_cast<SSL *>(ssl_);
+  Connection *conn = static_cast<Connection *>(SSL_get_app_data(ssl));
+  Environment *env = conn->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
-  if (where & SSL_CB_HANDSHAKE_START) {
+  if (where & SSL_CB_HANDSHAKE_START)
+  {
     conn->MakeCallback(env->onhandshakestart_string(), 0, nullptr);
   }
 
-  if (where & SSL_CB_HANDSHAKE_DONE) {
+  if (where & SSL_CB_HANDSHAKE_DONE)
+  {
     conn->MakeCallback(env->onhandshakedone_string(), 0, nullptr);
   }
 }
 
-
-void Connection::EncIn(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::EncIn(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
-  Environment* env = conn->env();
+  Environment *env = conn->env();
 
-  if (args.Length() < 3) {
+  if (args.Length() < 3)
+  {
     return env->ThrowTypeError(
         "Data, offset, and length arguments are mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
 
-  char* buffer_data = Buffer::Data(args[0]);
+  char *buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
   size_t off = args[1]->Int32Value();
@@ -3318,13 +3594,17 @@ void Connection::EncIn(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowRangeError("offset + length > buffer.length");
 
   int bytes_written;
-  char* data = buffer_data + off;
+  char *data = buffer_data + off;
 
-  if (conn->is_server() && !conn->hello_parser_.IsEnded()) {
+  if (conn->is_server() && !conn->hello_parser_.IsEnded())
+  {
     // Just accumulate data, everything will be pushed to BIO later
-    if (conn->hello_parser_.IsPaused()) {
+    if (conn->hello_parser_.IsPaused())
+    {
       bytes_written = 0;
-    } else {
+    }
+    else
+    {
       // Copy incoming data to the internal buffer
       // (which has a size of the biggest possible TLS frame)
       size_t available = sizeof(conn->hello_data_) - conn->hello_offset_;
@@ -3335,7 +3615,9 @@ void Connection::EncIn(const FunctionCallbackInfo<Value>& args) {
       conn->hello_parser_.Parse(conn->hello_data_, conn->hello_offset_);
       bytes_written = copied;
     }
-  } else {
+  }
+  else
+  {
     bytes_written = BIO_write(conn->bio_read_, data, len);
     conn->HandleBIOError(conn->bio_read_, "BIO_write", bytes_written);
     conn->SetShutdownFlags();
@@ -3344,20 +3626,21 @@ void Connection::EncIn(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(bytes_written);
 }
 
-
-void Connection::ClearOut(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::ClearOut(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
-  Environment* env = conn->env();
+  Environment *env = conn->env();
 
-  if (args.Length() < 3) {
+  if (args.Length() < 3)
+  {
     return env->ThrowTypeError(
         "Data, offset, and length arguments are mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
 
-  char* buffer_data = Buffer::Data(args[0]);
+  char *buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
   size_t off = args[1]->Int32Value();
@@ -3366,16 +3649,20 @@ void Connection::ClearOut(const FunctionCallbackInfo<Value>& args) {
   if (!Buffer::IsWithinBounds(off, len, buffer_length))
     return env->ThrowRangeError("offset + length > buffer.length");
 
-  if (!SSL_is_init_finished(conn->ssl_)) {
+  if (!SSL_is_init_finished(conn->ssl_))
+  {
     int rv;
 
-    if (conn->is_server()) {
+    if (conn->is_server())
+    {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:ClearOut",
                            rv,
                            kZeroIsAnError,
                            kSyscallError);
-    } else {
+    }
+    else
+    {
       rv = SSL_connect(conn->ssl_);
       conn->HandleSSLError("SSL_connect:ClearOut",
                            rv,
@@ -3383,7 +3670,8 @@ void Connection::ClearOut(const FunctionCallbackInfo<Value>& args) {
                            kSyscallError);
     }
 
-    if (rv < 0) {
+    if (rv < 0)
+    {
       return args.GetReturnValue().Set(rv);
     }
   }
@@ -3398,36 +3686,37 @@ void Connection::ClearOut(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(bytes_read);
 }
 
-
-void Connection::ClearPending(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::ClearPending(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
   int bytes_pending = BIO_pending(conn->bio_read_);
   args.GetReturnValue().Set(bytes_pending);
 }
 
-
-void Connection::EncPending(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::EncPending(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
   int bytes_pending = BIO_pending(conn->bio_write_);
   args.GetReturnValue().Set(bytes_pending);
 }
 
-
-void Connection::EncOut(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::EncOut(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
-  Environment* env = conn->env();
+  Environment *env = conn->env();
 
-  if (args.Length() < 3) {
+  if (args.Length() < 3)
+  {
     return env->ThrowTypeError(
         "Data, offset, and length arguments are mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
 
-  char* buffer_data = Buffer::Data(args[0]);
+  char *buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
   size_t off = args[1]->Int32Value();
@@ -3444,20 +3733,21 @@ void Connection::EncOut(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(bytes_read);
 }
 
-
-void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::ClearIn(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
-  Environment* env = conn->env();
+  Environment *env = conn->env();
 
-  if (args.Length() < 3) {
+  if (args.Length() < 3)
+  {
     return env->ThrowTypeError(
         "Data, offset, and length arguments are mandatory");
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
 
-  char* buffer_data = Buffer::Data(args[0]);
+  char *buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
   size_t off = args[1]->Int32Value();
@@ -3466,15 +3756,19 @@ void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
   if (!Buffer::IsWithinBounds(off, len, buffer_length))
     return env->ThrowRangeError("offset + length > buffer.length");
 
-  if (!SSL_is_init_finished(conn->ssl_)) {
+  if (!SSL_is_init_finished(conn->ssl_))
+  {
     int rv;
-    if (conn->is_server()) {
+    if (conn->is_server())
+    {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:ClearIn",
                            rv,
                            kZeroIsAnError,
                            kSyscallError);
-    } else {
+    }
+    else
+    {
       rv = SSL_connect(conn->ssl_);
       conn->HandleSSLError("SSL_connect:ClearIn",
                            rv,
@@ -3482,7 +3776,8 @@ void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
                            kSyscallError);
     }
 
-    if (rv < 0) {
+    if (rv < 0)
+    {
       return args.GetReturnValue().Set(rv);
     }
   }
@@ -3498,20 +3793,24 @@ void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(bytes_written);
 }
 
-
-void Connection::Start(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::Start(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
 
   int rv = 0;
-  if (!SSL_is_init_finished(conn->ssl_)) {
-    if (conn->is_server()) {
+  if (!SSL_is_init_finished(conn->ssl_))
+  {
+    if (conn->is_server())
+    {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:Start",
                            rv,
                            kZeroIsAnError,
                            kSyscallError);
-    } else {
+    }
+    else
+    {
       rv = SSL_connect(conn->ssl_);
       conn->HandleSSLError("SSL_connect:Start",
                            rv,
@@ -3522,33 +3821,37 @@ void Connection::Start(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rv);
 }
 
-
-void Connection::Close(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::Close(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
   conn->DestroySSL();
 }
 
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-void Connection::GetServername(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::GetServername(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
 
-  if (conn->is_server() && !conn->servername_.IsEmpty()) {
+  if (conn->is_server() && !conn->servername_.IsEmpty())
+  {
     args.GetReturnValue().Set(conn->servername_);
-  } else {
+  }
+  else
+  {
     args.GetReturnValue().Set(false);
   }
 }
 
-
-void Connection::SetSNICallback(const FunctionCallbackInfo<Value>& args) {
-  Connection* conn;
+void Connection::SetSNICallback(const FunctionCallbackInfo<Value> &args)
+{
+  Connection *conn;
   ASSIGN_OR_RETURN_UNWRAP(&conn, args.Holder());
-  Environment* env = conn->env();
+  Environment *env = conn->env();
 
-  if (args.Length() < 1 || !args[0]->IsFunction()) {
+  if (args.Length() < 1 || !args[0]->IsFunction())
+  {
     return env->ThrowError("Must give a Function as first argument");
   }
 
@@ -3558,8 +3861,8 @@ void Connection::SetSNICallback(const FunctionCallbackInfo<Value>& args) {
 }
 #endif
 
-
-void CipherBase::Initialize(Environment* env, Local<Object> target) {
+void CipherBase::Initialize(Environment *env, Local<Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3577,30 +3880,32 @@ void CipherBase::Initialize(Environment* env, Local<Object> target) {
               t->GetFunction());
 }
 
-
-void CipherBase::New(const FunctionCallbackInfo<Value>& args) {
+void CipherBase::New(const FunctionCallbackInfo<Value> &args)
+{
   CHECK(args.IsConstructCall());
   CipherKind kind = args[0]->IsTrue() ? kCipher : kDecipher;
-  Environment* env = Environment::GetCurrent(args);
+  Environment *env = Environment::GetCurrent(args);
   new CipherBase(env, args.This(), kind);
 }
 
-
-void CipherBase::Init(const char* cipher_type,
-                      const char* key_buf,
-                      int key_buf_len) {
+void CipherBase::Init(const char *cipher_type,
+                      const char *key_buf,
+                      int key_buf_len)
+{
   HandleScope scope(env()->isolate());
 
 #ifdef NODE_FIPS_MODE
-  if (FIPS_mode()) {
+  if (FIPS_mode())
+  {
     return env()->ThrowError(
         "crypto.createCipher() is not supported in FIPS mode.");
   }
-#endif  // NODE_FIPS_MODE
+#endif // NODE_FIPS_MODE
 
   CHECK_EQ(ctx_, nullptr);
-  const EVP_CIPHER* const cipher = EVP_get_cipherbyname(cipher_type);
-  if (cipher == nullptr) {
+  const EVP_CIPHER *const cipher = EVP_get_cipherbyname(cipher_type);
+  if (cipher == nullptr)
+  {
     return env()->ThrowError("Unknown cipher");
   }
 
@@ -3610,7 +3915,7 @@ void CipherBase::Init(const char* cipher_type,
   int key_len = EVP_BytesToKey(cipher,
                                EVP_md5(),
                                nullptr,
-                               reinterpret_cast<const unsigned char*>(key_buf),
+                               reinterpret_cast<const unsigned char *>(key_buf),
                                key_buf_len,
                                1,
                                key,
@@ -3623,7 +3928,8 @@ void CipherBase::Init(const char* cipher_type,
 
   int mode = EVP_CIPHER_CTX_mode(ctx_);
   if (encrypt && (mode == EVP_CIPH_CTR_MODE || mode == EVP_CIPH_GCM_MODE ||
-      mode == EVP_CIPH_CCM_MODE)) {
+                  mode == EVP_CIPH_CCM_MODE))
+  {
     ProcessEmitWarning(env(), "Use Cipheriv for counter mode of %s",
                        cipher_type);
   }
@@ -3636,18 +3942,19 @@ void CipherBase::Init(const char* cipher_type,
   EVP_CipherInit_ex(ctx_,
                     nullptr,
                     nullptr,
-                    reinterpret_cast<unsigned char*>(key),
-                    reinterpret_cast<unsigned char*>(iv),
+                    reinterpret_cast<unsigned char *>(key),
+                    reinterpret_cast<unsigned char *>(iv),
                     kind_ == kCipher);
 }
 
-
-void CipherBase::Init(const FunctionCallbackInfo<Value>& args) {
-  CipherBase* cipher;
+void CipherBase::Init(const FunctionCallbackInfo<Value> &args)
+{
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
-  Environment* env = cipher->env();
+  Environment *env = cipher->env();
 
-  if (args.Length() < 2) {
+  if (args.Length() < 2)
+  {
     return env->ThrowError("Cipher type and key arguments are mandatory");
   }
 
@@ -3655,21 +3962,22 @@ void CipherBase::Init(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_NOT_BUFFER(args[1], "Key");
 
   const node::Utf8Value cipher_type(args.GetIsolate(), args[0]);
-  const char* key_buf = Buffer::Data(args[1]);
+  const char *key_buf = Buffer::Data(args[1]);
   ssize_t key_buf_len = Buffer::Length(args[1]);
   cipher->Init(*cipher_type, key_buf, key_buf_len);
 }
 
-
-void CipherBase::InitIv(const char* cipher_type,
-                        const char* key,
+void CipherBase::InitIv(const char *cipher_type,
+                        const char *key,
                         int key_len,
-                        const char* iv,
-                        int iv_len) {
+                        const char *iv,
+                        int iv_len)
+{
   HandleScope scope(env()->isolate());
 
-  const EVP_CIPHER* const cipher = EVP_get_cipherbyname(cipher_type);
-  if (cipher == nullptr) {
+  const EVP_CIPHER *const cipher = EVP_get_cipherbyname(cipher_type);
+  if (cipher == nullptr)
+  {
     return env()->ThrowError("Unknown cipher");
   }
 
@@ -3677,7 +3985,8 @@ void CipherBase::InitIv(const char* cipher_type,
   const int mode = EVP_CIPHER_mode(cipher);
   const bool is_gcm_mode = (EVP_CIPH_GCM_MODE == mode);
 
-  if (is_gcm_mode == false && iv_len != expected_iv_len) {
+  if (is_gcm_mode == false && iv_len != expected_iv_len)
+  {
     return env()->ThrowError("Invalid IV length");
   }
 
@@ -3690,14 +3999,16 @@ void CipherBase::InitIv(const char* cipher_type,
   EVP_CipherInit_ex(ctx_, cipher, nullptr, nullptr, nullptr, encrypt);
 
   if (is_gcm_mode &&
-      !EVP_CIPHER_CTX_ctrl(ctx_, EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr)) {
-    
+      !EVP_CIPHER_CTX_ctrl(ctx_, EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr))
+  {
+
     EVP_CIPHER_CTX_free(ctx_);
     ctx_ = nullptr;
     return env()->ThrowError("Invalid IV length");
   }
 
-  if (!EVP_CIPHER_CTX_set_key_length(ctx_, key_len)) {
+  if (!EVP_CIPHER_CTX_set_key_length(ctx_, key_len))
+  {
     EVP_CIPHER_CTX_free(ctx_);
     ctx_ = nullptr;
     return env()->ThrowError("Invalid key length");
@@ -3706,18 +4017,19 @@ void CipherBase::InitIv(const char* cipher_type,
   EVP_CipherInit_ex(ctx_,
                     nullptr,
                     nullptr,
-                    reinterpret_cast<const unsigned char*>(key),
-                    reinterpret_cast<const unsigned char*>(iv),
+                    reinterpret_cast<const unsigned char *>(key),
+                    reinterpret_cast<const unsigned char *>(iv),
                     kind_ == kCipher);
 }
 
-
-void CipherBase::InitIv(const FunctionCallbackInfo<Value>& args) {
-  CipherBase* cipher;
+void CipherBase::InitIv(const FunctionCallbackInfo<Value> &args)
+{
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
-  Environment* env = cipher->env();
+  Environment *env = cipher->env();
 
-  if (args.Length() < 3) {
+  if (args.Length() < 3)
+  {
     return env->ThrowError("Cipher type, key, and IV arguments are mandatory");
   }
 
@@ -3727,52 +4039,54 @@ void CipherBase::InitIv(const FunctionCallbackInfo<Value>& args) {
 
   const node::Utf8Value cipher_type(env->isolate(), args[0]);
   ssize_t key_len = Buffer::Length(args[1]);
-  const char* key_buf = Buffer::Data(args[1]);
+  const char *key_buf = Buffer::Data(args[1]);
   ssize_t iv_len = Buffer::Length(args[2]);
-  const char* iv_buf = Buffer::Data(args[2]);
+  const char *iv_buf = Buffer::Data(args[2]);
   cipher->InitIv(*cipher_type, key_buf, key_len, iv_buf, iv_len);
 }
 
-
-bool CipherBase::IsAuthenticatedMode() const {
+bool CipherBase::IsAuthenticatedMode() const
+{
   // Check if this cipher operates in an AEAD mode that we support.
   CHECK_NE(ctx_, nullptr);
-  const EVP_CIPHER* const cipher = EVP_CIPHER_CTX_cipher(ctx_);
+  const EVP_CIPHER *const cipher = EVP_CIPHER_CTX_cipher(ctx_);
   int mode = EVP_CIPHER_mode(cipher);
   return mode == EVP_CIPH_GCM_MODE;
 }
 
-
-void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  CipherBase* cipher;
+void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   // Only callable after Final and if encrypting.
   if (cipher->ctx_ ||
       cipher->kind_ != kCipher ||
-      cipher->auth_tag_len_ == 0) {
+      cipher->auth_tag_len_ == 0)
+  {
     return env->ThrowError("Attempting to get auth tag in unsupported state");
   }
 
   Local<Object> buf =
       Buffer::Copy(env, cipher->auth_tag_, cipher->auth_tag_len_)
-      .ToLocalChecked();
+          .ToLocalChecked();
   args.GetReturnValue().Set(buf);
 }
 
-
-void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Auth tag");
 
-  CipherBase* cipher;
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   if (!cipher->ctx_ ||
       !cipher->IsAuthenticatedMode() ||
-      cipher->kind_ != kDecipher) {
+      cipher->kind_ != kDecipher)
+  {
     return env->ThrowError("Attempting to set auth tag in unsupported state");
   }
 
@@ -3786,48 +4100,50 @@ void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value>& args) {
   memcpy(cipher->auth_tag_, Buffer::Data(args[0]), cipher->auth_tag_len_);
 }
 
-
-bool CipherBase::SetAAD(const char* data, unsigned int len) {
+bool CipherBase::SetAAD(const char *data, unsigned int len)
+{
   if (!ctx_ || !IsAuthenticatedMode())
     return false;
   int outlen;
   if (!EVP_CipherUpdate(ctx_,
                         nullptr,
                         &outlen,
-                        reinterpret_cast<const unsigned char*>(data),
-                        len)) {
+                        reinterpret_cast<const unsigned char *>(data),
+                        len))
+  {
     return false;
   }
   return true;
 }
 
-
-void CipherBase::SetAAD(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void CipherBase::SetAAD(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "AAD");
 
-  CipherBase* cipher;
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   if (!cipher->SetAAD(Buffer::Data(args[0]), Buffer::Length(args[0])))
     env->ThrowError("Attempting to set AAD in unsupported state");
 }
 
-
-bool CipherBase::Update(const char* data,
+bool CipherBase::Update(const char *data,
                         int len,
-                        unsigned char** out,
-                        int* out_len) {
+                        unsigned char **out,
+                        int *out_len)
+{
   if (!ctx_)
     return 0;
 
   // on first update:
-  if (kind_ == kDecipher && IsAuthenticatedMode() && auth_tag_len_ > 0) {
+  if (kind_ == kDecipher && IsAuthenticatedMode() && auth_tag_len_ > 0)
+  {
     EVP_CIPHER_CTX_ctrl(ctx_,
                         EVP_CTRL_GCM_SET_TAG,
                         auth_tag_len_,
-                        reinterpret_cast<unsigned char*>(auth_tag_));
+                        reinterpret_cast<unsigned char *>(auth_tag_));
     auth_tag_len_ = 0;
   }
 
@@ -3836,36 +4152,40 @@ bool CipherBase::Update(const char* data,
   return EVP_CipherUpdate(ctx_,
                           *out,
                           out_len,
-                          reinterpret_cast<const unsigned char*>(data),
+                          reinterpret_cast<const unsigned char *>(data),
                           len);
 }
 
+void CipherBase::Update(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  CipherBase* cipher;
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(args[0], "Cipher data");
 
-  unsigned char* out = nullptr;
+  unsigned char *out = nullptr;
   bool r;
   int out_len = 0;
 
   // Only copy the data if we have to, because it's a string
-  if (args[0]->IsString()) {
+  if (args[0]->IsString())
+  {
     StringBytes::InlineDecoder decoder;
     if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
       return;
     r = cipher->Update(decoder.out(), decoder.size(), &out, &out_len);
-  } else {
-    char* buf = Buffer::Data(args[0]);
+  }
+  else
+  {
+    char *buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
     r = cipher->Update(buf, buflen, &out, &out_len);
   }
 
-  if (!r) {
+  if (!r)
+  {
     free(out);
     return ThrowCryptoError(env,
                             ERR_get_error(),
@@ -3874,31 +4194,31 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
 
   CHECK(out != nullptr || out_len == 0);
   Local<Object> buf =
-      Buffer::New(env, reinterpret_cast<char*>(out), out_len).ToLocalChecked();
+      Buffer::New(env, reinterpret_cast<char *>(out), out_len).ToLocalChecked();
 
   args.GetReturnValue().Set(buf);
 }
 
-
-bool CipherBase::SetAutoPadding(bool auto_padding) {
+bool CipherBase::SetAutoPadding(bool auto_padding)
+{
   if (!ctx_)
     return false;
   return EVP_CIPHER_CTX_set_padding(ctx_, auto_padding);
 }
 
+void CipherBase::SetAutoPadding(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void CipherBase::SetAutoPadding(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  CipherBase* cipher;
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
 
   if (!cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue()))
     env->ThrowError("Attempting to set auto padding in unsupported state");
 }
 
-
-bool CipherBase::Final(unsigned char** out, int *out_len) {
+bool CipherBase::Final(unsigned char **out, int *out_len)
+{
   if (!ctx_)
     return false;
 
@@ -3906,10 +4226,11 @@ bool CipherBase::Final(unsigned char** out, int *out_len) {
       static_cast<size_t>(EVP_CIPHER_CTX_block_size(ctx_)));
   int r = EVP_CipherFinal_ex(ctx_, *out, out_len);
 
-  if (r == 1 && kind_ == kCipher && IsAuthenticatedMode()) {
+  if (r == 1 && kind_ == kCipher && IsAuthenticatedMode())
+  {
     auth_tag_len_ = sizeof(auth_tag_);
     r = EVP_CIPHER_CTX_ctrl(ctx_, EVP_CTRL_GCM_GET_TAG, auth_tag_len_,
-                            reinterpret_cast<unsigned char*>(auth_tag_));
+                            reinterpret_cast<unsigned char *>(auth_tag_));
     CHECK_EQ(r, 1);
   }
 
@@ -3919,29 +4240,30 @@ bool CipherBase::Final(unsigned char** out, int *out_len) {
   return r == 1;
 }
 
+void CipherBase::Final(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  CipherBase* cipher;
+  CipherBase *cipher;
   ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
-  if (!cipher->ctx_) return env->ThrowError("Unsupported state");
+  if (!cipher->ctx_)
+    return env->ThrowError("Unsupported state");
 
-  unsigned char* out_value = nullptr;
+  unsigned char *out_value = nullptr;
   int out_len = -1;
 
   // Check IsAuthenticatedMode() first, Final() destroys the EVP_CIPHER_CTX.
   const bool is_auth_mode = cipher->IsAuthenticatedMode();
   bool r = cipher->Final(&out_value, &out_len);
 
-  if (out_len <= 0 || !r) {
+  if (out_len <= 0 || !r)
+  {
     free(out_value);
     out_value = nullptr;
     out_len = 0;
-    if (!r) {
-      const char* msg = is_auth_mode ?
-          "Unsupported state or unable to authenticate data" :
-          "Unsupported state";
+    if (!r)
+    {
+      const char *msg = is_auth_mode ? "Unsupported state or unable to authenticate data" : "Unsupported state";
 
       return ThrowCryptoError(env,
                               ERR_get_error(),
@@ -3950,17 +4272,20 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
   }
 
   Local<Object> buf = Buffer::New(
-      env,
-      reinterpret_cast<char*>(out_value),
-      out_len).ToLocalChecked();
+                          env,
+                          reinterpret_cast<char *>(out_value),
+                          out_len)
+                          .ToLocalChecked();
   args.GetReturnValue().Set(buf);
 }
 
-Hmac::~Hmac() {
+Hmac::~Hmac()
+{
   HMAC_CTX_free(ctx_);
 }
 
-void Hmac::Initialize(Environment* env, v8::Local<v8::Object> target) {
+void Hmac::Initialize(Environment *env, v8::Local<v8::Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3972,69 +4297,76 @@ void Hmac::Initialize(Environment* env, v8::Local<v8::Object> target) {
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Hmac"), t->GetFunction());
 }
 
-
-void Hmac::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Hmac::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   new Hmac(env, args.This());
 }
 
-
-void Hmac::HmacInit(const char* hash_type, const char* key, int key_len) {
+void Hmac::HmacInit(const char *hash_type, const char *key, int key_len)
+{
   HandleScope scope(env()->isolate());
 
-  const EVP_MD* md = EVP_get_digestbyname(hash_type);
-  if (md == nullptr) {
+  const EVP_MD *md = EVP_get_digestbyname(hash_type);
+  if (md == nullptr)
+  {
     return env()->ThrowError("Unknown message digest");
   }
-  if (key_len == 0) {
+  if (key_len == 0)
+  {
     key = "";
   }
   ctx_ = HMAC_CTX_new();
-  if (ctx_ == nullptr || !HMAC_Init_ex(ctx_, key, key_len, md, nullptr)) {
+  if (ctx_ == nullptr || !HMAC_Init_ex(ctx_, key, key_len, md, nullptr))
+  {
     HMAC_CTX_free(ctx_);
     ctx_ = nullptr;
     return ThrowCryptoError(env(), ERR_get_error());
   }
 }
 
-
-void Hmac::HmacInit(const FunctionCallbackInfo<Value>& args) {
-  Hmac* hmac;
+void Hmac::HmacInit(const FunctionCallbackInfo<Value> &args)
+{
+  Hmac *hmac;
   ASSIGN_OR_RETURN_UNWRAP(&hmac, args.Holder());
-  Environment* env = hmac->env();
+  Environment *env = hmac->env();
 
   const node::Utf8Value hash_type(env->isolate(), args[0]);
-  const char* buffer_data = Buffer::Data(args[1]);
+  const char *buffer_data = Buffer::Data(args[1]);
   size_t buffer_length = Buffer::Length(args[1]);
   hmac->HmacInit(*hash_type, buffer_data, buffer_length);
 }
 
-
-bool Hmac::HmacUpdate(const char* data, int len) {
+bool Hmac::HmacUpdate(const char *data, int len)
+{
   if (!ctx_)
     return false;
-  int r = HMAC_Update(ctx_, reinterpret_cast<const unsigned char*>(data), len);
+  int r = HMAC_Update(ctx_, reinterpret_cast<const unsigned char *>(data), len);
   return r == 1;
 }
 
+void Hmac::HmacUpdate(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hmac* hmac;
+  Hmac *hmac;
   ASSIGN_OR_RETURN_UNWRAP(&hmac, args.Holder());
 
   // Only copy the data if we have to, because it's a string
   bool r = true;
-  if (args[0]->IsString()) {
+  if (args[0]->IsString())
+  {
     StringBytes::InlineDecoder decoder;
-    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8)) {
+    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
+    {
       args.GetReturnValue().Set(false);
       return;
     }
     r = hmac->HmacUpdate(decoder.out(), decoder.size());
-  } else if (args[0]->IsArrayBufferView()) {
-    char* buf = Buffer::Data(args[0]);
+  }
+  else if (args[0]->IsArrayBufferView())
+  {
+    char *buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
     r = hmac->HmacUpdate(buf, buflen);
   }
@@ -4042,23 +4374,25 @@ void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(r);
 }
 
+void Hmac::HmacDigest(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hmac* hmac;
+  Hmac *hmac;
   ASSIGN_OR_RETURN_UNWRAP(&hmac, args.Holder());
 
   enum encoding encoding = BUFFER;
-  if (args.Length() >= 1) {
+  if (args.Length() >= 1)
+  {
     encoding = ParseEncoding(env->isolate(), args[0], BUFFER);
   }
-  CHECK_NE(encoding, UCS2);  // Digest does not support UTF-16
+  CHECK_NE(encoding, UCS2); // Digest does not support UTF-16
 
   unsigned char md_value[EVP_MAX_MD_SIZE];
   unsigned int md_len = 0;
 
-  if (hmac->ctx_) {
+  if (hmac->ctx_)
+  {
     HMAC_Final(hmac->ctx_, md_value, &md_len);
     HMAC_CTX_free(hmac->ctx_);
     hmac->ctx_ = nullptr;
@@ -4067,11 +4401,12 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
   Local<Value> error;
   MaybeLocal<Value> rc =
       StringBytes::Encode(env->isolate(),
-                          reinterpret_cast<const char*>(md_value),
+                          reinterpret_cast<const char *>(md_value),
                           md_len,
                           encoding,
                           &error);
-  if (rc.IsEmpty()) {
+  if (rc.IsEmpty())
+  {
     CHECK(!error.IsEmpty());
     env->isolate()->ThrowException(error);
     return;
@@ -4079,12 +4414,13 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rc.ToLocalChecked());
 }
 
-Hash::~Hash() {
+Hash::~Hash()
+{
   EVP_MD_CTX_free(mdctx_);
 }
 
-
-void Hash::Initialize(Environment* env, v8::Local<v8::Object> target) {
+void Hash::Initialize(Environment *env, v8::Local<v8::Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -4095,26 +4431,28 @@ void Hash::Initialize(Environment* env, v8::Local<v8::Object> target) {
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Hash"), t->GetFunction());
 }
 
-
-void Hash::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Hash::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   const node::Utf8Value hash_type(env->isolate(), args[0]);
 
-  Hash* hash = new Hash(env, args.This());
-  if (!hash->HashInit(*hash_type)) {
+  Hash *hash = new Hash(env, args.This());
+  if (!hash->HashInit(*hash_type))
+  {
     return ThrowCryptoError(env, ERR_get_error(),
                             "Digest method not supported");
   }
 }
 
-
-bool Hash::HashInit(const char* hash_type) {
-  const EVP_MD* md = EVP_get_digestbyname(hash_type);
+bool Hash::HashInit(const char *hash_type)
+{
+  const EVP_MD *md = EVP_get_digestbyname(hash_type);
   if (md == nullptr)
     return false;
   mdctx_ = EVP_MD_CTX_new();
-  if (mdctx_ == nullptr || EVP_DigestInit_ex(mdctx_, md, nullptr) <= 0) {
+  if (mdctx_ == nullptr || EVP_DigestInit_ex(mdctx_, md, nullptr) <= 0)
+  {
     EVP_MD_CTX_free(mdctx_);
     mdctx_ = nullptr;
     return false;
@@ -4123,32 +4461,36 @@ bool Hash::HashInit(const char* hash_type) {
   return true;
 }
 
-
-bool Hash::HashUpdate(const char* data, int len) {
+bool Hash::HashUpdate(const char *data, int len)
+{
   if (!mdctx_)
     return false;
   EVP_DigestUpdate(mdctx_, data, len);
   return true;
 }
 
+void Hash::HashUpdate(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hash* hash;
+  Hash *hash;
   ASSIGN_OR_RETURN_UNWRAP(&hash, args.Holder());
 
   // Only copy the data if we have to, because it's a string
   bool r = true;
-  if (args[0]->IsString()) {
+  if (args[0]->IsString())
+  {
     StringBytes::InlineDecoder decoder;
-    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8)) {
+    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
+    {
       args.GetReturnValue().Set(false);
       return;
     }
     r = hash->HashUpdate(decoder.out(), decoder.size());
-  } else if (args[0]->IsArrayBufferView()) {
-    char* buf = Buffer::Data(args[0]);
+  }
+  else if (args[0]->IsArrayBufferView())
+  {
+    char *buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
     r = hash->HashUpdate(buf, buflen);
   }
@@ -4156,15 +4498,16 @@ void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(r);
 }
 
+void Hash::HashDigest(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hash* hash;
+  Hash *hash;
   ASSIGN_OR_RETURN_UNWRAP(&hash, args.Holder());
 
   enum encoding encoding = BUFFER;
-  if (args.Length() >= 1) {
+  if (args.Length() >= 1)
+  {
     encoding = ParseEncoding(env->isolate(), args[0], BUFFER);
   }
 
@@ -4177,11 +4520,12 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   Local<Value> error;
   MaybeLocal<Value> rc =
       StringBytes::Encode(env->isolate(),
-                          reinterpret_cast<const char*>(md_value),
+                          reinterpret_cast<const char *>(md_value),
                           md_len,
                           encoding,
                           &error);
-  if (rc.IsEmpty()) {
+  if (rc.IsEmpty())
+  {
     CHECK(!error.IsEmpty());
     env->isolate()->ThrowException(error);
     return;
@@ -4189,28 +4533,31 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rc.ToLocalChecked());
 }
 
-SignBase::~SignBase() {
+SignBase::~SignBase()
+{
   EVP_MD_CTX_free(mdctx_);
 }
 
-
-SignBase::Error SignBase::Init(const char* sign_type) {
+SignBase::Error SignBase::Init(const char *sign_type)
+{
   CHECK_EQ(mdctx_, nullptr);
-  #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-    // Historically, "dss1" and "DSS1" were DSA aliases for SHA-1
-    // exposed through the public API.
-    if (strcmp(sign_type, "dss1") == 0 ||
-        strcmp(sign_type, "DSS1") == 0) {
-      sign_type = "SHA1";
-    }
-  #endif
-  const EVP_MD* md = EVP_get_digestbyname(sign_type);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+  // Historically, "dss1" and "DSS1" were DSA aliases for SHA-1
+  // exposed through the public API.
+  if (strcmp(sign_type, "dss1") == 0 ||
+      strcmp(sign_type, "DSS1") == 0)
+  {
+    sign_type = "SHA1";
+  }
+#endif
+  const EVP_MD *md = EVP_get_digestbyname(sign_type);
   if (md == nullptr)
     return kSignUnknownDigest;
 
   mdctx_ = EVP_MD_CTX_new();
   if (mdctx_ == nullptr ||
-      !EVP_DigestInit_ex(mdctx_, md, nullptr)) {
+      !EVP_DigestInit_ex(mdctx_, md, nullptr))
+  {
     EVP_MD_CTX_free(mdctx_);
     mdctx_ = nullptr;
     return kSignInit;
@@ -4219,8 +4566,8 @@ SignBase::Error SignBase::Init(const char* sign_type) {
   return kSignOk;
 }
 
-
-SignBase::Error SignBase::Update(const char* data, int len) {
+SignBase::Error SignBase::Update(const char *data, int len)
+{
   if (!mdctx_)
     return kSignNotInitialised;
   if (!EVP_DigestUpdate(mdctx_, data, len))
@@ -4228,51 +4575,56 @@ SignBase::Error SignBase::Update(const char* data, int len) {
   return kSignOk;
 }
 
-
-void SignBase::CheckThrow(SignBase::Error error) {
+void SignBase::CheckThrow(SignBase::Error error)
+{
   HandleScope scope(env()->isolate());
 
-  switch (error) {
-    case kSignUnknownDigest:
-      return env()->ThrowError("Unknown message digest");
+  switch (error)
+  {
+  case kSignUnknownDigest:
+    return env()->ThrowError("Unknown message digest");
 
-    case kSignNotInitialised:
-      return env()->ThrowError("Not initialised");
+  case kSignNotInitialised:
+    return env()->ThrowError("Not initialised");
 
+  case kSignInit:
+  case kSignUpdate:
+  case kSignPrivateKey:
+  case kSignPublicKey:
+  {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
+    if (err)
+      return ThrowCryptoError(env(), err);
+    switch (error)
+    {
     case kSignInit:
+      return env()->ThrowError("EVP_SignInit_ex failed");
     case kSignUpdate:
+      return env()->ThrowError("EVP_SignUpdate failed");
     case kSignPrivateKey:
+      return env()->ThrowError("PEM_read_bio_PrivateKey failed");
     case kSignPublicKey:
-      {
-        unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
-        if (err)
-          return ThrowCryptoError(env(), err);
-        switch (error) {
-          case kSignInit:
-            return env()->ThrowError("EVP_SignInit_ex failed");
-          case kSignUpdate:
-            return env()->ThrowError("EVP_SignUpdate failed");
-          case kSignPrivateKey:
-            return env()->ThrowError("PEM_read_bio_PrivateKey failed");
-          case kSignPublicKey:
-            return env()->ThrowError("PEM_read_bio_PUBKEY failed");
-          default:
-            ABORT();
-        }
-      }
+      return env()->ThrowError("PEM_read_bio_PUBKEY failed");
+    default:
+      ABORT();
+    }
+  }
 
-    case kSignOk:
-      return;
+  case kSignOk:
+    return;
   }
 }
 
-static bool ApplyRSAOptions(EVP_PKEY* pkey, EVP_PKEY_CTX* pkctx, int padding,
-                            int salt_len) {
+static bool ApplyRSAOptions(EVP_PKEY *pkey, EVP_PKEY_CTX *pkctx, int padding,
+                            int salt_len)
+{
   if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA ||
-      EVP_PKEY_id(pkey) == EVP_PKEY_RSA2) {
+      EVP_PKEY_id(pkey) == EVP_PKEY_RSA2)
+  {
     if (EVP_PKEY_CTX_set_rsa_padding(pkctx, padding) <= 0)
       return false;
-    if (padding == RSA_PKCS1_PSS_PADDING) {
+    if (padding == RSA_PKCS1_PSS_PADDING)
+    {
       if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkctx, salt_len) <= 0)
         return false;
     }
@@ -4281,9 +4633,8 @@ static bool ApplyRSAOptions(EVP_PKEY* pkey, EVP_PKEY_CTX* pkctx, int padding,
   return true;
 }
 
-
-
-void Sign::Initialize(Environment* env, v8::Local<v8::Object> target) {
+void Sign::Initialize(Environment *env, v8::Local<v8::Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -4295,18 +4646,20 @@ void Sign::Initialize(Environment* env, v8::Local<v8::Object> target) {
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Sign"), t->GetFunction());
 }
 
-
-void Sign::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Sign::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   new Sign(env, args.This());
 }
 
-void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
-  Sign* sign;
+void Sign::SignInit(const FunctionCallbackInfo<Value> &args)
+{
+  Sign *sign;
   ASSIGN_OR_RETURN_UNWRAP(&sign, args.Holder());
-  Environment* env = sign->env();
+  Environment *env = sign->env();
 
-  if (args.Length() == 0) {
+  if (args.Length() == 0)
+  {
     return env->ThrowError("Sign type argument is mandatory");
   }
 
@@ -4316,23 +4669,27 @@ void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
   sign->CheckThrow(sign->Init(*sign_type));
 }
 
-void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Sign::SignUpdate(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  Sign* sign;
+  Sign *sign;
   ASSIGN_OR_RETURN_UNWRAP(&sign, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(args[0], "Data");
 
   // Only copy the data if we have to, because it's a string
   Error err;
-  if (args[0]->IsString()) {
+  if (args[0]->IsString())
+  {
     StringBytes::InlineDecoder decoder;
     if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
       return;
     err = sign->Update(decoder.out(), decoder.size());
-  } else {
-    char* buf = Buffer::Data(args[0]);
+  }
+  else
+  {
+    char *buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
     err = sign->Update(buf, buflen);
   }
@@ -4340,13 +4697,14 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
   sign->CheckThrow(err);
 }
 
-static int Node_SignFinal(EVP_MD_CTX* mdctx, unsigned char* md,
-                          unsigned int* sig_len, EVP_PKEY* pkey, int padding,
-                          int pss_salt_len) {
+static int Node_SignFinal(EVP_MD_CTX *mdctx, unsigned char *md,
+                          unsigned int *sig_len, EVP_PKEY *pkey, int padding,
+                          int pss_salt_len)
+{
   unsigned char m[EVP_MAX_MD_SIZE];
   unsigned int m_len;
   int rv = 0;
-  EVP_PKEY_CTX* pkctx = nullptr;
+  EVP_PKEY_CTX *pkctx = nullptr;
 
   *sig_len = 0;
   if (!EVP_DigestFinal_ex(mdctx, m, &m_len))
@@ -4366,33 +4724,34 @@ static int Node_SignFinal(EVP_MD_CTX* mdctx, unsigned char* md,
     goto err;
   *sig_len = sltmp;
   rv = 1;
- err:
+err:
   EVP_PKEY_CTX_free(pkctx);
   return rv;
 }
 
-SignBase::Error Sign::SignFinal(const char* key_pem,
+SignBase::Error Sign::SignFinal(const char *key_pem,
                                 int key_pem_len,
-                                const char* passphrase,
-                                unsigned char* sig,
-                                unsigned int* sig_len,
+                                const char *passphrase,
+                                unsigned char *sig,
+                                unsigned int *sig_len,
                                 int padding,
-                                int salt_len) {
+                                int salt_len)
+{
   if (!mdctx_)
     return kSignNotInitialised;
 
-  BIO* bp = nullptr;
-  EVP_PKEY* pkey = nullptr;
+  BIO *bp = nullptr;
+  EVP_PKEY *pkey = nullptr;
   bool fatal = true;
 
-  bp = BIO_new_mem_buf(const_cast<char*>(key_pem), key_pem_len);
+  bp = BIO_new_mem_buf(const_cast<char *>(key_pem), key_pem_len);
   if (bp == nullptr)
     goto exit;
 
   pkey = PEM_read_bio_PrivateKey(bp,
                                  nullptr,
                                  PasswordCallback,
-                                 const_cast<char*>(passphrase));
+                                 const_cast<char *>(passphrase));
 
   // Errors might be injected into OpenSSL's error stack
   // without `pkey` being set to nullptr;
@@ -4402,7 +4761,8 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
 
 #ifdef NODE_FIPS_MODE
   /* Validate DSA2 parameters from FIPS 186-4 */
-  if (FIPS_mode() && EVP_PKEY_DSA == pkey->type) {
+  if (FIPS_mode() && EVP_PKEY_DSA == pkey->type)
+  {
     size_t L = BN_num_bits(pkey->pkey.dsa->p);
     size_t N = BN_num_bits(pkey->pkey.dsa->q);
     bool result = false;
@@ -4416,18 +4776,18 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
     else if (L == 3072 && N == 256)
       result = true;
 
-    if (!result) {
+    if (!result)
+    {
       fatal = true;
       goto exit;
     }
   }
-#endif  // NODE_FIPS_MODE
+#endif // NODE_FIPS_MODE
 
   if (Node_SignFinal(mdctx_, sig, sig_len, pkey, padding, salt_len))
     fatal = false;
 
-
- exit:
+exit:
   if (pkey != nullptr)
     EVP_PKEY_free(pkey);
   if (bp != nullptr)
@@ -4442,11 +4802,11 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
   return kSignOk;
 }
 
+void Sign::SignFinal(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Sign* sign;
+  Sign *sign;
   ASSIGN_OR_RETURN_UNWRAP(&sign, args.Holder());
 
   unsigned int len = args.Length();
@@ -4455,7 +4815,7 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
   size_t buf_len = Buffer::Length(args[0]);
-  char* buf = Buffer::Data(args[0]);
+  char *buf = Buffer::Data(args[0]);
 
   CHECK(args[2]->IsInt32());
   Maybe<int32_t> maybe_padding = args[2]->Int32Value(env->context());
@@ -4483,13 +4843,13 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
     return sign->CheckThrow(err);
 
   Local<Object> rc =
-      Buffer::Copy(env, reinterpret_cast<char*>(md_value), md_len)
-      .ToLocalChecked();
+      Buffer::Copy(env, reinterpret_cast<char *>(md_value), md_len)
+          .ToLocalChecked();
   args.GetReturnValue().Set(rc);
 }
 
-
-void Verify::Initialize(Environment* env, v8::Local<v8::Object> target) {
+void Verify::Initialize(Environment *env, v8::Local<v8::Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -4502,18 +4862,20 @@ void Verify::Initialize(Environment* env, v8::Local<v8::Object> target) {
               t->GetFunction());
 }
 
-
-void Verify::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Verify::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   new Verify(env, args.This());
 }
 
-void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
-  Verify* verify;
+void Verify::VerifyInit(const FunctionCallbackInfo<Value> &args)
+{
+  Verify *verify;
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
-  Environment* env = verify->env();
+  Environment *env = verify->env();
 
-  if (args.Length() == 0) {
+  if (args.Length() == 0)
+  {
     return env->ThrowError("Verify type argument is mandatory");
   }
 
@@ -4523,24 +4885,27 @@ void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
   verify->CheckThrow(verify->Init(*verify_type));
 }
 
+void Verify::VerifyUpdate(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Verify* verify;
+  Verify *verify;
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(args[0], "Data");
 
   // Only copy the data if we have to, because it's a string
   Error err;
-  if (args[0]->IsString()) {
+  if (args[0]->IsString())
+  {
     StringBytes::InlineDecoder decoder;
     if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8))
       return;
     err = verify->Update(decoder.out(), decoder.size());
-  } else {
-    char* buf = Buffer::Data(args[0]);
+  }
+  else
+  {
+    char *buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
     err = verify->Update(buf, buflen);
   }
@@ -4548,41 +4913,45 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
   verify->CheckThrow(err);
 }
 
-
-SignBase::Error Verify::VerifyFinal(const char* key_pem,
+SignBase::Error Verify::VerifyFinal(const char *key_pem,
                                     int key_pem_len,
-                                    const char* sig,
+                                    const char *sig,
                                     int siglen,
                                     int padding,
                                     int saltlen,
-                                    bool* verify_result) {
+                                    bool *verify_result)
+{
   if (!mdctx_)
     return kSignNotInitialised;
 
-  EVP_PKEY* pkey = nullptr;
-  BIO* bp = nullptr;
-  X509* x509 = nullptr;
+  EVP_PKEY *pkey = nullptr;
+  BIO *bp = nullptr;
+  X509 *x509 = nullptr;
   bool fatal = true;
   unsigned char m[EVP_MAX_MD_SIZE];
   unsigned int m_len;
   int r = 0;
-  EVP_PKEY_CTX* pkctx = nullptr;
+  EVP_PKEY_CTX *pkctx = nullptr;
 
-  bp = BIO_new_mem_buf(const_cast<char*>(key_pem), key_pem_len);
+  bp = BIO_new_mem_buf(const_cast<char *>(key_pem), key_pem_len);
   if (bp == nullptr)
     goto exit;
 
   // Check if this is a PKCS#8 or RSA public key before trying as X.509.
   // Split this out into a separate function once we have more than one
   // consumer of public keys.
-  if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+  if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0)
+  {
     pkey = PEM_read_bio_PUBKEY(bp, nullptr, NoPasswordCallback, nullptr);
     if (pkey == nullptr)
       goto exit;
-  } else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
-    RSA* rsa =
+  }
+  else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0)
+  {
+    RSA *rsa =
         PEM_read_bio_RSAPublicKey(bp, nullptr, PasswordCallback, nullptr);
-    if (rsa) {
+    if (rsa)
+    {
       pkey = EVP_PKEY_new();
       if (pkey)
         EVP_PKEY_set1_RSA(pkey, rsa);
@@ -4590,7 +4959,9 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
     }
     if (pkey == nullptr)
       goto exit;
-  } else {
+  }
+  else
+  {
     // X.509 fallback
     x509 = PEM_read_bio_X509(bp, nullptr, NoPasswordCallback, nullptr);
     if (x509 == nullptr)
@@ -4601,7 +4972,8 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
       goto exit;
   }
 
-  if (!EVP_DigestFinal_ex(mdctx_, m, &m_len)) {
+  if (!EVP_DigestFinal_ex(mdctx_, m, &m_len))
+  {
     goto exit;
   }
 
@@ -4617,15 +4989,15 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
   if (EVP_PKEY_CTX_set_signature_md(pkctx, EVP_MD_CTX_md(mdctx_)) <= 0)
     goto err;
   r = EVP_PKEY_verify(pkctx,
-                      reinterpret_cast<const unsigned char*>(sig),
+                      reinterpret_cast<const unsigned char *>(sig),
                       siglen,
                       m,
                       m_len);
 
- err:
+err:
   EVP_PKEY_CTX_free(pkctx);
 
- exit:
+exit:
   if (pkey != nullptr)
     EVP_PKEY_free(pkey);
   if (bp != nullptr)
@@ -4643,22 +5015,22 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
   return kSignOk;
 }
 
-
-void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void Verify::VerifyFinal(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   ClearErrorOnReturn clear_error_on_return;
 
-  Verify* verify;
+  Verify *verify;
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Key");
-  char* kbuf = Buffer::Data(args[0]);
+  char *kbuf = Buffer::Data(args[0]);
   ssize_t klen = Buffer::Length(args[0]);
 
   THROW_AND_RETURN_IF_NOT_STRING_OR_BUFFER(args[1], "Hash");
 
-  char* hbuf = Buffer::Data(args[1]);
+  char *hbuf = Buffer::Data(args[1]);
   ssize_t hlen = Buffer::Length(args[1]);
 
   CHECK(args[2]->IsInt32());
@@ -4679,39 +5051,43 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(verify_result);
 }
 
-
 template <PublicKeyCipher::Operation operation,
           PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
           PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
-bool PublicKeyCipher::Cipher(const char* key_pem,
+bool PublicKeyCipher::Cipher(const char *key_pem,
                              int key_pem_len,
-                             const char* passphrase,
+                             const char *passphrase,
                              int padding,
-                             const unsigned char* data,
+                             const unsigned char *data,
                              int len,
-                             unsigned char** out,
-                             size_t* out_len) {
-  EVP_PKEY* pkey = nullptr;
-  EVP_PKEY_CTX* ctx = nullptr;
-  BIO* bp = nullptr;
-  X509* x509 = nullptr;
+                             unsigned char **out,
+                             size_t *out_len)
+{
+  EVP_PKEY *pkey = nullptr;
+  EVP_PKEY_CTX *ctx = nullptr;
+  BIO *bp = nullptr;
+  X509 *x509 = nullptr;
   bool fatal = true;
 
-  bp = BIO_new_mem_buf(const_cast<char*>(key_pem), key_pem_len);
+  bp = BIO_new_mem_buf(const_cast<char *>(key_pem), key_pem_len);
   if (bp == nullptr)
     goto exit;
 
   // Check if this is a PKCS#8 or RSA public key before trying as X.509 and
   // private key.
   if (operation == kPublic &&
-      strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+      strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0)
+  {
     pkey = PEM_read_bio_PUBKEY(bp, nullptr, nullptr, nullptr);
     if (pkey == nullptr)
       goto exit;
-  } else if (operation == kPublic &&
-             strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
-    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, nullptr, nullptr, nullptr);
-    if (rsa) {
+  }
+  else if (operation == kPublic &&
+           strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0)
+  {
+    RSA *rsa = PEM_read_bio_RSAPublicKey(bp, nullptr, nullptr, nullptr);
+    if (rsa)
+    {
       pkey = EVP_PKEY_new();
       if (pkey)
         EVP_PKEY_set1_RSA(pkey, rsa);
@@ -4719,8 +5095,10 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
     }
     if (pkey == nullptr)
       goto exit;
-  } else if (operation == kPublic &&
-             strncmp(key_pem, CERTIFICATE_PFX, CERTIFICATE_PFX_LEN) == 0) {
+  }
+  else if (operation == kPublic &&
+           strncmp(key_pem, CERTIFICATE_PFX, CERTIFICATE_PFX_LEN) == 0)
+  {
     x509 = PEM_read_bio_X509(bp, nullptr, NoPasswordCallback, nullptr);
     if (x509 == nullptr)
       goto exit;
@@ -4728,11 +5106,13 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
     pkey = X509_get_pubkey(x509);
     if (pkey == nullptr)
       goto exit;
-  } else {
+  }
+  else
+  {
     pkey = PEM_read_bio_PrivateKey(bp,
                                    nullptr,
                                    PasswordCallback,
-                                   const_cast<char*>(passphrase));
+                                   const_cast<char *>(passphrase));
     if (pkey == nullptr)
       goto exit;
   }
@@ -4755,7 +5135,7 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
 
   fatal = false;
 
- exit:
+exit:
   if (x509 != nullptr)
     X509_free(x509);
   if (pkey != nullptr)
@@ -4768,26 +5148,26 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
   return !fatal;
 }
 
-
 template <PublicKeyCipher::Operation operation,
           PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
           PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
-void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Key");
-  char* kbuf = Buffer::Data(args[0]);
+  char *kbuf = Buffer::Data(args[0]);
   ssize_t klen = Buffer::Length(args[0]);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[1], "Data");
-  char* buf = Buffer::Data(args[1]);
+  char *buf = Buffer::Data(args[1]);
   ssize_t len = Buffer::Length(args[1]);
 
   int padding = args[2]->Uint32Value();
 
   String::Utf8Value passphrase(args[3]);
 
-  unsigned char* out_value = nullptr;
+  unsigned char *out_value = nullptr;
   size_t out_len = 0;
 
   ClearErrorOnReturn clear_error_on_return;
@@ -4797,29 +5177,31 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
       klen,
       args.Length() >= 3 && !args[2]->IsNull() ? *passphrase : nullptr,
       padding,
-      reinterpret_cast<const unsigned char*>(buf),
+      reinterpret_cast<const unsigned char *>(buf),
       len,
       &out_value,
       &out_len);
 
-  if (out_len == 0 || !r) {
+  if (out_len == 0 || !r)
+  {
     free(out_value);
     out_value = nullptr;
     out_len = 0;
-    if (!r) {
+    if (!r)
+    {
       return ThrowCryptoError(env,
-        ERR_get_error());
+                              ERR_get_error());
     }
   }
 
   Local<Object> vbuf =
-      Buffer::New(env, reinterpret_cast<char*>(out_value), out_len)
-      .ToLocalChecked();
+      Buffer::New(env, reinterpret_cast<char *>(out_value), out_len)
+          .ToLocalChecked();
   args.GetReturnValue().Set(vbuf);
 }
 
-
-void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
+void DiffieHellman::Initialize(Environment *env, Local<Object> target)
+{
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   const PropertyAttribute attributes =
@@ -4871,8 +5253,8 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
               t2->GetFunction());
 }
 
-
-bool DiffieHellman::Init(int primeLength, int g) {
+bool DiffieHellman::Init(int primeLength, int g)
+{
   dh = DH_new();
   if (!DH_generate_parameters_ex(dh, primeLength, g, 0))
     return false;
@@ -4883,12 +5265,14 @@ bool DiffieHellman::Init(int primeLength, int g) {
   return true;
 }
 
-bool DiffieHellman::Init(const char* p, int p_len, int g) {
+bool DiffieHellman::Init(const char *p, int p_len, int g)
+{
   dh = DH_new();
-  BIGNUM* bn_p = BN_bin2bn(reinterpret_cast<const unsigned char*>(p), p_len, nullptr);
-  BIGNUM* bn_g = BN_new();
+  BIGNUM *bn_p = BN_bin2bn(reinterpret_cast<const unsigned char *>(p), p_len, nullptr);
+  BIGNUM *bn_g = BN_new();
   if (!BN_set_word(bn_g, g) ||
-      !DH_set0_pqg(dh, bn_p, nullptr, bn_g)) {
+      !DH_set0_pqg(dh, bn_p, nullptr, bn_g))
+  {
     BN_free(bn_p);
     BN_free(bn_g);
     return false;
@@ -4900,12 +5284,13 @@ bool DiffieHellman::Init(const char* p, int p_len, int g) {
   return true;
 }
 
-
-bool DiffieHellman::Init(const char* p, int p_len, const char* g, int g_len) {
+bool DiffieHellman::Init(const char *p, int p_len, const char *g, int g_len)
+{
   dh = DH_new();
-  BIGNUM *bn_p = BN_bin2bn(reinterpret_cast<const unsigned char*>(p), p_len, 0);
-  BIGNUM *bn_g = BN_bin2bn(reinterpret_cast<const unsigned char*>(g), g_len, 0);
-  if (!DH_set0_pqg(dh, bn_p, NULL, bn_g)) {
+  BIGNUM *bn_p = BN_bin2bn(reinterpret_cast<const unsigned char *>(p), p_len, 0);
+  BIGNUM *bn_g = BN_bin2bn(reinterpret_cast<const unsigned char *>(g), g_len, 0);
+  if (!DH_set0_pqg(dh, bn_p, NULL, bn_g))
+  {
     BN_free(bn_p);
     BN_free(bn_g);
     return false;
@@ -4916,15 +5301,15 @@ bool DiffieHellman::Init(const char* p, int p_len, const char* g, int g_len) {
   initialised_ = true;
   return true;
 }
-
-
 
 void DiffieHellman::DiffieHellmanGroup(
-    const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  DiffieHellman* diffieHellman = new DiffieHellman(env, args.This());
+    const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+  DiffieHellman *diffieHellman = new DiffieHellman(env, args.This());
 
-  if (args.Length() != 1) {
+  if (args.Length() != 1)
+  {
     return env->ThrowError("Group name argument is mandatory");
   }
 
@@ -4933,8 +5318,9 @@ void DiffieHellman::DiffieHellmanGroup(
   bool initialized = false;
 
   const node::Utf8Value group_name(env->isolate(), args[0]);
-  for (size_t i = 0; i < arraysize(modp_groups); ++i) {
-    const modp_group* it = modp_groups + i;
+  for (size_t i = 0; i < arraysize(modp_groups); ++i)
+  {
+    const modp_group *it = modp_groups + i;
 
     if (!StringEqualNoCase(*group_name, it->name))
       continue;
@@ -4951,25 +5337,33 @@ void DiffieHellman::DiffieHellmanGroup(
   env->ThrowError("Unknown group");
 }
 
-
-void DiffieHellman::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  DiffieHellman* diffieHellman =
+void DiffieHellman::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+  DiffieHellman *diffieHellman =
       new DiffieHellman(env, args.This());
   bool initialized = false;
 
-  if (args.Length() == 2) {
-    if (args[0]->IsInt32()) {
-      if (args[1]->IsInt32()) {
+  if (args.Length() == 2)
+  {
+    if (args[0]->IsInt32())
+    {
+      if (args[1]->IsInt32())
+      {
         initialized = diffieHellman->Init(args[0]->Int32Value(),
                                           args[1]->Int32Value());
       }
-    } else {
-      if (args[1]->IsInt32()) {
+    }
+    else
+    {
+      if (args[1]->IsInt32())
+      {
         initialized = diffieHellman->Init(Buffer::Data(args[0]),
                                           Buffer::Length(args[0]),
                                           args[1]->Int32Value());
-      } else {
+      }
+      else
+      {
         initialized = diffieHellman->Init(Buffer::Data(args[0]),
                                           Buffer::Length(args[0]),
                                           Buffer::Data(args[1]),
@@ -4978,120 +5372,140 @@ void DiffieHellman::New(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
-  if (!initialized) {
+  if (!initialized)
+  {
     return ThrowCryptoError(env, ERR_get_error(), "Initialization failed");
   }
 }
 
+void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  DiffieHellman* diffieHellman;
+  DiffieHellman *diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
-  if (!diffieHellman->initialised_) {
+  if (!diffieHellman->initialised_)
+  {
     return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
   }
 
-  if (!DH_generate_key(diffieHellman->dh)) {
+  if (!DH_generate_key(diffieHellman->dh))
+  {
     return ThrowCryptoError(env, ERR_get_error(), "Key generation failed");
   }
-  
+
   const BIGNUM *pub_key;
   DH_get0_key(diffieHellman->dh, &pub_key, NULL);
   size_t size = BN_num_bytes(pub_key);
-  char* data = Malloc(size);
-  BN_bn2bin(pub_key, reinterpret_cast<unsigned char*>(data));
+  char *data = Malloc(size);
+  BN_bn2bin(pub_key, reinterpret_cast<unsigned char *>(data));
 
   args.GetReturnValue().Set(Buffer::New(env, data, size).ToLocalChecked());
 }
 
-void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const BIGNUM** num) {
-  DiffieHellman* diffieHellman;
+void DiffieHellman::GetFieldValue(const v8::FunctionCallbackInfo<v8::Value> &args, FieldType field, const BIGNUM **num)
+{
+  DiffieHellman *diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
-  if(field == FieldType::PRIME) {
+  if (field == FieldType::PRIME)
+  {
     DH_get0_pqg(diffieHellman->dh, num, NULL, NULL);
-  }else if(field == FieldType::GENERATOR) {
+  }
+  else if (field == FieldType::GENERATOR)
+  {
     DH_get0_pqg(diffieHellman->dh, NULL, NULL, num);
-  }else if(field == FieldType::PUBLIC_KEY) {
+  }
+  else if (field == FieldType::PUBLIC_KEY)
+  {
     DH_get0_key(diffieHellman->dh, num, NULL);
-  }else if(field == FieldType::PRIVATE_KEY) {
+  }
+  else if (field == FieldType::PRIVATE_KEY)
+  {
     DH_get0_key(diffieHellman->dh, NULL, num);
   }
 }
 
-void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args, FieldType field, const char* err_if_null) {
-  Environment* env = Environment::GetCurrent(args);
+void DiffieHellman::GetField(const FunctionCallbackInfo<Value> &args, FieldType field, const char *err_if_null)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  DiffieHellman* diffieHellman;
+  DiffieHellman *diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
-  if (!diffieHellman->initialised_) return env->ThrowError("Not initialized");
+  if (!diffieHellman->initialised_)
+    return env->ThrowError("Not initialized");
 
-  const BIGNUM* num;
+  const BIGNUM *num;
   GetFieldValue(args, field, &num);
-  if (num == nullptr) return env->ThrowError(err_if_null);
+  if (num == nullptr)
+    return env->ThrowError(err_if_null);
 
   size_t size = BN_num_bytes(num);
-  char* data = Malloc(size);
-  BN_bn2bin(num, reinterpret_cast<unsigned char*>(data));
+  char *data = Malloc(size);
+  BN_bn2bin(num, reinterpret_cast<unsigned char *>(data));
   args.GetReturnValue().Set(Buffer::New(env, data, size).ToLocalChecked());
 }
 
-void DiffieHellman::GetPrime(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::GetPrime(const FunctionCallbackInfo<Value> &args)
+{
   GetField(args, FieldType::PRIME, "p is null");
 }
 
-
-void DiffieHellman::GetGenerator(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::GetGenerator(const FunctionCallbackInfo<Value> &args)
+{
   GetField(args, FieldType::GENERATOR, "g is null");
 }
 
-
-void DiffieHellman::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::GetPublicKey(const FunctionCallbackInfo<Value> &args)
+{
   GetField(args, FieldType::PUBLIC_KEY,
            "No public key - did you forget to generate one?");
 }
 
-
-void DiffieHellman::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::GetPrivateKey(const FunctionCallbackInfo<Value> &args)
+{
   GetField(args, FieldType::PRIVATE_KEY,
            "No private key - did you forget to generate one?");
 }
 
+void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  DiffieHellman* diffieHellman;
+  DiffieHellman *diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
-  if (!diffieHellman->initialised_) {
+  if (!diffieHellman->initialised_)
+  {
     return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
   }
 
   ClearErrorOnReturn clear_error_on_return;
-  BIGNUM* key = nullptr;
+  BIGNUM *key = nullptr;
 
-  if (args.Length() == 0) {
+  if (args.Length() == 0)
+  {
     return env->ThrowError("Other party's public key argument is mandatory");
-  } else {
+  }
+  else
+  {
     THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Other party's public key");
     key = BN_bin2bn(
-        reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
+        reinterpret_cast<unsigned char *>(Buffer::Data(args[0])),
         Buffer::Length(args[0]),
         0);
   }
 
   int dataSize = DH_size(diffieHellman->dh);
-  char* data = Malloc(dataSize);
+  char *data = Malloc(dataSize);
 
-  int size = DH_compute_key(reinterpret_cast<unsigned char*>(data),
+  int size = DH_compute_key(reinterpret_cast<unsigned char *>(data),
                             key,
                             diffieHellman->dh);
 
-  if (size == -1) {
+  if (size == -1)
+  {
     int checkResult;
     int checked;
 
@@ -5099,17 +5513,27 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
     BN_free(key);
     free(data);
 
-    if (!checked) {
+    if (!checked)
+    {
       return ThrowCryptoError(env, ERR_get_error(), "Invalid Key");
-    } else if (checkResult) {
-      if (checkResult & DH_CHECK_PUBKEY_TOO_SMALL) {
+    }
+    else if (checkResult)
+    {
+      if (checkResult & DH_CHECK_PUBKEY_TOO_SMALL)
+      {
         return env->ThrowError("Supplied key is too small");
-      } else if (checkResult & DH_CHECK_PUBKEY_TOO_LARGE) {
+      }
+      else if (checkResult & DH_CHECK_PUBKEY_TOO_LARGE)
+      {
         return env->ThrowError("Supplied key is too large");
-      } else {
+      }
+      else
+      {
         return env->ThrowError("Invalid key");
       }
-    } else {
+    }
+    else
+    {
       return env->ThrowError("Invalid key");
     }
 
@@ -5123,7 +5547,8 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   // DH_compute_key returns number of bytes in a remainder of exponent, which
   // may have less bytes than a prime number. Therefore add 0-padding to the
   // allocated buffer.
-  if (size != dataSize) {
+  if (size != dataSize)
+  {
     CHECK(dataSize > size);
     memmove(data + dataSize - size, data, size);
     memset(data, 0, dataSize - size);
@@ -5133,56 +5558,63 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rc);
 }
 
+void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value> &args, FieldType field, const char *what)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<v8::Value>& args, FieldType field, const char* what) {
-  Environment* env = Environment::GetCurrent(args);
-
-  DiffieHellman* dh;
+  DiffieHellman *dh;
   ASSIGN_OR_RETURN_UNWRAP(&dh, args.Holder());
-  if (!dh->initialised_) return env->ThrowError("Not initialized");
+  if (!dh->initialised_)
+    return env->ThrowError("Not initialized");
 
   char errmsg[64];
 
-  if (args.Length() == 0) {
+  if (args.Length() == 0)
+  {
     snprintf(errmsg, sizeof(errmsg), "%s argument is mandatory", what);
     return env->ThrowError(errmsg);
   }
 
-  if (!Buffer::HasInstance(args[0])) {
+  if (!Buffer::HasInstance(args[0]))
+  {
     snprintf(errmsg, sizeof(errmsg), "%s must be a buffer", what);
     return env->ThrowTypeError(errmsg);
   }
 
-  BIGNUM* num = BN_bin2bn(reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
-                   Buffer::Length(args[0]), nullptr);
+  BIGNUM *num = BN_bin2bn(reinterpret_cast<unsigned char *>(Buffer::Data(args[0])),
+                          Buffer::Length(args[0]), nullptr);
   SetKeyValue(dh, field, num);
   CHECK_NE(num, nullptr);
 }
 
-void DiffieHellman::SetKeyValue(DiffieHellman* dh, FieldType field, BIGNUM* num) {
-  if(field == FieldType::PUBLIC_KEY) {
+void DiffieHellman::SetKeyValue(DiffieHellman *dh, FieldType field, BIGNUM *num)
+{
+  if (field == FieldType::PUBLIC_KEY)
+  {
     DH_set0_key(dh->dh, num, NULL);
-  }else if (field == FieldType::PRIVATE_KEY) {
+  }
+  else if (field == FieldType::PRIVATE_KEY)
+  {
     DH_set0_key(dh->dh, NULL, num);
   }
 }
 
-
-void DiffieHellman::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::SetPublicKey(const FunctionCallbackInfo<Value> &args)
+{
   SetKey(args, FieldType::PUBLIC_KEY, "Public key");
 }
 
-
-void DiffieHellman::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
+void DiffieHellman::SetPrivateKey(const FunctionCallbackInfo<Value> &args)
+{
   SetKey(args, FieldType::PRIVATE_KEY, "Private key");
 }
 
-
 void DiffieHellman::VerifyErrorGetter(Local<String> property,
-                                      const PropertyCallbackInfo<Value>& args) {
+                                      const PropertyCallbackInfo<Value> &args)
+{
   HandleScope scope(args.GetIsolate());
 
-  DiffieHellman* diffieHellman;
+  DiffieHellman *diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
 
   if (!diffieHellman->initialised_)
@@ -5192,8 +5624,8 @@ void DiffieHellman::VerifyErrorGetter(Local<String> property,
   args.GetReturnValue().Set(diffieHellman->verifyError_);
 }
 
-
-bool DiffieHellman::VerifyContext() {
+bool DiffieHellman::VerifyContext()
+{
   int codes;
   if (!DH_check(dh, &codes))
     return false;
@@ -5201,8 +5633,8 @@ bool DiffieHellman::VerifyContext() {
   return true;
 }
 
-
-void ECDH::Initialize(Environment* env, Local<Object> target) {
+void ECDH::Initialize(Environment *env, Local<Object> target)
+{
   HandleScope scope(env->isolate());
 
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
@@ -5220,9 +5652,9 @@ void ECDH::Initialize(Environment* env, Local<Object> target) {
               t->GetFunction());
 }
 
-
-void ECDH::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void ECDH::New(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   MarkPopErrorOnReturn mark_pop_error_on_return;
 
@@ -5234,31 +5666,32 @@ void ECDH::New(const FunctionCallbackInfo<Value>& args) {
   if (nid == NID_undef)
     return env->ThrowTypeError("First argument should be a valid curve name");
 
-  EC_KEY* key = EC_KEY_new_by_curve_name(nid);
+  EC_KEY *key = EC_KEY_new_by_curve_name(nid);
   if (key == nullptr)
     return env->ThrowError("Failed to create EC_KEY using curve name");
 
   new ECDH(env, args.This(), key);
 }
 
+void ECDH::GenerateKeys(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void ECDH::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
   if (!EC_KEY_generate_key(ecdh->key_))
     return env->ThrowError("Failed to generate EC_KEY");
 }
 
-
-EC_POINT* ECDH::BufferToPoint(char* data, size_t len) {
-  EC_POINT* pub;
+EC_POINT *ECDH::BufferToPoint(char *data, size_t len)
+{
+  EC_POINT *pub;
   int r;
 
   pub = EC_POINT_new(group_);
-  if (pub == nullptr) {
+  if (pub == nullptr)
+  {
     env()->ThrowError("Failed to allocate EC_POINT for a public key");
     return nullptr;
   }
@@ -5266,28 +5699,29 @@ EC_POINT* ECDH::BufferToPoint(char* data, size_t len) {
   r = EC_POINT_oct2point(
       group_,
       pub,
-      reinterpret_cast<unsigned char*>(data),
+      reinterpret_cast<unsigned char *>(data),
       len,
       nullptr);
-  if (!r) {
+  if (!r)
+  {
     env()->ThrowError("Failed to translate Buffer to a EC_POINT");
     goto fatal;
   }
 
   return pub;
 
- fatal:
+fatal:
   EC_POINT_free(pub);
   return nullptr;
 }
 
-
-void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void ECDH::ComputeSecret(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Data");
 
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
   MarkPopErrorOnReturn mark_pop_error_on_return;
@@ -5295,7 +5729,7 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   if (!ecdh->IsKeyPairValid())
     return env->ThrowError("Invalid key pair");
 
-  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0]),
+  EC_POINT *pub = ecdh->BufferToPoint(Buffer::Data(args[0]),
                                       Buffer::Length(args[0]));
   if (pub == nullptr)
     return;
@@ -5303,11 +5737,12 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   // NOTE: field_size is in bits
   int field_size = EC_GROUP_get_degree(ecdh->group_);
   size_t out_len = (field_size + 7) / 8;
-  char* out = node::Malloc(out_len);
+  char *out = node::Malloc(out_len);
 
   int r = ECDH_compute_key(out, out_len, pub, ecdh->key_, nullptr);
   EC_POINT_free(pub);
-  if (!r) {
+  if (!r)
+  {
     free(out);
     return env->ThrowError("Failed to compute ECDH key");
   }
@@ -5316,17 +5751,17 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(buf);
 }
 
-
-void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void ECDH::GetPublicKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   // Conversion form
   CHECK_EQ(args.Length(), 1);
 
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
-  const EC_POINT* pub = EC_KEY_get0_public_key(ecdh->key_);
+  const EC_POINT *pub = EC_KEY_get0_public_key(ecdh->key_);
   if (pub == nullptr)
     return env->ThrowError("Failed to get ECDH public key");
 
@@ -5338,60 +5773,63 @@ void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (size == 0)
     return env->ThrowError("Failed to get public key length");
 
-  unsigned char* out = node::Malloc<unsigned char>(size);
+  unsigned char *out = node::Malloc<unsigned char>(size);
 
   int r = EC_POINT_point2oct(ecdh->group_, pub, form, out, size, nullptr);
-  if (r != size) {
+  if (r != size)
+  {
     free(out);
     return env->ThrowError("Failed to get public key");
   }
 
   Local<Object> buf =
-      Buffer::New(env, reinterpret_cast<char*>(out), size).ToLocalChecked();
+      Buffer::New(env, reinterpret_cast<char *>(out), size).ToLocalChecked();
   args.GetReturnValue().Set(buf);
 }
 
+void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
-  const BIGNUM* b = EC_KEY_get0_private_key(ecdh->key_);
+  const BIGNUM *b = EC_KEY_get0_private_key(ecdh->key_);
   if (b == nullptr)
     return env->ThrowError("Failed to get ECDH private key");
 
   int size = BN_num_bytes(b);
-  unsigned char* out = node::Malloc<unsigned char>(size);
+  unsigned char *out = node::Malloc<unsigned char>(size);
 
-  if (size != BN_bn2bin(b, out)) {
+  if (size != BN_bn2bin(b, out))
+  {
     free(out);
     return env->ThrowError("Failed to convert ECDH private key to Buffer");
   }
 
   Local<Object> buf =
-      Buffer::New(env, reinterpret_cast<char*>(out), size).ToLocalChecked();
+      Buffer::New(env, reinterpret_cast<char *>(out), size).ToLocalChecked();
   args.GetReturnValue().Set(buf);
 }
 
+void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Private key");
 
-  BIGNUM* priv = BN_bin2bn(
-      reinterpret_cast<unsigned char*>(Buffer::Data(args[0].As<Object>())),
+  BIGNUM *priv = BN_bin2bn(
+      reinterpret_cast<unsigned char *>(Buffer::Data(args[0].As<Object>())),
       Buffer::Length(args[0].As<Object>()),
       nullptr);
   if (priv == nullptr)
     return env->ThrowError("Failed to convert Buffer to BN");
 
-  if (!ecdh->IsKeyValidForCurve(priv)) {
+  if (!ecdh->IsKeyValidForCurve(priv))
+  {
     BN_free(priv);
     return env->ThrowError("Private key is not valid for specified curve.");
   }
@@ -5399,7 +5837,8 @@ void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   int result = EC_KEY_set_private_key(ecdh->key_, priv);
   BN_free(priv);
 
-  if (!result) {
+  if (!result)
+  {
     return env->ThrowError("Failed to convert BN to a private key");
   }
 
@@ -5408,20 +5847,22 @@ void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   EC_KEY_set_public_key(ecdh->key_, nullptr);
 
   MarkPopErrorOnReturn mark_pop_error_on_return;
-  (void) &mark_pop_error_on_return;  // Silence compiler warning.
+  (void)&mark_pop_error_on_return; // Silence compiler warning.
 
-  const BIGNUM* priv_key = EC_KEY_get0_private_key(ecdh->key_);
+  const BIGNUM *priv_key = EC_KEY_get0_private_key(ecdh->key_);
   CHECK_NE(priv_key, nullptr);
 
-  EC_POINT* pub = EC_POINT_new(ecdh->group_);
+  EC_POINT *pub = EC_POINT_new(ecdh->group_);
   CHECK_NE(pub, nullptr);
 
-  if (!EC_POINT_mul(ecdh->group_, pub, priv_key, nullptr, nullptr, nullptr)) {
+  if (!EC_POINT_mul(ecdh->group_, pub, priv_key, nullptr, nullptr, nullptr))
+  {
     EC_POINT_free(pub);
     return env->ThrowError("Failed to generate ECDH public key");
   }
 
-  if (!EC_KEY_set_public_key(ecdh->key_, pub)) {
+  if (!EC_KEY_set_public_key(ecdh->key_, pub))
+  {
     EC_POINT_free(pub);
     return env->ThrowError("Failed to set generated public key");
   }
@@ -5429,18 +5870,18 @@ void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   EC_POINT_free(pub);
 }
 
+void ECDH::SetPublicKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void ECDH::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  ECDH* ecdh;
+  ECDH *ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Public key");
 
   MarkPopErrorOnReturn mark_pop_error_on_return;
 
-  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0].As<Object>()),
+  EC_POINT *pub = ecdh->BufferToPoint(Buffer::Data(args[0].As<Object>()),
                                       Buffer::Length(args[0].As<Object>()));
   if (pub == nullptr)
     return env->ThrowError("Failed to convert Buffer to EC_POINT");
@@ -5451,16 +5892,17 @@ void ECDH::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Failed to set EC_POINT as the public key");
 }
 
-
-bool ECDH::IsKeyValidForCurve(const BIGNUM* private_key) {
+bool ECDH::IsKeyValidForCurve(const BIGNUM *private_key)
+{
   CHECK_NE(group_, nullptr);
   CHECK_NE(private_key, nullptr);
   // Private keys must be in the range [1, n-1].
   // Ref: Section 3.2.1 - http://www.secg.org/sec1-v2.pdf
-  if (BN_cmp(private_key, BN_value_one()) < 0) {
+  if (BN_cmp(private_key, BN_value_one()) < 0)
+  {
     return false;
   }
-  BIGNUM* order = BN_new();
+  BIGNUM *order = BN_new();
   CHECK_NE(order, nullptr);
   bool result = EC_GROUP_get_order(group_, order, nullptr) &&
                 BN_cmp(private_key, order) < 0;
@@ -5468,23 +5910,23 @@ bool ECDH::IsKeyValidForCurve(const BIGNUM* private_key) {
   return result;
 }
 
-
-bool ECDH::IsKeyPairValid() {
+bool ECDH::IsKeyPairValid()
+{
   MarkPopErrorOnReturn mark_pop_error_on_return;
-  (void) &mark_pop_error_on_return;  // Silence compiler warning.
+  (void)&mark_pop_error_on_return; // Silence compiler warning.
   return 1 == EC_KEY_check_key(key_);
 }
 
-
-class PBKDF2Request : public AsyncWrap {
- public:
-  PBKDF2Request(Environment* env,
+class PBKDF2Request : public AsyncWrap
+{
+public:
+  PBKDF2Request(Environment *env,
                 Local<Object> object,
-                const EVP_MD* digest,
+                const EVP_MD *digest,
                 int passlen,
-                char* pass,
+                char *pass,
                 int saltlen,
-                char* salt,
+                char *salt,
                 int iter,
                 int keylen)
       : AsyncWrap(env, object, AsyncWrap::PROVIDER_PBKDF2REQUEST),
@@ -5496,11 +5938,13 @@ class PBKDF2Request : public AsyncWrap {
         salt_(salt),
         keylen_(keylen),
         key_(node::Malloc(keylen)),
-        iter_(iter) {
+        iter_(iter)
+  {
     Wrap(object, this);
   }
 
-  ~PBKDF2Request() override {
+  ~PBKDF2Request() override
+  {
     free(pass_);
     pass_ = nullptr;
     passlen_ = 0;
@@ -5517,63 +5961,67 @@ class PBKDF2Request : public AsyncWrap {
     persistent().Reset();
   }
 
-  uv_work_t* work_req() {
+  uv_work_t *work_req()
+  {
     return &work_req_;
   }
 
   size_t self_size() const override { return sizeof(*this); }
 
-  static void Work(uv_work_t* work_req);
+  static void Work(uv_work_t *work_req);
   void Work();
 
-  static void After(uv_work_t* work_req, int status);
+  static void After(uv_work_t *work_req, int status);
   void After(Local<Value> (*argv)[2]);
   void After();
 
- private:
+private:
   uv_work_t work_req_;
-  const EVP_MD* digest_;
+  const EVP_MD *digest_;
   bool success_;
   int passlen_;
-  char* pass_;
+  char *pass_;
   int saltlen_;
-  char* salt_;
+  char *salt_;
   int keylen_;
-  char* key_;
+  char *key_;
   int iter_;
 };
 
-
-void PBKDF2Request::Work() {
+void PBKDF2Request::Work()
+{
   success_ =
       PKCS5_PBKDF2_HMAC(
-          pass_, passlen_, reinterpret_cast<unsigned char*>(salt_), saltlen_,
-          iter_, digest_, keylen_, reinterpret_cast<unsigned char*>(key_));
+          pass_, passlen_, reinterpret_cast<unsigned char *>(salt_), saltlen_,
+          iter_, digest_, keylen_, reinterpret_cast<unsigned char *>(key_));
   OPENSSL_cleanse(pass_, passlen_);
   OPENSSL_cleanse(salt_, saltlen_);
 }
 
-
-void PBKDF2Request::Work(uv_work_t* work_req) {
-  PBKDF2Request* req = ContainerOf(&PBKDF2Request::work_req_, work_req);
+void PBKDF2Request::Work(uv_work_t *work_req)
+{
+  PBKDF2Request *req = ContainerOf(&PBKDF2Request::work_req_, work_req);
   req->Work();
 }
 
-
-void PBKDF2Request::After(Local<Value> (*argv)[2]) {
-  if (success_) {
+void PBKDF2Request::After(Local<Value> (*argv)[2])
+{
+  if (success_)
+  {
     (*argv)[0] = Undefined(env()->isolate());
     (*argv)[1] = Buffer::New(env(), key_, keylen_).ToLocalChecked();
     key_ = nullptr;
     keylen_ = 0;
-  } else {
+  }
+  else
+  {
     (*argv)[0] = Exception::Error(env()->pbkdf2_error_string());
     (*argv)[1] = Undefined(env()->isolate());
   }
 }
 
-
-void PBKDF2Request::After() {
+void PBKDF2Request::After()
+{
   HandleScope handle_scope(env()->isolate());
   Context::Scope context_scope(env()->context());
   Local<Value> argv[2];
@@ -5581,38 +6029,40 @@ void PBKDF2Request::After() {
   MakeCallback(env()->ondone_string(), arraysize(argv), argv);
 }
 
-
-void PBKDF2Request::After(uv_work_t* work_req, int status) {
+void PBKDF2Request::After(uv_work_t *work_req, int status)
+{
   CHECK_EQ(status, 0);
-  PBKDF2Request* req = ContainerOf(&PBKDF2Request::work_req_, work_req);
+  PBKDF2Request *req = ContainerOf(&PBKDF2Request::work_req_, work_req);
   req->After();
   delete req;
 }
 
+void PBKDF2(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void PBKDF2(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  const EVP_MD* digest = nullptr;
-  const char* type_error = nullptr;
-  char* pass = nullptr;
-  char* salt = nullptr;
+  const EVP_MD *digest = nullptr;
+  const char *type_error = nullptr;
+  char *pass = nullptr;
+  char *salt = nullptr;
   int passlen = -1;
   int saltlen = -1;
   double raw_keylen = -1;
   int keylen = -1;
   int iter = -1;
-  PBKDF2Request* req = nullptr;
+  PBKDF2Request *req = nullptr;
   Local<Object> obj;
 
-  if (args.Length() != 5 && args.Length() != 6) {
+  if (args.Length() != 5 && args.Length() != 6)
+  {
     type_error = "Bad parameter";
     goto err;
   }
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "Pass phrase");
   passlen = Buffer::Length(args[0]);
-  if (passlen < 0) {
+  if (passlen < 0)
+  {
     type_error = "Bad password";
     goto err;
   }
@@ -5623,7 +6073,8 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   memcpy(pass, Buffer::Data(args[0]), passlen);
 
   saltlen = Buffer::Length(args[1]);
-  if (saltlen < 0) {
+  if (saltlen < 0)
+  {
     type_error = "Bad salt";
     goto err;
   }
@@ -5631,46 +6082,52 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   salt = node::Malloc(saltlen);
   memcpy(salt, Buffer::Data(args[1]), saltlen);
 
-  if (!args[2]->IsNumber()) {
+  if (!args[2]->IsNumber())
+  {
     type_error = "Iterations not a number";
     goto err;
   }
 
   iter = args[2]->Int32Value();
-  if (iter < 0) {
+  if (iter < 0)
+  {
     type_error = "Bad iterations";
     goto err;
   }
 
-  if (!args[3]->IsNumber()) {
+  if (!args[3]->IsNumber())
+  {
     type_error = "Key length not a number";
     goto err;
   }
 
   raw_keylen = args[3]->NumberValue();
   if (raw_keylen < 0.0 || isnan(raw_keylen) || isinf(raw_keylen) ||
-      raw_keylen > INT_MAX) {
+      raw_keylen > INT_MAX)
+  {
     type_error = "Bad key length";
     goto err;
   }
 
   keylen = static_cast<int>(raw_keylen);
 
-  if (args[4]->IsString()) {
+  if (args[4]->IsString())
+  {
     node::Utf8Value digest_name(env->isolate(), args[4]);
     digest = EVP_get_digestbyname(*digest_name);
-    if (digest == nullptr) {
+    if (digest == nullptr)
+    {
       type_error = "Bad digest name";
       goto err;
     }
   }
 
-  if (digest == nullptr) {
+  if (digest == nullptr)
+  {
     digest = EVP_sha1();
   }
 
-  obj = env->pbkdf2_constructor_template()->
-      NewInstance(env->context()).ToLocalChecked();
+  obj = env->pbkdf2_constructor_template()->NewInstance(env->context()).ToLocalChecked();
   req = new PBKDF2Request(env,
                           obj,
                           digest,
@@ -5681,10 +6138,12 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
                           iter,
                           keylen);
 
-  if (args[5]->IsFunction()) {
+  if (args[5]->IsFunction())
+  {
     obj->Set(env->ondone_string(), args[5]);
 
-    if (env->in_domain()) {
+    if (env->in_domain())
+    {
       obj->Set(env->context(),
                env->domain_string(),
                env->domain_array()->Get(env->context(), 0).ToLocalChecked())
@@ -5695,7 +6154,9 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
                   req->work_req(),
                   PBKDF2Request::Work,
                   PBKDF2Request::After);
-  } else {
+  }
+  else
+  {
     env->PrintSyncTrace();
     req->Work();
     Local<Value> argv[2];
@@ -5709,72 +6170,87 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   }
   return;
 
- err:
+err:
   free(salt);
   free(pass);
   return env->ThrowTypeError(type_error);
 }
 
-
 // Only instantiate within a valid HandleScope.
-class RandomBytesRequest : public AsyncWrap {
- public:
-  enum FreeMode { FREE_DATA, DONT_FREE_DATA };
+class RandomBytesRequest : public AsyncWrap
+{
+public:
+  enum FreeMode
+  {
+    FREE_DATA,
+    DONT_FREE_DATA
+  };
 
-  RandomBytesRequest(Environment* env,
+  RandomBytesRequest(Environment *env,
                      Local<Object> object,
                      size_t size,
-                     char* data,
+                     char *data,
                      FreeMode free_mode)
       : AsyncWrap(env, object, AsyncWrap::PROVIDER_RANDOMBYTESREQUEST),
         error_(0),
         size_(size),
         data_(data),
-        free_mode_(free_mode) {
+        free_mode_(free_mode)
+  {
     Wrap(object, this);
   }
 
-  ~RandomBytesRequest() override {
+  ~RandomBytesRequest() override
+  {
     ClearWrap(object());
     persistent().Reset();
   }
 
-  uv_work_t* work_req() {
+  uv_work_t *work_req()
+  {
     return &work_req_;
   }
 
-  inline size_t size() const {
+  inline size_t size() const
+  {
     return size_;
   }
 
-  inline char* data() const {
+  inline char *data() const
+  {
     return data_;
   }
 
-  inline void set_data(char* data) {
+  inline void set_data(char *data)
+  {
     data_ = data;
   }
 
-  inline void release() {
+  inline void release()
+  {
     size_ = 0;
-    if (free_mode_ == FREE_DATA) {
+    if (free_mode_ == FREE_DATA)
+    {
       free(data_);
       data_ = nullptr;
     }
   }
 
-  inline void return_memory(char** d, size_t* len) {
+  inline void return_memory(char **d, size_t *len)
+  {
     *d = data_;
     data_ = nullptr;
     *len = size_;
     size_ = 0;
   }
 
-  inline unsigned long error() const {  // NOLINT(runtime/int)
+  inline unsigned long error() const
+  { // NOLINT(runtime/int)
     return error_;
   }
 
-  inline void set_error(unsigned long err) {  // NOLINT(runtime/int)
+  inline void set_error(unsigned long err)
+  { // NOLINT(runtime/int)
     error_ = err;
   }
 
@@ -5782,71 +6258,81 @@ class RandomBytesRequest : public AsyncWrap {
 
   uv_work_t work_req_;
 
- private:
-  unsigned long error_;  // NOLINT(runtime/int)
+private:
+  unsigned long error_; // NOLINT(runtime/int)
   size_t size_;
-  char* data_;
+  char *data_;
   const FreeMode free_mode_;
 };
 
-
-void RandomBytesWork(uv_work_t* work_req) {
-  RandomBytesRequest* req =
+void RandomBytesWork(uv_work_t *work_req)
+{
+  RandomBytesRequest *req =
       ContainerOf(&RandomBytesRequest::work_req_, work_req);
 
   // Ensure that OpenSSL's PRNG is properly seeded.
   CheckEntropy();
 
-  const int r = RAND_bytes(reinterpret_cast<unsigned char*>(req->data()),
+  const int r = RAND_bytes(reinterpret_cast<unsigned char *>(req->data()),
                            req->size());
 
   // RAND_bytes() returns 0 on error.
-  if (r == 0) {
-    req->set_error(ERR_get_error());  // NOLINT(runtime/int)
-  } else if (r == -1) {
-    req->set_error(static_cast<unsigned long>(-1));  // NOLINT(runtime/int)
+  if (r == 0)
+  {
+    req->set_error(ERR_get_error()); // NOLINT(runtime/int)
+  }
+  else if (r == -1)
+  {
+    req->set_error(static_cast<unsigned long>(-1)); // NOLINT(runtime/int)
   }
 }
 
-
 // don't call this function without a valid HandleScope
-void RandomBytesCheck(RandomBytesRequest* req, Local<Value> (*argv)[2]) {
-  if (req->error()) {
+void RandomBytesCheck(RandomBytesRequest *req, Local<Value> (*argv)[2])
+{
+  if (req->error())
+  {
     char errmsg[256] = "Operation not supported";
 
-    if (req->error() != static_cast<unsigned long>(-1))  // NOLINT(runtime/int)
+    if (req->error() != static_cast<unsigned long>(-1)) // NOLINT(runtime/int)
       ERR_error_string_n(req->error(), errmsg, sizeof errmsg);
 
     (*argv)[0] = Exception::Error(OneByteString(req->env()->isolate(), errmsg));
     (*argv)[1] = Null(req->env()->isolate());
     req->release();
-  } else {
-    char* data = nullptr;
+  }
+  else
+  {
+    char *data = nullptr;
     size_t size;
     req->return_memory(&data, &size);
     (*argv)[0] = Null(req->env()->isolate());
     Local<Value> buffer =
         req->object()->Get(req->env()->context(),
-                           req->env()->buffer_string()).ToLocalChecked();
+                           req->env()->buffer_string())
+            .ToLocalChecked();
 
-    if (buffer->IsArrayBufferView()) {
+    if (buffer->IsArrayBufferView())
+    {
       CHECK_LE(req->size(), Buffer::Length(buffer));
-      char* buf = Buffer::Data(buffer);
+      char *buf = Buffer::Data(buffer);
       memcpy(buf, data, req->size());
       (*argv)[1] = buffer;
-    } else {
+    }
+    else
+    {
       (*argv)[1] = Buffer::New(req->env(), data, size)
-          .ToLocalChecked();
+                       .ToLocalChecked();
     }
   }
 }
 
-
-void RandomBytesAfter(uv_work_t* work_req, int status) {
+void RandomBytesAfter(uv_work_t *work_req, int status)
+{
   CHECK_EQ(status, 0);
-  RandomBytesRequest* req =
+  RandomBytesRequest *req =
       ContainerOf(&RandomBytesRequest::work_req_, work_req);
-  Environment* env = req->env();
+  Environment *env = req->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
   Local<Value> argv[2];
@@ -5855,10 +6341,10 @@ void RandomBytesAfter(uv_work_t* work_req, int status) {
   delete req;
 }
 
-
-void RandomBytesProcessSync(Environment* env,
-                            RandomBytesRequest* req,
-                            Local<Value> (*argv)[2]) {
+void RandomBytesProcessSync(Environment *env,
+                            RandomBytesRequest *req,
+                            Local<Value> (*argv)[2])
+{
   env->PrintSyncTrace();
   RandomBytesWork(req->work_req());
   RandomBytesCheck(req, argv);
@@ -5868,11 +6354,12 @@ void RandomBytesProcessSync(Environment* env,
     env->isolate()->ThrowException((*argv)[0]);
 }
 
+void RandomBytes(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void RandomBytes(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  if (!args[0]->IsNumber() || args[0].As<v8::Number>()->Value() < 0) {
+  if (!args[0]->IsNumber() || args[0].As<v8::Number>()->Value() < 0)
+  {
     return env->ThrowTypeError("size must be a number >= 0");
   }
 
@@ -5880,20 +6367,21 @@ void RandomBytes(const FunctionCallbackInfo<Value>& args) {
   if (size > Buffer::kMaxLength)
     return env->ThrowTypeError("size must be a uint32");
 
-  Local<Object> obj = env->randombytes_constructor_template()->
-      NewInstance(env->context()).ToLocalChecked();
-  char* data = node::Malloc(size);
-  RandomBytesRequest* req =
+  Local<Object> obj = env->randombytes_constructor_template()->NewInstance(env->context()).ToLocalChecked();
+  char *data = node::Malloc(size);
+  RandomBytesRequest *req =
       new RandomBytesRequest(env,
                              obj,
                              size,
                              data,
                              RandomBytesRequest::FREE_DATA);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsFunction())
+  {
     obj->Set(env->ondone_string(), args[1]);
 
-    if (env->in_domain()) {
+    if (env->in_domain())
+    {
       obj->Set(env->context(),
                env->domain_string(),
                env->domain_array()->Get(env->context(), 0).ToLocalChecked())
@@ -5905,7 +6393,9 @@ void RandomBytes(const FunctionCallbackInfo<Value>& args) {
                   RandomBytesWork,
                   RandomBytesAfter);
     args.GetReturnValue().Set(obj);
-  } else {
+  }
+  else
+  {
     Local<Value> argv[2];
     RandomBytesProcessSync(env, req, &argv);
     if (argv[0]->IsNull())
@@ -5913,9 +6403,9 @@ void RandomBytes(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-
-void RandomBytesBuffer(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void RandomBytesBuffer(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   CHECK(args[0]->IsArrayBufferView());
   CHECK(args[1]->IsUint32());
@@ -5924,22 +6414,23 @@ void RandomBytesBuffer(const FunctionCallbackInfo<Value>& args) {
   int64_t offset = args[1]->IntegerValue();
   int64_t size = args[2]->IntegerValue();
 
-  Local<Object> obj = env->randombytes_constructor_template()->
-      NewInstance(env->context()).ToLocalChecked();
+  Local<Object> obj = env->randombytes_constructor_template()->NewInstance(env->context()).ToLocalChecked();
   obj->Set(env->context(), env->buffer_string(), args[0]).FromJust();
-  char* data = Buffer::Data(args[0]);
+  char *data = Buffer::Data(args[0]);
   data += offset;
 
-  RandomBytesRequest* req =
+  RandomBytesRequest *req =
       new RandomBytesRequest(env,
                              obj,
                              size,
                              data,
                              RandomBytesRequest::DONT_FREE_DATA);
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsFunction())
+  {
     obj->Set(env->context(), env->ondone_string(), args[3]).FromJust();
 
-    if (env->in_domain()) {
+    if (env->in_domain())
+    {
       obj->Set(env->context(),
                env->domain_string(),
                env->domain_array()->Get(env->context(), 0).ToLocalChecked())
@@ -5951,7 +6442,9 @@ void RandomBytesBuffer(const FunctionCallbackInfo<Value>& args) {
                   RandomBytesWork,
                   RandomBytesAfter);
     args.GetReturnValue().Set(obj);
-  } else {
+  }
+  else
+  {
     Local<Value> argv[2];
     RandomBytesProcessSync(env, req, &argv);
     if (argv[0]->IsNull())
@@ -5959,28 +6452,31 @@ void RandomBytesBuffer(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+void GetSSLCiphers(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  SSL_CTX* ctx = SSL_CTX_new(TLS_method());
-  if (ctx == nullptr) {
+  SSL_CTX *ctx = SSL_CTX_new(TLS_method());
+  if (ctx == nullptr)
+  {
     return env->ThrowError("SSL_CTX_new() failed.");
   }
 
-  SSL* ssl = SSL_new(ctx);
-  if (ssl == nullptr) {
+  SSL *ssl = SSL_new(ctx);
+  if (ssl == nullptr)
+  {
     SSL_CTX_free(ctx);
     return env->ThrowError("SSL_new() failed.");
   }
 
   Local<Array> arr = Array::New(env->isolate());
-  STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(ssl);
+  STACK_OF(SSL_CIPHER) *ciphers = SSL_get_ciphers(ssl);
 
-  for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); ++i) {
+  for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); ++i)
+  {
     //https://github.com/nodejs/node/pull/16130/commits/25683a6ced7e1e6e7be9105a7e6c585799bc454c
     //arr->Set(i, OneByteString(args.GetIsolate(), "TLSv1/SSLv3"));
-    const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
+    const SSL_CIPHER *cipher = sk_SSL_CIPHER_value(ciphers, i);
     arr->Set(i, OneByteString(args.GetIsolate(), SSL_CIPHER_get_name(cipher)));
   }
 
@@ -5990,59 +6486,64 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(arr);
 }
 
-class CipherPushContext {
+class CipherPushContext
+{
 public:
- explicit CipherPushContext(Environment* env)
-     : arr(Array::New(env->isolate())),
-       env_(env) {
- }
+  explicit CipherPushContext(Environment *env)
+      : arr(Array::New(env->isolate())),
+        env_(env)
+  {
+  }
 
- inline Environment* env() const { return env_; }
+  inline Environment *env() const { return env_; }
 
- Local<Array> arr;
+  Local<Array> arr;
 
 private:
- Environment* env_;
+  Environment *env_;
 };
 
-
 template <class TypeName>
-static void array_push_back(const TypeName* md,
-                           const char* from,
-                           const char* to,
-                           void* arg) {
- CipherPushContext* ctx = static_cast<CipherPushContext*>(arg);
- ctx->arr->Set(ctx->arr->Length(), OneByteString(ctx->env()->isolate(), from));
+static void array_push_back(const TypeName *md,
+                            const char *from,
+                            const char *to,
+                            void *arg)
+{
+  CipherPushContext *ctx = static_cast<CipherPushContext *>(arg);
+  ctx->arr->Set(ctx->arr->Length(), OneByteString(ctx->env()->isolate(), from));
 }
 
-
-void GetCiphers(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void GetCiphers(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   CipherPushContext ctx(env);
   EVP_CIPHER_do_all_sorted(array_push_back<EVP_CIPHER>, &ctx);
   args.GetReturnValue().Set(ctx.arr);
 }
 
-
-void GetHashes(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void GetHashes(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   CipherPushContext ctx(env);
   EVP_MD_do_all_sorted(array_push_back<EVP_MD>, &ctx);
   args.GetReturnValue().Set(ctx.arr);
 }
 
-
-void GetCurves(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void GetCurves(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   const size_t num_curves = EC_get_builtin_curves(nullptr, 0);
   Local<Array> arr = Array::New(env->isolate(), num_curves);
-  EC_builtin_curve* curves;
+  EC_builtin_curve *curves;
 
-  if (num_curves) {
+  if (num_curves)
+  {
     curves = node::Malloc<EC_builtin_curve>(num_curves);
 
-    if (EC_get_builtin_curves(curves, num_curves)) {
-      for (size_t i = 0; i < num_curves; i++) {
+    if (EC_get_builtin_curves(curves, num_curves))
+    {
+      for (size_t i = 0; i < num_curves; i++)
+      {
         arr->Set(i, OneByteString(env->isolate(), OBJ_nid2sn(curves[i].nid)));
       }
     }
@@ -6053,11 +6554,11 @@ void GetCurves(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(arr);
 }
 
-
-bool VerifySpkac(const char* data, unsigned int len) {
+bool VerifySpkac(const char *data, unsigned int len)
+{
   bool i = 0;
-  EVP_PKEY* pkey = nullptr;
-  NETSCAPE_SPKI* spki = nullptr;
+  EVP_PKEY *pkey = nullptr;
+  NETSCAPE_SPKI *spki = nullptr;
 
   spki = NETSCAPE_SPKI_b64_decode(data, len);
   if (spki == nullptr)
@@ -6069,7 +6570,7 @@ bool VerifySpkac(const char* data, unsigned int len) {
 
   i = NETSCAPE_SPKI_verify(spki, pkey) > 0;
 
- exit:
+exit:
   if (pkey != nullptr)
     EVP_PKEY_free(pkey);
 
@@ -6079,9 +6580,9 @@ bool VerifySpkac(const char* data, unsigned int len) {
   return i;
 }
 
-
-void VerifySpkac(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void VerifySpkac(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   bool i = false;
 
   if (args.Length() < 1)
@@ -6093,7 +6594,7 @@ void VerifySpkac(const FunctionCallbackInfo<Value>& args) {
   if (length == 0)
     return args.GetReturnValue().Set(i);
 
-  char* data = Buffer::Data(args[0]);
+  char *data = Buffer::Data(args[0]);
   CHECK_NE(data, nullptr);
 
   i = VerifySpkac(data, length);
@@ -6101,13 +6602,13 @@ void VerifySpkac(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(i);
 }
 
+char *ExportPublicKey(const char *data, int len, size_t *size)
+{
+  char *buf = nullptr;
+  EVP_PKEY *pkey = nullptr;
+  NETSCAPE_SPKI *spki = nullptr;
 
-char* ExportPublicKey(const char* data, int len, size_t* size) {
-  char* buf = nullptr;
-  EVP_PKEY* pkey = nullptr;
-  NETSCAPE_SPKI* spki = nullptr;
-
-  BIO* bio = BIO_new(BIO_s_mem());
+  BIO *bio = BIO_new(BIO_s_mem());
   if (bio == nullptr)
     goto exit;
 
@@ -6122,14 +6623,14 @@ char* ExportPublicKey(const char* data, int len, size_t* size) {
   if (PEM_write_bio_PUBKEY(bio, pkey) <= 0)
     goto exit;
 
-  BUF_MEM* ptr;
+  BUF_MEM *ptr;
   BIO_get_mem_ptr(bio, &ptr);
 
   *size = ptr->length;
   buf = Malloc(*size);
   memcpy(buf, ptr->data, *size);
 
- exit:
+exit:
   if (pkey != nullptr)
     EVP_PKEY_free(pkey);
 
@@ -6142,9 +6643,9 @@ char* ExportPublicKey(const char* data, int len, size_t* size) {
   return buf;
 }
 
-
-void ExportPublicKey(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void ExportPublicKey(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   if (args.Length() < 1)
     return env->ThrowTypeError("Public key argument is mandatory");
@@ -6155,11 +6656,11 @@ void ExportPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (length == 0)
     return args.GetReturnValue().SetEmptyString();
 
-  char* data = Buffer::Data(args[0]);
+  char *data = Buffer::Data(args[0]);
   CHECK_NE(data, nullptr);
 
   size_t pkey_size;
-  char* pkey = ExportPublicKey(data, length, &pkey_size);
+  char *pkey = ExportPublicKey(data, length, &pkey_size);
   if (pkey == nullptr)
     return args.GetReturnValue().SetEmptyString();
 
@@ -6167,25 +6668,25 @@ void ExportPublicKey(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(out);
 }
 
-
-const char* ExportChallenge(const char* data, int len) {
-  NETSCAPE_SPKI* sp = nullptr;
+const char *ExportChallenge(const char *data, int len)
+{
+  NETSCAPE_SPKI *sp = nullptr;
 
   sp = NETSCAPE_SPKI_b64_decode(data, len);
   if (sp == nullptr)
     return nullptr;
 
-  unsigned char* buf = nullptr;
+  unsigned char *buf = nullptr;
   ASN1_STRING_to_UTF8(&buf, sp->spkac->challenge);
 
   NETSCAPE_SPKI_free(sp);
 
-  return reinterpret_cast<const char*>(buf);
+  return reinterpret_cast<const char *>(buf);
 }
 
-
-void ExportChallenge(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void ExportChallenge(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   if (args.Length() < 1)
     return env->ThrowTypeError("Challenge argument is mandatory");
@@ -6196,43 +6697,47 @@ void ExportChallenge(const FunctionCallbackInfo<Value>& args) {
   if (len == 0)
     return args.GetReturnValue().SetEmptyString();
 
-  char* data = Buffer::Data(args[0]);
+  char *data = Buffer::Data(args[0]);
   CHECK_NE(data, nullptr);
 
-  const char* cert = ExportChallenge(data, len);
+  const char *cert = ExportChallenge(data, len);
   if (cert == nullptr)
     return args.GetReturnValue().SetEmptyString();
 
   Local<Value> outString = Encode(env->isolate(), cert, strlen(cert), BUFFER);
 
-  OPENSSL_free(const_cast<char*>(cert));
+  OPENSSL_free(const_cast<char *>(cert));
 
   args.GetReturnValue().Set(outString);
 }
 
-void TimingSafeEqual(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void TimingSafeEqual(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
   THROW_AND_RETURN_IF_NOT_BUFFER(args[0], "First argument");
   THROW_AND_RETURN_IF_NOT_BUFFER(args[1], "Second argument");
 
   size_t buf_length = Buffer::Length(args[0]);
-  if (buf_length != Buffer::Length(args[1])) {
+  if (buf_length != Buffer::Length(args[1]))
+  {
     return env->ThrowTypeError("Input buffers must have the same length");
   }
 
-  const char* buf1 = Buffer::Data(args[0]);
-  const char* buf2 = Buffer::Data(args[1]);
+  const char *buf1 = Buffer::Data(args[0]);
+  const char *buf2 = Buffer::Data(args[1]);
 
   return args.GetReturnValue().Set(CRYPTO_memcmp(buf1, buf2, buf_length) == 0);
 }
 
-void InitCryptoOnce() {
+void InitCryptoOnce()
+{
   SSL_load_error_strings();
   OPENSSL_no_config();
 
   // --openssl-config=...
-  if (!openssl_config.empty()) {
+  if (!openssl_config.empty())
+  {
     OPENSSL_load_builtin_modules();
 #ifndef OPENSSL_NO_ENGINE
     ENGINE_load_builtin_engines();
@@ -6243,7 +6748,8 @@ void InitCryptoOnce() {
         nullptr,
         CONF_MFLAGS_DEFAULT_SECTION);
     int err = ERR_get_error();
-    if (0 != err) {
+    if (0 != err)
+    {
       fprintf(stderr,
               "openssl config failed: %s\n",
               ERR_error_string(err, NULL));
@@ -6254,26 +6760,28 @@ void InitCryptoOnce() {
   SSL_library_init();
   OpenSSL_add_all_algorithms();
 
-  #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    crypto_lock_init();
-    CRYPTO_set_locking_callback(crypto_lock_cb);
-    CRYPTO_THREADID_set_callback(crypto_threadid_cb);
-  #endif
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  crypto_lock_init();
+  CRYPTO_set_locking_callback(crypto_lock_cb);
+  CRYPTO_THREADID_set_callback(crypto_threadid_cb);
+#endif
 
 #ifdef NODE_FIPS_MODE
   /* Override FIPS settings in cnf file, if needed. */
-  unsigned long err = 0;  // NOLINT(runtime/int)
-  if (enable_fips_crypto || force_fips_crypto) {
-    if (0 == FIPS_mode() && !FIPS_mode_set(1)) {
+  unsigned long err = 0; // NOLINT(runtime/int)
+  if (enable_fips_crypto || force_fips_crypto)
+  {
+    if (0 == FIPS_mode() && !FIPS_mode_set(1))
+    {
       err = ERR_get_error();
     }
   }
-  if (0 != err) {
+  if (0 != err)
+  {
     fprintf(stderr, "openssl fips failed: %s\n", ERR_error_string(err, NULL));
     UNREACHABLE();
   }
-#endif  // NODE_FIPS_MODE
-
+#endif // NODE_FIPS_MODE
 
   // Turn off compression. Saves memory and protects against CRIME attacks.
   // No-op with OPENSSL_NO_COMP builds of OpenSSL.
@@ -6282,40 +6790,47 @@ void InitCryptoOnce() {
 #ifndef OPENSSL_NO_ENGINE
   ERR_load_ENGINE_strings();
   ENGINE_load_builtin_engines();
-#endif  // !OPENSSL_NO_ENGINE
+#endif // !OPENSSL_NO_ENGINE
 }
 
-
 #ifndef OPENSSL_NO_ENGINE
-void SetEngine(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SetEngine(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
   CHECK(args.Length() >= 2 && args[0]->IsString());
   unsigned int flags = args[1]->Uint32Value();
 
   ClearErrorOnReturn clear_error_on_return;
 
   const node::Utf8Value engine_id(env->isolate(), args[0]);
-  ENGINE* engine = ENGINE_by_id(*engine_id);
+  ENGINE *engine = ENGINE_by_id(*engine_id);
 
   // Engine not found, try loading dynamically
-  if (engine == nullptr) {
+  if (engine == nullptr)
+  {
     engine = ENGINE_by_id("dynamic");
-    if (engine != nullptr) {
+    if (engine != nullptr)
+    {
       if (!ENGINE_ctrl_cmd_string(engine, "SO_PATH", *engine_id, 0) ||
-          !ENGINE_ctrl_cmd_string(engine, "LOAD", nullptr, 0)) {
+          !ENGINE_ctrl_cmd_string(engine, "LOAD", nullptr, 0))
+      {
         ENGINE_free(engine);
         engine = nullptr;
       }
     }
   }
 
-  if (engine == nullptr) {
+  if (engine == nullptr)
+  {
     int err = ERR_get_error();
-    if (err == 0) {
+    if (err == 0)
+    {
       char tmp[1024];
       snprintf(tmp, sizeof(tmp), "Engine \"%s\" was not found", *engine_id);
       return env->ThrowError(tmp);
-    } else {
+    }
+    else
+    {
       return ThrowCryptoError(env, err);
     }
   }
@@ -6325,28 +6840,36 @@ void SetEngine(const FunctionCallbackInfo<Value>& args) {
   if (r == 0)
     return ThrowCryptoError(env, ERR_get_error());
 }
-#endif  // !OPENSSL_NO_ENGINE
+#endif // !OPENSSL_NO_ENGINE
 
-void GetFipsCrypto(const FunctionCallbackInfo<Value>& args) {
-  if (FIPS_mode()) {
+void GetFipsCrypto(const FunctionCallbackInfo<Value> &args)
+{
+  if (FIPS_mode())
+  {
     args.GetReturnValue().Set(1);
-  } else {
+  }
+  else
+  {
     args.GetReturnValue().Set(0);
   }
 }
 
-void SetFipsCrypto(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void SetFipsCrypto(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 #ifdef NODE_FIPS_MODE
   const bool enabled = FIPS_mode();
   const bool enable = args[0]->BooleanValue();
   if (enable == enabled)
-    return;  // No action needed.
-  if (force_fips_crypto) {
+    return; // No action needed.
+  if (force_fips_crypto)
+  {
     return env->ThrowError(
         "Cannot set FIPS mode, it was forced with --force-fips at startup.");
-  } else if (!FIPS_mode_set(enable)) {
-    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
+  }
+  else if (!FIPS_mode_set(enable))
+  {
+    unsigned long err = ERR_get_error(); // NOLINT(runtime/int)
     return ThrowCryptoError(env, err);
   }
 #else
@@ -6357,11 +6880,12 @@ void SetFipsCrypto(const FunctionCallbackInfo<Value>& args) {
 void InitCrypto(Local<Object> target,
                 Local<Value> unused,
                 Local<Context> context,
-                void* priv) {
+                void *priv)
+{
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitCryptoOnce);
 
-  Environment* env = Environment::GetCurrent(context);
+  Environment *env = Environment::GetCurrent(context);
   SecureContext::Initialize(env, target);
   Connection::Initialize(env, target);
   CipherBase::Initialize(env, target);
@@ -6377,7 +6901,7 @@ void InitCrypto(Local<Object> target,
   env->SetMethod(target, "certExportChallenge", ExportChallenge);
 #ifndef OPENSSL_NO_ENGINE
   env->SetMethod(target, "setEngine", SetEngine);
-#endif  // !OPENSSL_NO_ENGINE
+#endif // !OPENSSL_NO_ENGINE
   env->SetMethod(target, "getFipsCrypto", GetFipsCrypto);
   env->SetMethod(target, "setFipsCrypto", SetFipsCrypto);
   env->SetMethod(target, "PBKDF2", PBKDF2);
@@ -6420,7 +6944,7 @@ void InitCrypto(Local<Object> target,
   env->set_randombytes_constructor_template(rbt);
 }
 
-}  // namespace crypto
-}  // namespace node
+} // namespace crypto
+} // namespace node
 
 NODE_MODULE_CONTEXT_AWARE_BUILTIN(crypto, node::crypto::InitCrypto)
