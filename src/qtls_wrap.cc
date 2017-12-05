@@ -56,17 +56,18 @@ void QTLSWrap::Initialize(Local<Object> target,
   AsyncWrap::AddWrapMethods(env, t, AsyncWrap::kFlagHasReset);
   // example: env->SetProtoMethod(t, "receive", Receive);
   env->SetProtoMethod(t, "start", Start);
+  env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
-  //env->set_qtls_wrap_constructor_function(t->GetFunction());
+  env->set_qtls_wrap_constructor_function(t->GetFunction());
 
   target->Set(qtlsWrapString, t->GetFunction());
 }
 
 QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
     : AsyncWrap(env,
-                env->tls_wrap_constructor_function()
+                env->qtls_wrap_constructor_function()
                     ->NewInstance(env->context())
                     .ToLocalChecked(),
                 AsyncWrap::PROVIDER_QTLSWRAP),
