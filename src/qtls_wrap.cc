@@ -27,7 +27,8 @@ using v8::Object;
 using v8::String;
 using v8::Value;
 
-QTLSWrap::~QTLSWrap() {
+QTLSWrap::~QTLSWrap()
+{
   this->sc_ = nullptr;
   this->enc_in_ = nullptr;
   this->enc_out_ = nullptr;
@@ -58,6 +59,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "start", Start);
   env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
   env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
+  env->SetProtoMethod(t, "destroySSL", DestroySSL);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
@@ -89,6 +91,63 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
 
   InitSSL();
+}
+
+
+void QTLSWrap::DestroySSL(const FunctionCallbackInfo<Value> &args)
+{
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  // Destroy the SSL structure and friends
+  wrap->SSLWrap<QTLSWrap>::DestroySSL();
+}
+
+
+Local<Value> QTLSWrap::GetSSLError(int status, int* err, const char** msg) {
+  EscapableHandleScope scope(env()->isolate());
+
+  // ssl_ is already destroyed in reading EOF by close notify alert.
+  if (ssl_ == nullptr)
+    return Local<Value>();
+
+  *err = SSL_get_error(ssl_, status);
+  switch (*err) {
+    case SSL_ERROR_NONE:
+    case SSL_ERROR_WANT_READ:
+    case SSL_ERROR_WANT_WRITE:
+    case SSL_ERROR_WANT_X509_LOOKUP:
+      break;
+    case SSL_ERROR_ZERO_RETURN:
+      return scope.Escape(env()->zero_return_string());
+      break;
+    default:
+      {
+        CHECK(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
+
+        BIO* bio = BIO_new(BIO_s_mem());
+        ERR_print_errors(bio);
+
+        BUF_MEM* mem;
+        BIO_get_mem_ptr(bio, &mem);
+
+        Local<String> message =
+            OneByteString(env()->isolate(), mem->data, mem->length);
+        Local<Value> exception = Exception::Error(message);
+
+        if (msg != nullptr) {
+          CHECK_EQ(*msg, nullptr);
+          char* const buf = new char[mem->length + 1];
+          memcpy(buf, mem->data, mem->length);
+          buf[mem->length] = '\0';
+          *msg = buf;
+        }
+        BIO_free_all(bio);
+
+        return scope.Escape(exception);
+      }
+  }
+  return Local<Value>();
 }
 
 void QTLSWrap::InitSSL()
@@ -130,7 +189,8 @@ void QTLSWrap::InitSSL()
     ABORT();
   }
 }
-void QTLSWrap::NewSessionDoneCb() {
+void QTLSWrap::NewSessionDoneCb()
+{
   // started cycle in tlswrap, but probably here nothing to do
 }
 
@@ -145,7 +205,8 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
 
   // add transport parameters
-  if(qtlsWrap->transport_parameters == nullptr) {
+  if (qtlsWrap->transport_parameters == nullptr)
+  {
     return 0;
   }
 
@@ -170,7 +231,8 @@ int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
   // parse transport params
   // add transport parameters
-  if(qtlsWrap->transport_parameters != nullptr) {
+  if (qtlsWrap->transport_parameters != nullptr)
+  {
     return 0;
   }
 
@@ -202,7 +264,6 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
     // handshake done
   }
 }
-
 
 void QTLSWrap::Wrap(const FunctionCallbackInfo<Value> &args)
 {
@@ -237,7 +298,17 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
 
   // Send ClientHello handshake
   CHECK(wrap->is_client());
+  // next call will return -1 because OpenSSL can't complete the handshake when it is just starting
   int read = SSL_do_handshake(wrap->ssl_);
+  // Still need to check though if the error is SSL_ERROR_WANT_READ or SSL_ERROR_WANT_WRITE
+  // if this is not the case, return error
+  int err;
+  const char* error_str = nullptr;
+  Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
+  if (!arg.IsEmpty()) {
+    wrap->MakeCallback(env->onerror_string(), 1, &arg);
+    delete[] error_str;
+  }
   // read enc_out_ bio and return this data
 }
 
@@ -247,25 +318,26 @@ void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &arg
 
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  
+
   if (args.Length() < 1 || !args[0]->IsUint8Array())
   {
     return env->ThrowTypeError("Argument must be a buffer");
   }
 
   Local<Object> bufferObj = args[0]->ToObject();
-  unsigned char* data = (unsigned char*) Buffer::Data(bufferObj);
+  unsigned char *data = (unsigned char *)Buffer::Data(bufferObj);
   size_t length = Buffer::Length(bufferObj);
-  
+
   //store data in variables to write in addtransportparamscb
   wrap->transport_parameters = data;
   wrap->transport_parameters_length = length;
 }
 
-void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
 
-  QTLSWrap* wrap;
+  QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
   if (args.Length() < 2 || !args[0]->IsBoolean() || !args[1]->IsBoolean())
@@ -275,18 +347,24 @@ void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowTypeError("SetVerifyMode after destroySSL");
 
   int verify_mode;
-  if (wrap->is_server()) {
+  if (wrap->is_server())
+  {
     bool request_cert = args[0]->IsTrue();
-    if (!request_cert) {
+    if (!request_cert)
+    {
       // Note reject_unauthorized ignored.
       verify_mode = SSL_VERIFY_NONE;
-    } else {
+    }
+    else
+    {
       bool reject_unauthorized = args[1]->IsTrue();
       verify_mode = SSL_VERIFY_PEER;
       if (reject_unauthorized)
         verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     }
-  } else {
+  }
+  else
+  {
     // Note request_cert and reject_unauthorized are ignored for clients.
     verify_mode = SSL_VERIFY_NONE;
   }
@@ -294,6 +372,7 @@ void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   // Always allow a connection. We'll reject in javascript.
   SSL_set_verify(wrap->ssl_, verify_mode, crypto::VerifyCallback);
 }
+
 
 } // namespace node
 

@@ -32,10 +32,11 @@ public:
   size_t self_size() const override { return sizeof(*this); }
   void NewSessionDoneCb();
 
-
   static void Initialize(v8::Local<v8::Object> target,
                          v8::Local<v8::Value> unused,
                          v8::Local<v8::Context> context);
+  // If |msg| is not nullptr, caller is responsible for calling `delete[] *msg`.
+  v8::Local<v8::Value> GetSSLError(int status, int* err, const char** msg);
 
 protected:
   static const int kInitialClientBufferLength = 4096;
@@ -68,6 +69,7 @@ protected:
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
   crypto::SecureContext *sc_;
