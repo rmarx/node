@@ -22,6 +22,8 @@ using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
+using v8::Handle;
+using v8::Integer;
 using v8::Local;
 using v8::Object;
 using v8::String;
@@ -93,7 +95,6 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   InitSSL();
 }
 
-
 void QTLSWrap::DestroySSL(const FunctionCallbackInfo<Value> &args)
 {
   QTLSWrap *wrap;
@@ -103,8 +104,8 @@ void QTLSWrap::DestroySSL(const FunctionCallbackInfo<Value> &args)
   wrap->SSLWrap<QTLSWrap>::DestroySSL();
 }
 
-
-Local<Value> QTLSWrap::GetSSLError(int status, int* err, const char** msg) {
+Local<Value> QTLSWrap::GetSSLError(int status, int *err, const char **msg)
+{
   EscapableHandleScope scope(env()->isolate());
 
   // ssl_ is already destroyed in reading EOF by close notify alert.
@@ -112,40 +113,42 @@ Local<Value> QTLSWrap::GetSSLError(int status, int* err, const char** msg) {
     return Local<Value>();
 
   *err = SSL_get_error(ssl_, status);
-  switch (*err) {
-    case SSL_ERROR_NONE:
-    case SSL_ERROR_WANT_READ:
-    case SSL_ERROR_WANT_WRITE:
-    case SSL_ERROR_WANT_X509_LOOKUP:
-      break;
-    case SSL_ERROR_ZERO_RETURN:
-      return scope.Escape(env()->zero_return_string());
-      break;
-    default:
-      {
-        CHECK(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
+  switch (*err)
+  {
+  case SSL_ERROR_NONE:
+  case SSL_ERROR_WANT_READ:
+  case SSL_ERROR_WANT_WRITE:
+  case SSL_ERROR_WANT_X509_LOOKUP:
+    break;
+  case SSL_ERROR_ZERO_RETURN:
+    return scope.Escape(env()->zero_return_string());
+    break;
+  default:
+  {
+    CHECK(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
 
-        BIO* bio = BIO_new(BIO_s_mem());
-        ERR_print_errors(bio);
+    BIO *bio = BIO_new(BIO_s_mem());
+    ERR_print_errors(bio);
 
-        BUF_MEM* mem;
-        BIO_get_mem_ptr(bio, &mem);
+    BUF_MEM *mem;
+    BIO_get_mem_ptr(bio, &mem);
 
-        Local<String> message =
-            OneByteString(env()->isolate(), mem->data, mem->length);
-        Local<Value> exception = Exception::Error(message);
+    Local<String> message =
+        OneByteString(env()->isolate(), mem->data, mem->length);
+    Local<Value> exception = Exception::Error(message);
 
-        if (msg != nullptr) {
-          CHECK_EQ(*msg, nullptr);
-          char* const buf = new char[mem->length + 1];
-          memcpy(buf, mem->data, mem->length);
-          buf[mem->length] = '\0';
-          *msg = buf;
-        }
-        BIO_free_all(bio);
+    if (msg != nullptr)
+    {
+      CHECK_EQ(*msg, nullptr);
+      char *const buf = new char[mem->length + 1];
+      memcpy(buf, mem->data, mem->length);
+      buf[mem->length] = '\0';
+      *msg = buf;
+    }
+    BIO_free_all(bio);
 
-        return scope.Escape(exception);
-      }
+    return scope.Escape(exception);
+  }
   }
   return Local<Value>();
 }
@@ -168,11 +171,6 @@ void QTLSWrap::InitSSL()
 
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
-  SSL_CTX_add_custom_ext(sc_->ctx_, 26,
-                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
-                             SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
-                         AddTransportParamsCallback, FreeTransportParamsCallback, nullptr,
-                         ParseTransportParamsCallback, nullptr);
   if (is_server())
   {
     SSL_set_accept_state(ssl_);
@@ -303,13 +301,32 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
   // Still need to check though if the error is SSL_ERROR_WANT_READ or SSL_ERROR_WANT_WRITE
   // if this is not the case, return error
   int err;
-  const char* error_str = nullptr;
+  const char *error_str = nullptr;
   Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
-  if (!arg.IsEmpty()) {
+  if (!arg.IsEmpty())
+  {
     wrap->MakeCallback(env->onerror_string(), 1, &arg);
     delete[] error_str;
+    return;
   }
-  // read enc_out_ bio and return this data
+  char *data[1];
+  size_t size[arraysize(data)];
+  size_t count = arraysize(data);
+  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
+
+  /*if (args.Length() > 0 && args[0]->IsFunction())
+  {
+    Handle<v8::Function> function = v8::Handle<v8::Function>::Cast(args[0]);
+    Local<Value> argv[] = {
+        Integer::New(env->isolate(), write_size_),
+        Buffer::New(env, data, &write_size_).ToLocalChecked()};
+
+    if (argv[1].IsEmpty())
+      argv[1] = Undefined(env->isolate());
+
+    function->Call(function, arraysize(argv), argv);
+    // read enc_out_ bio and return this data
+  }*/
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -372,7 +389,6 @@ void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
   // Always allow a connection. We'll reject in javascript.
   SSL_set_verify(wrap->ssl_, verify_mode, crypto::VerifyCallback);
 }
-
 
 } // namespace node
 

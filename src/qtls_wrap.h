@@ -38,12 +38,6 @@ public:
   // If |msg| is not nullptr, caller is responsible for calling `delete[] *msg`.
   v8::Local<v8::Value> GetSSLError(int status, int* err, const char** msg);
 
-protected:
-  static const int kInitialClientBufferLength = 4096;
-
-
-  QTLSWrap(Environment *env, crypto::SecureContext *sc, Kind kind);
-  void InitSSL();
 
   ////////////////////////////////////////////////
   //            SSL Callback methods            //
@@ -60,6 +54,13 @@ protected:
                            size_t inlen, X509 *x, size_t chainidx, int *al,
                            void *parse_arg);
   static void SSLInfoCallback(const SSL *ssl_, int where, int ret);
+  
+protected:
+  static const int kInitialClientBufferLength = 4096;
+
+
+  QTLSWrap(Environment *env, crypto::SecureContext *sc, Kind kind);
+  void InitSSL();
 
 
   ////////////////////////////////////////////////
