@@ -58,7 +58,7 @@ void QTLSWrap::Initialize(Local<Object> target,
 
   AsyncWrap::AddWrapMethods(env, t, AsyncWrap::kFlagHasReset);
   // example: env->SetProtoMethod(t, "receive", Receive);
-  env->SetProtoMethod(t, "start", Start);
+  env->SetProtoMethod(t, "getClientInitial",GetClientInitial);
   env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
   env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
@@ -283,16 +283,12 @@ void QTLSWrap::Wrap(const FunctionCallbackInfo<Value> &args)
   args.GetReturnValue().Set(res->object());
 }
 
-void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
+void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
 {
   Environment *env = Environment::GetCurrent(args);
 
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-
-  if (wrap->started_)
-    return env->ThrowError("Already started.");
-  wrap->started_ = true;
 
   // Send ClientHello handshake
   CHECK(wrap->is_client());
@@ -314,6 +310,8 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
   size_t count = arraysize(data);
   size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
 
+  /*
+  // Code to call a callback function
   if (args.Length() > 0 && args[0]->IsFunction())
   {
     Handle<v8::Function> function = v8::Handle<v8::Function>::Cast(args[0]);
@@ -326,7 +324,10 @@ void QTLSWrap::Start(const FunctionCallbackInfo<Value> &args)
       argv[1] = Undefined(env->isolate());
 
     function->Call(function, arraysize(argv), argv);
-  }
+  }*/
+
+  // Return client initial data as buffer
+  args.GetReturnValue().Set(Buffer::New(env, data[0], write_size_).ToLocalChecked());
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)

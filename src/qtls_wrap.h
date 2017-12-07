@@ -67,7 +67,7 @@ protected:
   //            mehods for JS land              //
   ////////////////////////////////////////////////
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetClientInitial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
