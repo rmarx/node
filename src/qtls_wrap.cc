@@ -78,7 +78,7 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
                     ->NewInstance(env->context())
                     .ToLocalChecked(),
                 AsyncWrap::PROVIDER_QTLSWRAP),
-      SSLWrap<QTLSWrap>(env, sc, kind, true),
+      SSLWrap<QTLSWrap>(env, QTLSWrap::AddContextCallbacks(sc), kind),
       sc_(sc),
       started_(false),
       transport_parameters(nullptr),
@@ -95,6 +95,17 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
 
   InitSSL();
+}
+
+SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
+{
+
+  SSL_CTX_add_custom_ext(sc->ctx_, 26,
+                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
+                             SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
+                         QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
+                         QTLSWrap::ParseTransportParamsCallback, nullptr);
+  return sc;
 }
 
 void QTLSWrap::DestroySSL(const FunctionCallbackInfo<Value> &args)
