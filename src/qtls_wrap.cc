@@ -58,10 +58,12 @@ void QTLSWrap::Initialize(Local<Object> target,
 
   AsyncWrap::AddWrapMethods(env, t, AsyncWrap::kFlagHasReset);
   // example: env->SetProtoMethod(t, "receive", Receive);
-  env->SetProtoMethod(t, "getClientInitial",GetClientInitial);
+  env->SetProtoMethod(t, "getClientInitial", GetClientInitial);
   env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
   env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
+  env->SetProtoMethod(t, "writeHandshakeData", WriteHandshakeData);
+  env->SetProtoMethod(t, "readHandshakeData", ReadHandshakeData);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
@@ -260,6 +262,8 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
   if (where & SSL_CB_HANDSHAKE_DONE)
   {
     // handshake done
+    // dummy statement
+    int x = 0;
   }
 }
 
@@ -327,6 +331,50 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
   }*/
 
   // Return client initial data as buffer
+  args.GetReturnValue().Set(Buffer::New(env, data[0], write_size_).ToLocalChecked());
+}
+
+void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  if (!args[0]->IsUint8Array())
+  {
+    env->ThrowTypeError("First argument must be a buffer");
+    return;
+  }
+  const char *data = Buffer::Data(args[0]);
+  size_t length = Buffer::Length(args[0]);
+
+  int written = BIO_write(wrap->enc_in_, data, length);
+  args.GetReturnValue().Set(written);
+}
+
+void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  int read = SSL_do_handshake(wrap->ssl_);
+
+  int err;
+  const char *error_str = nullptr;
+  Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
+  if (!arg.IsEmpty())
+  {
+    wrap->MakeCallback(env->onerror_string(), 1, &arg);
+    delete[] error_str;
+    return;
+  }
+  char *data[1];
+  size_t size[arraysize(data)];
+  size_t count = arraysize(data);
+  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
   args.GetReturnValue().Set(Buffer::New(env, data[0], write_size_).ToLocalChecked());
 }
 
