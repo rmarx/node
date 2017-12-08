@@ -78,7 +78,7 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
                     ->NewInstance(env->context())
                     .ToLocalChecked(),
                 AsyncWrap::PROVIDER_QTLSWRAP),
-      SSLWrap<QTLSWrap>(env, sc, kind),
+      SSLWrap<QTLSWrap>(env, sc, kind, true),
       sc_(sc),
       started_(false),
       transport_parameters(nullptr),
