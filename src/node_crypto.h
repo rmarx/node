@@ -201,7 +201,7 @@ public:
     kServer
   };
 
-  SSLWrap(Environment *env, SecureContext *sc, Kind kind, bool isQuicker = false)
+  SSLWrap(Environment *env, SecureContext *sc, Kind kind)
       : env_(env),
         kind_(kind),
         next_sess_(nullptr),
@@ -211,14 +211,6 @@ public:
         cert_cb_arg_(nullptr),
         cert_cb_running_(false)
   {
-    if (isQuicker)
-    {
-      SSL_CTX_add_custom_ext(sc->ctx_, 26,
-                             SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
-                                 SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
-                             QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
-                             QTLSWrap::ParseTransportParamsCallback, nullptr);
-    }
     ssl_ = SSL_new(sc->ctx_);
     CHECK_NE(ssl_, nullptr);
   }
