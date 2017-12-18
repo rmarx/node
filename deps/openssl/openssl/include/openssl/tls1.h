@@ -30,9 +30,9 @@ extern "C" {
 # define TLS1_3_VERSION                  0x0304
 # define TLS_MAX_VERSION                 TLS1_3_VERSION
 
-/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -21 */
-# define TLS1_3_VERSION_DRAFT            0x7f15
-# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 21)"
+/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -22 */
+# define TLS1_3_VERSION_DRAFT            0x7f16
+# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 22)"
 
 /* Special value for method supporting multiple versions */
 # define TLS_ANY_VERSION                 0x10000
@@ -47,10 +47,10 @@ extern "C" {
 # define TLS1_2_VERSION_MINOR            0x03
 
 # define TLS1_get_version(s) \
-                ((SSL_version(s) >> 8) == TLS1_VERSION_MAJOR ? SSL_version(s) : 0)
+        ((SSL_version(s) >> 8) == TLS1_VERSION_MAJOR ? SSL_version(s) : 0)
 
 # define TLS1_get_client_version(s) \
-                ((SSL_client_version(s) >> 8) == TLS1_VERSION_MAJOR ? SSL_client_version(s) : 0)
+        ((SSL_client_version(s) >> 8) == TLS1_VERSION_MAJOR ? SSL_client_version(s) : 0)
 
 # define TLS1_AD_DECRYPTION_FAILED       21
 # define TLS1_AD_RECORD_OVERFLOW         22
@@ -203,6 +203,17 @@ extern "C" {
 # define TLSEXT_curve_P_256                              23
 # define TLSEXT_curve_P_384                              24
 
+/* OpenSSL value to disable maximum fragment length extension */
+# define TLSEXT_max_fragment_length_DISABLED    0
+/* Allowed values for max fragment length extension */
+# define TLSEXT_max_fragment_length_512         1
+# define TLSEXT_max_fragment_length_1024        2
+# define TLSEXT_max_fragment_length_2048        3
+# define TLSEXT_max_fragment_length_4096        4
+
+int SSL_CTX_set_tlsext_max_fragment_length(SSL_CTX *ctx, uint8_t mode);
+int SSL_set_tlsext_max_fragment_length(SSL *ssl, uint8_t mode);
+
 # define TLSEXT_MAXLEN_host_name 255
 
 __owur const char *SSL_get_servername(const SSL *s, const int type);
@@ -232,42 +243,43 @@ int SSL_get_shared_sigalgs(SSL *s, int idx,
 __owur int SSL_check_chain(SSL *s, X509 *x, EVP_PKEY *pk, STACK_OF(X509) *chain);
 
 # define SSL_set_tlsext_host_name(s,name) \
-SSL_ctrl(s,SSL_CTRL_SET_TLSEXT_HOSTNAME,TLSEXT_NAMETYPE_host_name, \
-         (char *)(name))
+        SSL_ctrl(s,SSL_CTRL_SET_TLSEXT_HOSTNAME,TLSEXT_NAMETYPE_host_name,\
+                (void *)name)
 
 # define SSL_set_tlsext_debug_callback(ssl, cb) \
-SSL_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_DEBUG_CB,(void (*)(void))(cb))
+        SSL_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_DEBUG_CB,\
+                (void (*)(void))cb)
 
 # define SSL_set_tlsext_debug_arg(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_DEBUG_ARG,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_DEBUG_ARG,0,arg)
 
 # define SSL_get_tlsext_status_type(ssl) \
-SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_TYPE,0, NULL)
+        SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_TYPE,0,NULL)
 
 # define SSL_set_tlsext_status_type(ssl, type) \
-SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_TYPE,type, NULL)
+        SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_TYPE,type,NULL)
 
 # define SSL_get_tlsext_status_exts(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_EXTS,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_EXTS,0,arg)
 
 # define SSL_set_tlsext_status_exts(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_EXTS,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_EXTS,0,arg)
 
 # define SSL_get_tlsext_status_ids(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_IDS,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_IDS,0,arg)
 
 # define SSL_set_tlsext_status_ids(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_IDS,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_IDS,0,arg)
 
 # define SSL_get_tlsext_status_ocsp_resp(ssl, arg) \
-SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_OCSP_RESP,0, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_OCSP_RESP,0,arg)
 
 # define SSL_set_tlsext_status_ocsp_resp(ssl, arg, arglen) \
-SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_OCSP_RESP,arglen, (void *)(arg))
+        SSL_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_OCSP_RESP,arglen,arg)
 
 # define SSL_CTX_set_tlsext_servername_callback(ctx, cb) \
-SSL_CTX_callback_ctrl(ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, \
-                      (void (*)(void))(cb))
+        SSL_CTX_callback_ctrl(ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_CB,\
+                (void (*)(void))cb)
 
 # define SSL_TLSEXT_ERR_OK 0
 # define SSL_TLSEXT_ERR_ALERT_WARNING 1
@@ -275,42 +287,42 @@ SSL_CTX_callback_ctrl(ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, \
 # define SSL_TLSEXT_ERR_NOACK 3
 
 # define SSL_CTX_set_tlsext_servername_arg(ctx, arg) \
-SSL_CTX_ctrl(ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG,0, (void *)(arg))
+        SSL_CTX_ctrl(ctx,SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG,0,arg)
 
 # define SSL_CTX_get_tlsext_ticket_keys(ctx, keys, keylen) \
-        SSL_CTX_ctrl((ctx),SSL_CTRL_GET_TLSEXT_TICKET_KEYS,(keylen),(keys))
+        SSL_CTX_ctrl(ctx,SSL_CTRL_GET_TLSEXT_TICKET_KEYS,keylen,keys)
 # define SSL_CTX_set_tlsext_ticket_keys(ctx, keys, keylen) \
-        SSL_CTX_ctrl((ctx),SSL_CTRL_SET_TLSEXT_TICKET_KEYS,(keylen),(keys))
+        SSL_CTX_ctrl(ctx,SSL_CTRL_SET_TLSEXT_TICKET_KEYS,keylen,keys)
 
 # define SSL_CTX_get_tlsext_status_cb(ssl, cb) \
-SSL_CTX_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_CB,0, (void (**)(void))(cb))
+        SSL_CTX_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_CB,0,(void *)cb)
 # define SSL_CTX_set_tlsext_status_cb(ssl, cb) \
-SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB, \
-                      (void (*)(void))(cb))
+        SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB,\
+                (void (*)(void))cb)
 
 # define SSL_CTX_get_tlsext_status_arg(ssl, arg) \
-SSL_CTX_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_CB_ARG,0, (void *)(arg))
+        SSL_CTX_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_CB_ARG,0,arg)
 # define SSL_CTX_set_tlsext_status_arg(ssl, arg) \
-SSL_CTX_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB_ARG,0, (void *)(arg))
+        SSL_CTX_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB_ARG,0,arg)
 
-#define SSL_CTX_set_tlsext_status_type(ssl, type) \
-        SSL_CTX_ctrl(ssl, SSL_CTRL_SET_TLSEXT_STATUS_REQ_TYPE, type, NULL)
+# define SSL_CTX_set_tlsext_status_type(ssl, type) \
+        SSL_CTX_ctrl(ssl,SSL_CTRL_SET_TLSEXT_STATUS_REQ_TYPE,type,NULL)
 
-#define SSL_CTX_get_tlsext_status_type(ssl) \
-        SSL_CTX_ctrl(ssl, SSL_CTRL_GET_TLSEXT_STATUS_REQ_TYPE, 0, NULL)
+# define SSL_CTX_get_tlsext_status_type(ssl) \
+        SSL_CTX_ctrl(ssl,SSL_CTRL_GET_TLSEXT_STATUS_REQ_TYPE,0,NULL)
 
 # define SSL_CTX_set_tlsext_ticket_key_cb(ssl, cb) \
-SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
-                      (void (*)(void))(cb))
+        SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB,\
+                (void (*)(void))cb)
 
 # ifndef OPENSSL_NO_HEARTBEATS
 #  define SSL_DTLSEXT_HB_ENABLED                   0x01
 #  define SSL_DTLSEXT_HB_DONT_SEND_REQUESTS        0x02
 #  define SSL_DTLSEXT_HB_DONT_RECV_REQUESTS        0x04
 #  define SSL_get_dtlsext_heartbeat_pending(ssl) \
-        SSL_ctrl((ssl),SSL_CTRL_GET_DTLS_EXT_HEARTBEAT_PENDING,0,NULL)
+        SSL_ctrl(ssl,SSL_CTRL_GET_DTLS_EXT_HEARTBEAT_PENDING,0,NULL)
 #  define SSL_set_dtlsext_heartbeat_no_requests(ssl, arg) \
-        SSL_ctrl((ssl),SSL_CTRL_SET_DTLS_EXT_HEARTBEAT_NO_REQUESTS,arg,NULL)
+        SSL_ctrl(ssl,SSL_CTRL_SET_DTLS_EXT_HEARTBEAT_NO_REQUESTS,arg,NULL)
 
 #  if OPENSSL_API_COMPAT < 0x10100000L
 #   define SSL_CTRL_TLS_EXT_SEND_HEARTBEAT \
@@ -328,7 +340,7 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 #   define SSL_get_tlsext_heartbeat_pending(ssl) \
         SSL_get_dtlsext_heartbeat_pending(ssl)
 #   define SSL_set_tlsext_heartbeat_no_requests(ssl, arg) \
-        SSL_set_dtlsext_heartbeat_no_requests(ssl, arg)
+        SSL_set_dtlsext_heartbeat_no_requests(ssl,arg)
 #  endif
 # endif
 
@@ -337,12 +349,10 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_CK_PSK_WITH_3DES_EDE_CBC_SHA               0x0300008B
 # define TLS1_CK_PSK_WITH_AES_128_CBC_SHA                0x0300008C
 # define TLS1_CK_PSK_WITH_AES_256_CBC_SHA                0x0300008D
-
 # define TLS1_CK_DHE_PSK_WITH_RC4_128_SHA                0x0300008E
 # define TLS1_CK_DHE_PSK_WITH_3DES_EDE_CBC_SHA           0x0300008F
 # define TLS1_CK_DHE_PSK_WITH_AES_128_CBC_SHA            0x03000090
 # define TLS1_CK_DHE_PSK_WITH_AES_256_CBC_SHA            0x03000091
-
 # define TLS1_CK_RSA_PSK_WITH_RC4_128_SHA                0x03000092
 # define TLS1_CK_RSA_PSK_WITH_3DES_EDE_CBC_SHA           0x03000093
 # define TLS1_CK_RSA_PSK_WITH_AES_128_CBC_SHA            0x03000094
@@ -355,17 +365,14 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_CK_DHE_PSK_WITH_AES_256_GCM_SHA384         0x030000AB
 # define TLS1_CK_RSA_PSK_WITH_AES_128_GCM_SHA256         0x030000AC
 # define TLS1_CK_RSA_PSK_WITH_AES_256_GCM_SHA384         0x030000AD
-
 # define TLS1_CK_PSK_WITH_AES_128_CBC_SHA256             0x030000AE
 # define TLS1_CK_PSK_WITH_AES_256_CBC_SHA384             0x030000AF
 # define TLS1_CK_PSK_WITH_NULL_SHA256                    0x030000B0
 # define TLS1_CK_PSK_WITH_NULL_SHA384                    0x030000B1
-
 # define TLS1_CK_DHE_PSK_WITH_AES_128_CBC_SHA256         0x030000B2
 # define TLS1_CK_DHE_PSK_WITH_AES_256_CBC_SHA384         0x030000B3
 # define TLS1_CK_DHE_PSK_WITH_NULL_SHA256                0x030000B4
 # define TLS1_CK_DHE_PSK_WITH_NULL_SHA384                0x030000B5
-
 # define TLS1_CK_RSA_PSK_WITH_AES_128_CBC_SHA256         0x030000B6
 # define TLS1_CK_RSA_PSK_WITH_AES_256_CBC_SHA384         0x030000B7
 # define TLS1_CK_RSA_PSK_WITH_NULL_SHA256                0x030000B8
@@ -383,7 +390,6 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_CK_DHE_DSS_WITH_AES_128_SHA                0x03000032
 # define TLS1_CK_DHE_RSA_WITH_AES_128_SHA                0x03000033
 # define TLS1_CK_ADH_WITH_AES_128_SHA                    0x03000034
-
 # define TLS1_CK_RSA_WITH_AES_256_SHA                    0x03000035
 # define TLS1_CK_DH_DSS_WITH_AES_256_SHA                 0x03000036
 # define TLS1_CK_DH_RSA_WITH_AES_256_SHA                 0x03000037
@@ -528,7 +534,6 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_CK_SRP_SHA_DSS_WITH_AES_256_CBC_SHA        0x0300C022
 
 /* ECDH HMAC based ciphersuites from RFC5289 */
-
 # define TLS1_CK_ECDHE_ECDSA_WITH_AES_128_SHA256         0x0300C023
 # define TLS1_CK_ECDHE_ECDSA_WITH_AES_256_SHA384         0x0300C024
 # define TLS1_CK_ECDH_ECDSA_WITH_AES_128_SHA256          0x0300C025
@@ -558,7 +563,6 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_CK_ECDHE_PSK_WITH_AES_256_CBC_SHA384       0x0300C038
 
 /* NULL PSK ciphersuites from RFC4785 */
-
 # define TLS1_CK_ECDHE_PSK_WITH_NULL_SHA                 0x0300C039
 # define TLS1_CK_ECDHE_PSK_WITH_NULL_SHA256              0x0300C03A
 # define TLS1_CK_ECDHE_PSK_WITH_NULL_SHA384              0x0300C03B
@@ -1002,7 +1006,6 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_TXT_ADH_WITH_AES_256_GCM_SHA384            "ADH-AES256-GCM-SHA384"
 
 /* CCM ciphersuites from RFC6655 */
-
 # define TLS1_TXT_RSA_WITH_AES_128_CCM                   "AES128-CCM"
 # define TLS1_TXT_RSA_WITH_AES_256_CCM                   "AES256-CCM"
 # define TLS1_TXT_DHE_RSA_WITH_AES_128_CCM               "DHE-RSA-AES128-CCM"
@@ -1024,14 +1027,12 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB, \
 # define TLS1_TXT_DHE_PSK_WITH_AES_256_CCM_8             "DHE-PSK-AES256-CCM8"
 
 /* CCM ciphersuites from RFC7251 */
-
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_128_CCM       "ECDHE-ECDSA-AES128-CCM"
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_256_CCM       "ECDHE-ECDSA-AES256-CCM"
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_128_CCM_8     "ECDHE-ECDSA-AES128-CCM8"
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_256_CCM_8     "ECDHE-ECDSA-AES256-CCM8"
 
 /* ECDH HMAC based ciphersuites from RFC5289 */
-
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_128_SHA256    "ECDHE-ECDSA-AES128-SHA256"
 # define TLS1_TXT_ECDHE_ECDSA_WITH_AES_256_SHA384    "ECDHE-ECDSA-AES256-SHA384"
 # define TLS1_TXT_ECDH_ECDSA_WITH_AES_128_SHA256     "ECDH-ECDSA-AES128-SHA256"

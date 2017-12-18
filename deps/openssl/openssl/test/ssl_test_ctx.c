@@ -472,6 +472,34 @@ IMPLEMENT_SSL_TEST_INT_OPTION(SSL_TEST_CTX, test, app_data_size)
 
 IMPLEMENT_SSL_TEST_INT_OPTION(SSL_TEST_CTX, test, max_fragment_size)
 
+/* Maximum-Fragment-Length TLS extension mode */
+static const test_enum ssl_max_fragment_len_mode[] = {
+    {"None", TLSEXT_max_fragment_length_DISABLED},
+    { "512", TLSEXT_max_fragment_length_512},
+    {"1024", TLSEXT_max_fragment_length_1024},
+    {"2048", TLSEXT_max_fragment_length_2048},
+    {"4096", TLSEXT_max_fragment_length_4096}
+};
+
+__owur static int parse_max_fragment_len_mode(SSL_TEST_CLIENT_CONF *client_conf,
+                                              const char *value)
+{
+    int ret_value;
+
+    if (!parse_enum(ssl_max_fragment_len_mode,
+                    OSSL_NELEM(ssl_max_fragment_len_mode), &ret_value, value)) {
+        return 0;
+    }
+    client_conf->max_fragment_len_mode = ret_value;
+    return 1;
+}
+
+const char *ssl_max_fragment_len_name(int MFL_mode)
+{
+    return enum_name(ssl_max_fragment_len_mode,
+                     OSSL_NELEM(ssl_max_fragment_len_mode), MFL_mode);
+}
+
 
 /* Expected key and signature types */
 
@@ -587,6 +615,10 @@ __owur static int parse_expected_client_ca_names(SSL_TEST_CTX *test_ctx,
     return parse_expected_ca_names(&test_ctx->expected_client_ca_names, value);
 }
 
+/* ExpectedCipher */
+
+IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_CTX, test, expected_cipher)
+
 /* Known test options and their corresponding parse methods. */
 
 /* Top-level options. */
@@ -622,6 +654,7 @@ static const ssl_test_ctx_option ssl_test_ctx_options[] = {
     { "ExpectedClientSignType", &parse_expected_client_sign_type },
     { "ExpectedClientCANames", &parse_expected_client_ca_names },
     { "UseSCTP", &parse_test_use_sctp },
+    { "ExpectedCipher", &parse_test_expected_cipher },
 };
 
 /* Nested client options. */
@@ -639,6 +672,7 @@ static const ssl_test_client_option ssl_test_client_options[] = {
     { "RenegotiateCiphers", &parse_client_reneg_ciphers},
     { "SRPUser", &parse_client_srp_user },
     { "SRPPassword", &parse_client_srp_password },
+    { "MaxFragmentLenExt", &parse_max_fragment_len_mode },
 };
 
 /* Nested server options. */
@@ -699,6 +733,7 @@ void SSL_TEST_CTX_free(SSL_TEST_CTX *ctx)
     OPENSSL_free(ctx->expected_alpn_protocol);
     sk_X509_NAME_pop_free(ctx->expected_server_ca_names, X509_NAME_free);
     sk_X509_NAME_pop_free(ctx->expected_client_ca_names, X509_NAME_free);
+    OPENSSL_free(ctx->expected_cipher);
     OPENSSL_free(ctx);
 }
 

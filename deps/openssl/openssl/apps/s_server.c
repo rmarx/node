@@ -208,7 +208,7 @@ static int psk_find_session_cb(SSL *ssl, const unsigned char *identity,
 
     if (key_len == EVP_MD_size(EVP_sha256()))
         cipher = SSL_CIPHER_find(ssl, tls13_aes128gcmsha256_id);
-    else if(key_len == EVP_MD_size(EVP_sha384()))
+    else if (key_len == EVP_MD_size(EVP_sha384()))
         cipher = SSL_CIPHER_find(ssl, tls13_aes256gcmsha384_id);
 
     if (cipher == NULL) {
@@ -255,7 +255,7 @@ static int ssl_srp_server_param_cb(SSL *s, int *ad, void *arg)
     if (p->login == NULL && p->user == NULL) {
         p->login = SSL_get_srp_username(s);
         BIO_printf(bio_err, "SRP username = \"%s\"\n", p->login);
-        return (-1);
+        return -1;
     }
 
     if (p->user == NULL) {
@@ -355,9 +355,9 @@ static int ebcdic_read(BIO *b, char *out, int outl)
     BIO *next = BIO_next(b);
 
     if (out == NULL || outl == 0)
-        return (0);
+        return 0;
     if (next == NULL)
-        return (0);
+        return 0;
 
     ret = BIO_read(next, out, outl);
     if (ret > 0)
@@ -373,7 +373,7 @@ static int ebcdic_write(BIO *b, const char *in, int inl)
     int num;
 
     if ((in == NULL) || (inl <= 0))
-        return (0);
+        return 0;
     if (next == NULL)
         return 0;
 
@@ -396,7 +396,7 @@ static int ebcdic_write(BIO *b, const char *in, int inl)
 
     ret = BIO_write(next, wbuf->buff, inl);
 
-    return (ret);
+    return ret;
 }
 
 static long ebcdic_ctrl(BIO *b, int cmd, long num, void *ptr)
@@ -405,7 +405,7 @@ static long ebcdic_ctrl(BIO *b, int cmd, long num, void *ptr)
     BIO *next = BIO_next(b);
 
     if (next == NULL)
-        return (0);
+        return 0;
     switch (cmd) {
     case BIO_CTRL_DUP:
         ret = 0L;
@@ -414,7 +414,7 @@ static long ebcdic_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = BIO_ctrl(next, cmd, num, ptr);
         break;
     }
-    return (ret);
+    return ret;
 }
 
 static int ebcdic_gets(BIO *bp, char *buf, int size)
@@ -2019,7 +2019,7 @@ int s_server_main(int argc, char *argv[])
     SSL_CTX_set_verify(ctx, s_server_verify, verify_callback);
     if (!SSL_CTX_set_session_id_context(ctx,
                                         (void *)&s_server_session_id_context,
-                                        sizeof s_server_session_id_context)) {
+                                        sizeof(s_server_session_id_context))) {
         BIO_printf(bio_err, "error setting session id context\n");
         ERR_print_errors(bio_err);
         goto end;
@@ -2033,7 +2033,7 @@ int s_server_main(int argc, char *argv[])
         SSL_CTX_set_verify(ctx2, s_server_verify, verify_callback);
         if (!SSL_CTX_set_session_id_context(ctx2,
                     (void *)&s_server_session_id_context,
-                    sizeof s_server_session_id_context)) {
+                    sizeof(s_server_session_id_context))) {
             BIO_printf(bio_err, "error setting session id context\n");
             ERR_print_errors(bio_err);
             goto end;
@@ -2140,7 +2140,7 @@ int s_server_main(int argc, char *argv[])
 #ifdef CHARSET_EBCDIC
     BIO_meth_free(methods_ebcdic);
 #endif
-    return (ret);
+    return ret;
 }
 
 static void print_stats(BIO *bio, SSL_CTX *ssl_ctx)
@@ -2202,22 +2202,25 @@ static int sv_body(int s, int stype, int prot, unsigned char *context)
             BIO_printf(bio_err, "Turned on non blocking io\n");
     }
 
+    con = SSL_new(ctx);
     if (con == NULL) {
-        con = SSL_new(ctx);
-
-        if (s_tlsextdebug) {
-            SSL_set_tlsext_debug_callback(con, tlsext_cb);
-            SSL_set_tlsext_debug_arg(con, bio_s_out);
-        }
-
-        if (context
-            && !SSL_set_session_id_context(con,
-                                           context, strlen((char *)context))) {
-            BIO_printf(bio_err, "Error setting session id context\n");
-            ret = -1;
-            goto err;
-        }
+        ret = -1;
+        goto err;
     }
+
+    if (s_tlsextdebug) {
+        SSL_set_tlsext_debug_callback(con, tlsext_cb);
+        SSL_set_tlsext_debug_arg(con, bio_s_out);
+    }
+
+    if (context != NULL
+        && !SSL_set_session_id_context(con, context,
+                                       strlen((char *)context))) {
+        BIO_printf(bio_err, "Error setting session id context\n");
+        ret = -1;
+        goto err;
+    }
+
     if (!SSL_clear(con)) {
         BIO_printf(bio_err, "Error clearing SSL connection\n");
         ret = -1;
@@ -2337,10 +2340,14 @@ static int sv_body(int s, int stype, int prot, unsigned char *context)
                 (void)BIO_flush(bio_s_out);
             }
         }
-        if (write_header)
-            BIO_printf(bio_s_out, "No early data received\n");
-        else
+        if (write_header) {
+            if (SSL_get_early_data_status(con) == SSL_EARLY_DATA_NOT_SENT)
+                BIO_printf(bio_s_out, "No early data received\n");
+            else
+                BIO_printf(bio_s_out, "Early data was rejected\n");
+        } else {
             BIO_printf(bio_s_out, "\nEnd of early data\n");
+        }
         if (SSL_is_init_finished(con))
             print_connection_info(con);
     }
@@ -2657,7 +2664,7 @@ static int sv_body(int s, int stype, int prot, unsigned char *context)
     if (ret >= 0)
         BIO_printf(bio_s_out, "ACCEPT\n");
     (void)BIO_flush(bio_s_out);
-    return (ret);
+    return ret;
 }
 
 static void close_accept_socket(void)
@@ -2772,7 +2779,7 @@ static int init_ssl_connection(SSL *con)
         }
         /* Always print any error messages */
         ERR_print_errors(bio_err);
-        return (0);
+        return 0;
     }
 
     print_connection_info(con);
@@ -2805,7 +2812,7 @@ static void print_connection_info(SSL *con)
         peer = NULL;
     }
 
-    if (SSL_get_shared_ciphers(con, buf, sizeof buf) != NULL)
+    if (SSL_get_shared_ciphers(con, buf, sizeof(buf)) != NULL)
         BIO_printf(bio_s_out, "Shared ciphers:%s\n", buf);
     str = SSL_CIPHER_get_name(SSL_get_current_cipher(con));
     ssl_print_sigalgs(bio_s_out, con);
@@ -2875,7 +2882,7 @@ static DH *load_dh_param(const char *dhfile)
     ret = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
  err:
     BIO_free(bio);
-    return (ret);
+    return ret;
 }
 #endif
 
@@ -3263,7 +3270,7 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
         BIO_printf(bio_s_out, "ACCEPT\n");
     OPENSSL_free(buf);
     BIO_free_all(io);
-    return (ret);
+    return ret;
 }
 
 static int rev_body(int s, int stype, int prot, unsigned char *context)
@@ -3416,7 +3423,7 @@ static int rev_body(int s, int stype, int prot, unsigned char *context)
 
     OPENSSL_free(buf);
     BIO_free_all(io);
-    return (ret);
+    return ret;
 }
 
 #define MAX_SESSION_ID_ATTEMPTS 10

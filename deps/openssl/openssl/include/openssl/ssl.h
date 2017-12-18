@@ -338,6 +338,17 @@ typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX *x509_ctx);
 # define SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION        0x00040000U
 /* Disable encrypt-then-mac */
 # define SSL_OP_NO_ENCRYPT_THEN_MAC                      0x00080000U
+
+/*
+ * Enable TLSv1.3 Compatibility mode. This is on by default. A future version
+ * of OpenSSL may have this disabled by default.
+ */
+# define SSL_OP_ENABLE_MIDDLEBOX_COMPAT                  0x00100000U
+
+/* Prioritize Chacha20Poly1305 when client does.
+ * Modifies SSL_OP_CIPHER_SERVER_PREFERENCE */
+# define SSL_OP_PRIORITIZE_CHACHA                        0x00200000U
+
 /*
  * Set on servers to choose the cipher according to the server's preferences
  */
@@ -976,8 +987,6 @@ typedef enum {
     TLS_ST_CR_CERT_VRFY,
     TLS_ST_SW_CERT_VRFY,
     TLS_ST_CR_HELLO_REQ,
-    TLS_ST_SW_HELLO_RETRY_REQUEST,
-    TLS_ST_CR_HELLO_RETRY_REQUEST,
     TLS_ST_SW_KEY_UPDATE,
     TLS_ST_CW_KEY_UPDATE,
     TLS_ST_SR_KEY_UPDATE,
@@ -1915,10 +1924,11 @@ __owur size_t SSL_get_client_random(const SSL *ssl, unsigned char *out,
                                     size_t outlen);
 __owur size_t SSL_get_server_random(const SSL *ssl, unsigned char *out,
                                     size_t outlen);
-__owur size_t SSL_SESSION_get_master_key(const SSL_SESSION *ssl,
+__owur size_t SSL_SESSION_get_master_key(const SSL_SESSION *sess,
                                          unsigned char *out, size_t outlen);
 __owur int SSL_SESSION_set1_master_key(SSL_SESSION *sess,
                                        const unsigned char *in, size_t len);
+uint8_t SSL_SESSION_get_max_fragment_length(const SSL_SESSION *sess);
 
 #define SSL_get_ex_new_index(l, p, newf, dupf, freef) \
     CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_SSL, l, p, newf, dupf, freef)

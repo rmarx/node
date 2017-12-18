@@ -717,6 +717,9 @@ const EVP_MD *EVP_ripemd160(void);
 # ifndef OPENSSL_NO_WHIRLPOOL
 const EVP_MD *EVP_whirlpool(void);
 # endif
+# ifndef OPENSSL_NO_SM3
+const EVP_MD *EVP_sm3(void);
+# endif
 const EVP_CIPHER *EVP_enc_null(void); /* does nothing :-) */
 # ifndef OPENSSL_NO_DES
 const EVP_CIPHER *EVP_des_ecb(void);
@@ -914,6 +917,15 @@ const EVP_CIPHER *EVP_seed_cbc(void);
 const EVP_CIPHER *EVP_seed_cfb128(void);
 #  define EVP_seed_cfb EVP_seed_cfb128
 const EVP_CIPHER *EVP_seed_ofb(void);
+# endif
+
+# ifndef OPENSSL_NO_SM4
+const EVP_CIPHER *EVP_sm4_ecb(void);
+const EVP_CIPHER *EVP_sm4_cbc(void);
+const EVP_CIPHER *EVP_sm4_cfb128(void);
+#  define EVP_sm4_cfb EVP_sm4_cfb128
+const EVP_CIPHER *EVP_sm4_ofb(void);
+const EVP_CIPHER *EVP_sm4_ctr(void);
 # endif
 
 # if OPENSSL_API_COMPAT < 0x10100000L
@@ -1198,6 +1210,20 @@ void EVP_PKEY_asn1_set_item(EVP_PKEY_ASN1_METHOD *ameth,
                                               X509_ALGOR *alg2,
                                               ASN1_BIT_STRING *sig));
 
+void EVP_PKEY_asn1_set_siginf(EVP_PKEY_ASN1_METHOD *ameth,
+                              int (*siginf_set) (X509_SIG_INFO *siginf,
+                                                 const X509_ALGOR *alg,
+                                                 const ASN1_STRING *sig));
+
+void EVP_PKEY_asn1_set_check(EVP_PKEY_ASN1_METHOD *ameth,
+                             int (*pkey_check) (const EVP_PKEY *pk));
+
+void EVP_PKEY_asn1_set_public_check(EVP_PKEY_ASN1_METHOD *ameth,
+                                    int (*pkey_pub_check) (const EVP_PKEY *pk));
+
+void EVP_PKEY_asn1_set_param_check(EVP_PKEY_ASN1_METHOD *ameth,
+                                   int (*pkey_param_check) (const EVP_PKEY *pk));
+
 void EVP_PKEY_asn1_set_security_bits(EVP_PKEY_ASN1_METHOD *ameth,
                                      int (*pkey_security_bits) (const EVP_PKEY
                                                                 *pk));
@@ -1347,6 +1373,8 @@ int EVP_PKEY_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey);
 int EVP_PKEY_keygen_init(EVP_PKEY_CTX *ctx);
 int EVP_PKEY_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey);
 int EVP_PKEY_check(EVP_PKEY_CTX *ctx);
+int EVP_PKEY_public_check(EVP_PKEY_CTX *ctx);
+int EVP_PKEY_param_check(EVP_PKEY_CTX *ctx);
 
 void EVP_PKEY_CTX_set_cb(EVP_PKEY_CTX *ctx, EVP_PKEY_gen_cb *cb);
 EVP_PKEY_gen_cb *EVP_PKEY_CTX_get_cb(EVP_PKEY_CTX *ctx);
@@ -1448,6 +1476,12 @@ void EVP_PKEY_meth_set_ctrl(EVP_PKEY_METHOD *pmeth,
 void EVP_PKEY_meth_set_check(EVP_PKEY_METHOD *pmeth,
                              int (*check) (EVP_PKEY *pkey));
 
+void EVP_PKEY_meth_set_public_check(EVP_PKEY_METHOD *pmeth,
+                                    int (*check) (EVP_PKEY *pkey));
+
+void EVP_PKEY_meth_set_param_check(EVP_PKEY_METHOD *pmeth,
+                                   int (*check) (EVP_PKEY *pkey));
+
 void EVP_PKEY_meth_get_init(EVP_PKEY_METHOD *pmeth,
                             int (**pinit) (EVP_PKEY_CTX *ctx));
 
@@ -1542,6 +1576,12 @@ void EVP_PKEY_meth_get_ctrl(EVP_PKEY_METHOD *pmeth,
 
 void EVP_PKEY_meth_get_check(EVP_PKEY_METHOD *pmeth,
                              int (**pcheck) (EVP_PKEY *pkey));
+
+void EVP_PKEY_meth_get_public_check(EVP_PKEY_METHOD *pmeth,
+                                    int (**pcheck) (EVP_PKEY *pkey));
+
+void EVP_PKEY_meth_get_param_check(EVP_PKEY_METHOD *pmeth,
+                                   int (**pcheck) (EVP_PKEY *pkey));
 
 void EVP_add_alg_module(void);
 

@@ -53,6 +53,58 @@ use FindBin;
 use lib "$FindBin::Bin/perl";
 use OpenSSL::Glob;
 
+# When building a "variant" shared library, with a custom SONAME, also customize
+# all the symbol versions.  This produces a shared object that can coexist
+# without conflict in the same address space as a default build, or an object
+# with a different variant tag.
+#
+# For example, with a target definition that includes:
+#
+#         shlib_variant => "-opt",
+#
+# we build the following objects:
+#
+# $ perl -le '
+#     for (@ARGV) {
+#         if ($l = readlink) {
+#             printf "%s -> %s\n", $_, $l
+#         } else {
+#             print
+#         }
+#     }' *.so*
+# libcrypto-opt.so.1.1
+# libcrypto.so -> libcrypto-opt.so.1.1
+# libssl-opt.so.1.1
+# libssl.so -> libssl-opt.so.1.1
+#
+# whose SONAMEs and dependencies are:
+#
+# $ for l in *.so; do
+#     echo $l
+#     readelf -d $l | egrep 'SONAME|NEEDED.*(ssl|crypto)'
+#   done
+# libcrypto.so
+#  0x000000000000000e (SONAME)             Library soname: [libcrypto-opt.so.1.1]
+# libssl.so
+#  0x0000000000000001 (NEEDED)             Shared library: [libcrypto-opt.so.1.1]
+#  0x000000000000000e (SONAME)             Library soname: [libssl-opt.so.1.1]
+#
+# We case-fold the variant tag to upper case and replace all non-alnum
+# characters with "_".  This yields the following symbol versions:
+#
+# $ nm libcrypto.so | grep -w A
+# 0000000000000000 A OPENSSL_OPT_1_1_0
+# 0000000000000000 A OPENSSL_OPT_1_1_0a
+# 0000000000000000 A OPENSSL_OPT_1_1_0c
+# 0000000000000000 A OPENSSL_OPT_1_1_0d
+# 0000000000000000 A OPENSSL_OPT_1_1_0f
+# 0000000000000000 A OPENSSL_OPT_1_1_0g
+# $ nm libssl.so | grep -w A
+# 0000000000000000 A OPENSSL_OPT_1_1_0
+# 0000000000000000 A OPENSSL_OPT_1_1_0d
+#
+(my $SO_VARIANT = qq{\U$target{"shlib_variant"}}) =~ s/\W/_/g;
+
 my $debug=0;
 
 my $crypto_num= catfile($config{sourcedir},"util","libcrypto.num");
@@ -83,9 +135,9 @@ my @known_algorithms = ( "RC2", "RC4", "RC5", "IDEA", "DES", "BF",
 			 "CAST", "MD2", "MD4", "MD5", "SHA", "SHA0", "SHA1",
 			 "SHA256", "SHA512", "RMD160",
 			 "MDC2", "WHIRLPOOL", "RSA", "DSA", "DH", "EC", "EC2M",
-			 "HMAC", "AES", "CAMELLIA", "SEED", "GOST", "ARIA",
+			 "HMAC", "AES", "CAMELLIA", "SEED", "GOST", "ARIA", "SM4",
                          "SCRYPT", "CHACHA", "POLY1305", "BLAKE2",
-			 "SIPHASH",
+			 "SIPHASH", "SM3",
 			 # EC_NISTP_64_GCC_128
 			 "EC_NISTP_64_GCC_128",
 			 # Envelope "algorithms"
@@ -176,16 +228,9 @@ foreach (@ARGV, split(/ /, $config{options}))
 		$zlib = 1;
 	}
 
-	$do_ssl=1 if $_ eq "libssl";
-	if ($_ eq "ssl") {
-		$do_ssl=1;
-		$libname=$_
-	}
-	$do_crypto=1 if $_ eq "libcrypto";
-	if ($_ eq "crypto") {
-		$do_crypto=1;
-		$libname=$_;
-	}
+	$do_crypto=1 if $_ eq "libcrypto" || $_ eq "crypto";
+	$do_ssl=1 if $_ eq "libssl" || $_ eq "ssl";
+
 	$do_update=1 if $_ eq "update";
 	$do_rewrite=1 if $_ eq "rewrite";
 	$do_ctest=1 if $_ eq "ctest";
@@ -200,6 +245,8 @@ foreach (@ARGV, split(/ /, $config{options}))
 	}
 
 	}
+$libname = $unified_info{sharednames}->{libcrypto} if $do_crypto;
+$libname = $unified_info{sharednames}->{libssl} if $do_ssl;
 
 if (!$libname) {
 	if ($do_ssl) {
@@ -526,7 +573,7 @@ sub do_defs
 				while($tag[$tag_i] ne "-") {
 					if ($tag[$tag_i] eq "OPENSSL_NO_".$1) {
 						$tag{$tag[$tag_i]}=2;
-						print STDERR "DEBUG: $file: chaged tag $1 = 2\n" if $debug;
+						print STDERR "DEBUG: $file: changed tag $1 = 2\n" if $debug;
 					}
 					$tag_i--;
 				}
@@ -1158,9 +1205,6 @@ sub print_def_file
         my $prevnum = 0;
         my $symvtextcount = 0;
 
-	if ($W32)
-		{ $libname.="32"; }
-
         if ($W32)
                 {
                 print OUT <<"EOF";
@@ -1177,6 +1221,7 @@ EOF
         elsif ($VMS)
                 {
                 print OUT <<"EOF";
+IDENTIFICATION=$version
 CASE_SENSITIVE=YES
 SYMBOL_VECTOR=(-
 EOF
@@ -1231,13 +1276,13 @@ EOF
 						if ($symversion ne $prevsymversion) {
 							if ($prevsymversion ne "") {
 								if ($prevprevsymversion ne "") {
-									print OUT "} OPENSSL_"
+									print OUT "} OPENSSL${SO_VARIANT}_"
 												."$prevprevsymversion;\n\n";
 								} else {
 									print OUT "};\n\n";
 								}
 							}
-							print OUT "OPENSSL_$symversion {\n    global:\n";
+							print OUT "OPENSSL${SO_VARIANT}_$symversion {\n    global:\n";
 							$prevprevsymversion = $prevsymversion;
 							$prevsymversion = $symversion;
 						}
@@ -1286,7 +1331,7 @@ EOF
 	} while ($linux && $thisversion ne $currversion);
 	if ($linux) {
 		if ($prevprevsymversion ne "") {
-			print OUT "    local: *;\n} OPENSSL_$prevprevsymversion;\n\n";
+			print OUT "    local: *;\n} OPENSSL${SO_VARIANT}_$prevprevsymversion;\n\n";
 		} else {
 			print OUT "    local: *;\n};\n\n";
 		}
@@ -1632,7 +1677,7 @@ sub do_deprecated()
 {
 	my ($decl, $plats, $algs) = @_;
 	$decl =~ /^\s*(DEPRECATEDIN_\d+_\d+_\d+)\s*\((.*)\)\s*$/
-            or die "Bad DEPRECTEDIN: $decl\n";
+            or die "Bad DEPRECATEDIN: $decl\n";
 	my $info1 .= "#INFO:";
 	$info1 .= join(',', @{$plats}) . ":";
 	my $info2 = $info1;

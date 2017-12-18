@@ -18,7 +18,7 @@ IF[{- !$disabled{tests} -}]
   DEPEND[libtestutil.a]=../libcrypto
 
   # Special hack for descrip.mms to include the MAIN object module
-  # explicitely.  This will only be done if there isn't a MAIN in the
+  # explicitly.  This will only be done if there isn't a MAIN in the
   # program's object modules already.
   BEGINRAW[descrip.mms]
 INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
@@ -46,7 +46,7 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
           x509_time_test x509_dup_cert_test x509_check_cert_pkey_test \
           recordlentest drbgtest sslbuffertest \
           time_offset_test pemtest ssl_cert_table_internal_test ciphername_test \
-          servername_test
+          servername_test ocspapitest rsa_mp_test fatalerrtest tls13ccstest
 
   SOURCE[aborttest]=aborttest.c
   INCLUDE[aborttest]=../include
@@ -151,6 +151,18 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
   SOURCE[rsa_test]=rsa_test.c
   INCLUDE[rsa_test]=.. ../include
   DEPEND[rsa_test]=../libcrypto libtestutil.a
+
+  SOURCE[rsa_mp_test]=rsa_mp_test.c
+  INCLUDE[rsa_mp_test]=.. ../include
+  DEPEND[rsa_mp_test]=../libcrypto libtestutil.a
+
+  SOURCE[fatalerrtest]=fatalerrtest.c ssltestlib.c
+  INCLUDE[fatalerrtest]=../include ..
+  DEPEND[fatalerrtest]=../libcrypto ../libssl libtestutil.a
+
+  SOURCE[tls13ccstest]=tls13ccstest.c ssltestlib.c
+  INCLUDE[tls13ccstest]=../include
+  DEPEND[tls13ccstest]=../libcrypto ../libssl libtestutil.a
 
   SOURCE[evp_test]=evp_test.c
   INCLUDE[evp_test]=../include
@@ -277,6 +289,10 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
   INCLUDE[sslapitest]=../include ..
   DEPEND[sslapitest]=../libcrypto ../libssl libtestutil.a
 
+  SOURCE[ocspapitest]=ocspapitest.c
+  INCLUDE[ocspapitest]=../include ..
+  DEPEND[ocspapitest]=../libcrypto libtestutil.a
+
   SOURCE[dtlstest]=dtlstest.c ssltestlib.c
   INCLUDE[dtlstest]=../include .
   DEPEND[dtlstest]=../libcrypto ../libssl libtestutil.a
@@ -395,6 +411,9 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
     IF[{- !$disabled{siphash} -}]
       PROGRAMS_NO_INST=siphash_internal_test
     ENDIF
+    IF[{- !$disabled{sm4} -}]
+      PROGRAMS_NO_INST=sm4_internal_test
+    ENDIF
 
     SOURCE[poly1305_internal_test]=poly1305_internal_test.c
     INCLUDE[poly1305_internal_test]=.. ../include ../crypto/include
@@ -431,6 +450,10 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
     SOURCE[siphash_internal_test]=siphash_internal_test.c
     INCLUDE[siphash_internal_test]=.. ../include ../crypto/include
     DEPEND[siphash_internal_test]=../libcrypto.a libtestutil.a
+
+    SOURCE[sm4_internal_test]=sm4_internal_test.c
+    INCLUDE[sm4_internal_test]=.. ../include ../crypto/include
+    DEPEND[sm4_internal_test]=../libcrypto.a libtestutil.a
   ENDIF
 
   IF[{- !$disabled{mdc2} -}]

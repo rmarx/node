@@ -10,14 +10,6 @@
 /**
  * The Whirlpool hashing function.
  *
- * <P>
- * <b>References</b>
- *
- * <P>
- * The Whirlpool algorithm was developed by
- * <a href="mailto:pbarreto@scopus.com.br">Paulo S. L. M. Barreto</a> and
- * <a href="mailto:vincent.rijmen@cryptomathic.com">Vincent Rijmen</a>.
- *
  * See
  *      P.S.L.M. Barreto, V. Rijmen,
  *      ``The Whirlpool hashing function,''
@@ -249,7 +241,7 @@ int WHIRLPOOL_Final(unsigned char *md, WHIRLPOOL_CTX *c)
         OPENSSL_cleanse(c, sizeof(*c));
         return 1;
     }
-    return (0);
+    return 0;
 }
 
 unsigned char *WHIRLPOOL(const void *inp, size_t bytes, unsigned char *md)
@@ -262,5 +254,5 @@ unsigned char *WHIRLPOOL(const void *inp, size_t bytes, unsigned char *md)
     WHIRLPOOL_Init(&ctx);
     WHIRLPOOL_Update(&ctx, inp, bytes);
     WHIRLPOOL_Final(md, &ctx);
-    return (md);
+    return md;
 }

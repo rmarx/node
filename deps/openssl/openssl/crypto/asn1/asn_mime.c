@@ -859,7 +859,7 @@ static int mime_hdr_cmp(const MIME_HEADER *const *a,
     if (!(*a)->name || !(*b)->name)
         return ! !(*a)->name - ! !(*b)->name;
 
-    return (strcmp((*a)->name, (*b)->name));
+    return strcmp((*a)->name, (*b)->name);
 }
 
 static int mime_param_cmp(const MIME_PARAM *const *a,
@@ -867,7 +867,7 @@ static int mime_param_cmp(const MIME_PARAM *const *a,
 {
     if (!(*a)->param_name || !(*b)->param_name)
         return ! !(*a)->param_name - ! !(*b)->param_name;
-    return (strcmp((*a)->param_name, (*b)->param_name));
+    return strcmp((*a)->param_name, (*b)->param_name);
 }
 
 /* Find a header with a given name (if possible) */
@@ -949,7 +949,7 @@ static int strip_eol(char *linebuf, int *plen, int flags)
     int len = *plen;
     char *p, c;
     int is_eol = 0;
-    p = linebuf + len - 1;
+
     for (p = linebuf + len - 1; len > 0; len--, p--) {
         c = *p;
         if (c == '\n')

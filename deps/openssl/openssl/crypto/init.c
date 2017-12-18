@@ -53,7 +53,7 @@ static struct thread_local_inits_st *ossl_init_get_thread_local(int alloc)
         CRYPTO_THREAD_get_local(&threadstopkey);
 
     if (local == NULL && alloc) {
-        local = OPENSSL_zalloc(sizeof *local);
+        local = OPENSSL_zalloc(sizeof(*local));
         if (local != NULL && !CRYPTO_THREAD_set_local(&threadstopkey, local)) {
             OPENSSL_free(local);
             return NULL;
@@ -503,7 +503,7 @@ void OPENSSL_cleanup(void)
      * obj_cleanup_int() must be called last
      */
     rand_cleanup_int();
-    rand_cleanup_drbg_int();
+    rand_drbg_cleanup_int();
     conf_modules_free_int();
 #ifndef OPENSSL_NO_ENGINE
     engine_cleanup_int();

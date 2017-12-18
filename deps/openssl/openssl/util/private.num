@@ -21,6 +21,7 @@ CRYPTO_EX_new                           datatype
 DTLS_timer_cb                           datatype
 EVP_PKEY_gen_cb                         datatype
 EVP_PKEY_METHOD                         datatype
+EVP_PKEY_ASN1_METHOD                    datatype
 GEN_SESSION_CB                          datatype
 OPENSSL_Applink                         external
 OSSL_STORE_CTX                          datatype
@@ -61,6 +62,7 @@ X509_STORE_CTX_verify_cb                datatype
 X509_STORE_CTX_verify_fn                datatype
 X509_STORE_set_verify_cb_func           datatype
 bio_info_cb                             datatype
+BIO_info_cb                             datatype
 custom_ext_add_cb                       datatype
 custom_ext_free_cb                      datatype
 custom_ext_parse_cb                     datatype
@@ -191,9 +193,16 @@ EVP_SignUpdate                          define
 EVP_VerifyInit                          define
 EVP_VerifyInit_ex                       define
 EVP_VerifyUpdate                        define
+EVP_bf_cfb                              define
+EVP_cast5_cfb                           define
 EVP_cleanup                             define deprecated 1.1.0
 EVP_get_digestbynid                     define
 EVP_get_digestbyobj                     define
+EVP_idea_cfb                            define
+EVP_rc2_cfb                             define
+EVP_rc5_32_12_16_cfb                    define
+EVP_seed_cfb                            define
+EVP_sm4_cfb                             define
 OBJ_cleanup                             define deprecated 1.1.0
 OPENSSL_VERSION_NUMBER                  define
 OPENSSL_clear_free                      define

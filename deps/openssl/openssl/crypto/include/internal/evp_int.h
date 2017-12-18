@@ -76,6 +76,8 @@ struct evp_pkey_method_st {
                          size_t siglen, const unsigned char *tbs,
                          size_t tbslen);
     int (*check) (EVP_PKEY *pkey);
+    int (*public_check) (EVP_PKEY *pkey);
+    int (*param_check) (EVP_PKEY *pkey);
 } /* EVP_PKEY_METHOD */ ;
 
 DEFINE_STACK_OF_CONST(EVP_PKEY_METHOD)
@@ -396,7 +398,7 @@ void openssl_add_all_digests_int(void);
 void evp_cleanup_int(void);
 void evp_app_cleanup_int(void);
 
-/* Pulling defines out of C soure files */
+/* Pulling defines out of C source files */
 
 #define EVP_RC4_KEY_SIZE 16
 #ifndef TLS1_1_VERSION

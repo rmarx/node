@@ -22,9 +22,6 @@ extern "C" {
  * OpenSSL was configured with the following options:
  */
 
-#ifndef OPENSSL_NO_ARIA
-# define OPENSSL_NO_ARIA
-#endif
 #ifndef OPENSSL_NO_COMP
 # define OPENSSL_NO_COMP
 #endif

@@ -50,7 +50,8 @@ void EVP_CIPHER_CTX_free(EVP_CIPHER_CTX *ctx)
 int EVP_CipherInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
                    const unsigned char *key, const unsigned char *iv, int enc)
 {
-    EVP_CIPHER_CTX_reset(ctx);
+    if (cipher != NULL)
+        EVP_CIPHER_CTX_reset(ctx);
     return EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, enc);
 }
 
@@ -391,7 +392,7 @@ int EVP_EncryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)
     }
 
     b = ctx->cipher->block_size;
-    OPENSSL_assert(b <= sizeof ctx->buf);
+    OPENSSL_assert(b <= sizeof(ctx->buf));
     if (b == 1) {
         *outl = 0;
         return 1;
@@ -452,7 +453,7 @@ int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl,
     if (ctx->flags & EVP_CIPH_NO_PADDING)
         return EVP_EncryptUpdate(ctx, out, outl, in, inl);
 
-    OPENSSL_assert(b <= sizeof ctx->final);
+    OPENSSL_assert(b <= sizeof(ctx->final));
 
     if (ctx->final_used) {
         /* see comment about PTRDIFF_T comparison above */
@@ -522,9 +523,9 @@ int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)
     if (b > 1) {
         if (ctx->buf_len || !ctx->final_used) {
             EVPerr(EVP_F_EVP_DECRYPTFINAL_EX, EVP_R_WRONG_FINAL_BLOCK_LENGTH);
-            return (0);
+            return 0;
         }
-        OPENSSL_assert(b <= sizeof ctx->final);
+        OPENSSL_assert(b <= sizeof(ctx->final));
 
         /*
          * The following assumes that the ciphertext has been authenticated.
@@ -533,12 +534,12 @@ int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)
         n = ctx->final[b - 1];
         if (n == 0 || n > (int)b) {
             EVPerr(EVP_F_EVP_DECRYPTFINAL_EX, EVP_R_BAD_DECRYPT);
-            return (0);
+            return 0;
         }
         for (i = 0; i < n; i++) {
             if (ctx->final[--b] != n) {
                 EVPerr(EVP_F_EVP_DECRYPTFINAL_EX, EVP_R_BAD_DECRYPT);
-                return (0);
+                return 0;
             }
         }
         n = ctx->cipher->block_size - n;

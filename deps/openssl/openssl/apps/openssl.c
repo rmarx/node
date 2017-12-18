@@ -80,8 +80,8 @@ static int apps_startup()
 #endif
 
     /* Set non-default library initialisation settings */
-    if (!OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_ALL_BUILTIN
-                             | OPENSSL_INIT_LOAD_CONFIG, NULL))
+    if (!OPENSSL_init_ssl(OPENSSL_INIT_ENGINE_ALL_BUILTIN
+                          | OPENSSL_INIT_LOAD_CONFIG, NULL))
         return 0;
 
     setup_ui_method();
@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
     for (;;) {
         ret = 0;
         /* Read a line, continue reading if line ends with \ */
-        for (p = buf, n = sizeof buf, i = 0, first = 1; n > 0; first = 0) {
+        for (p = buf, n = sizeof(buf), i = 0, first = 1; n > 0; first = 0) {
             prompt = first ? "OpenSSL> " : "> ";
             p[0] = '\0';
 #ifndef READLINE
@@ -534,7 +534,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
     FUNCTION f, *fp;
 
     if (argc <= 0 || argv[0] == NULL)
-        return (0);
+        return 0;
     f.name = argv[0];
     fp = lh_FUNCTION_retrieve(prog, &f);
     if (fp == NULL) {
@@ -549,7 +549,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
         }
     }
     if (fp != NULL) {
-        return (fp->func(argc, argv));
+        return fp->func(argc, argv);
     }
     if ((strncmp(argv[0], "no-", 3)) == 0) {
         /*
@@ -559,7 +559,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
         f.name = argv[0] + 3;
         if (lh_FUNCTION_retrieve(prog, &f) == NULL) {
             BIO_printf(bio_out, "%s\n", argv[0]);
-            return (0);
+            return 0;
         }
         BIO_printf(bio_out, "%s\n", argv[0] + 3);
         return 1;
@@ -750,6 +750,12 @@ static void list_disabled(void)
 #ifdef OPENSSL_NO_SEED
     BIO_puts(bio_out, "SEED\n");
 #endif
+#ifdef OPENSSL_NO_SM3
+    BIO_puts(bio_out, "SM3\n");
+#endif
+#ifdef OPENSSL_NO_SM4
+    BIO_puts(bio_out, "SM4\n");
+#endif
 #ifdef OPENSSL_NO_SOCK
     BIO_puts(bio_out, "SOCK\n");
 #endif
@@ -790,7 +796,7 @@ static LHASH_OF(FUNCTION) *prog_init(void)
     qsort(functions, i, sizeof(*functions), SortFnByName);
 
     if ((ret = lh_FUNCTION_new(function_hash, function_cmp)) == NULL)
-        return (NULL);
+        return NULL;
 
     for (f = functions; f->name != NULL; f++)
         (void)lh_FUNCTION_insert(ret, f);

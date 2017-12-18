@@ -82,7 +82,7 @@ int engine_free_util(ENGINE *e, int not_locked)
     else
         i = --e->struct_ref;
 #endif
-    engine_ref_debug(e, 0, -1)
+    engine_ref_debug(e, 0, -1);
     if (i > 0)
         return 1;
     REF_ASSERT_ISNT(i < 0);
@@ -174,12 +174,12 @@ void engine_cleanup_int(void)
 
 int ENGINE_set_ex_data(ENGINE *e, int idx, void *arg)
 {
-    return (CRYPTO_set_ex_data(&e->ex_data, idx, arg));
+    return CRYPTO_set_ex_data(&e->ex_data, idx, arg);
 }
 
 void *ENGINE_get_ex_data(const ENGINE *e, int idx)
 {
-    return (CRYPTO_get_ex_data(&e->ex_data, idx));
+    return CRYPTO_get_ex_data(&e->ex_data, idx);
 }
 
 /*

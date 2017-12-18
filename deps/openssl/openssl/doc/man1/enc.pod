@@ -2,6 +2,7 @@
 
 =head1 NAME
 
+openssl-enc,
 enc - symmetric cipher routines
 
 =head1 SYNOPSIS
@@ -263,7 +264,7 @@ authentication tag.
 
  des-cbc            DES in CBC mode
  des                Alias for des-cbc
- des-cfb            DES in CBC mode
+ des-cfb            DES in CFB mode
  des-ofb            DES in OFB mode
  des-ecb            DES in ECB mode
 

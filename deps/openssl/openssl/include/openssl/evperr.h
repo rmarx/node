@@ -55,6 +55,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_F_EVP_PBE_SCRYPT                             181
 # define EVP_F_EVP_PKCS82PKEY                             111
 # define EVP_F_EVP_PKEY2PKCS8                             113
+# define EVP_F_EVP_PKEY_ASN1_ADD0                         188
 # define EVP_F_EVP_PKEY_CHECK                             186
 # define EVP_F_EVP_PKEY_COPY_PARAMETERS                   103
 # define EVP_F_EVP_PKEY_CTX_CTRL                          137
@@ -82,6 +83,8 @@ int ERR_load_EVP_strings(void);
 # define EVP_F_EVP_PKEY_NEW                               106
 # define EVP_F_EVP_PKEY_PARAMGEN                          148
 # define EVP_F_EVP_PKEY_PARAMGEN_INIT                     149
+# define EVP_F_EVP_PKEY_PARAM_CHECK                       189
+# define EVP_F_EVP_PKEY_PUBLIC_CHECK                      190
 # define EVP_F_EVP_PKEY_SET1_ENGINE                       187
 # define EVP_F_EVP_PKEY_SIGN                              140
 # define EVP_F_EVP_PKEY_SIGN_INIT                         141
@@ -151,6 +154,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE   150
 # define EVP_R_OPERATON_NOT_INITIALIZED                   151
 # define EVP_R_PARTIALLY_OVERLAPPING                      162
+# define EVP_R_PKEY_ASN1_METHOD_ALREADY_REGISTERED        179
 # define EVP_R_PRIVATE_KEY_DECODE_ERROR                   145
 # define EVP_R_PRIVATE_KEY_ENCODE_ERROR                   146
 # define EVP_R_PUBLIC_KEY_NOT_RSA                         106

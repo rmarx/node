@@ -463,13 +463,9 @@ STACK_OF(X509_NAME) *SSL_dup_CA_list(const STACK_OF(X509_NAME) *sk)
     STACK_OF(X509_NAME) *ret;
     X509_NAME *name;
 
-    ret = sk_X509_NAME_new_null();
+    ret = sk_X509_NAME_new_reserve(NULL, num);
     if (ret == NULL) {
         SSLerr(SSL_F_SSL_DUP_CA_LIST, ERR_R_MALLOC_FAILURE);
-        return NULL;
-    }
-    if (!sk_X509_NAME_reserve(ret, num)) {
-        sk_X509_NAME_free(ret);
         return NULL;
     }
     for (i = 0; i < num; i++) {
@@ -572,7 +568,7 @@ int SSL_CTX_add_client_CA(SSL_CTX *ctx, X509 *x)
 
 static int xname_sk_cmp(const X509_NAME *const *a, const X509_NAME *const *b)
 {
-    return (X509_NAME_cmp(*a, *b));
+    return X509_NAME_cmp(*a, *b);
 }
 
 static int xname_cmp(const X509_NAME *a, const X509_NAME *b)
@@ -647,7 +643,7 @@ STACK_OF(X509_NAME) *SSL_load_client_CA_file(const char *file)
     lh_X509_NAME_free(name_hash);
     if (ret != NULL)
         ERR_clear_error();
-    return (ret);
+    return ret;
 }
 
 /**
@@ -733,15 +729,15 @@ int SSL_add_dir_cert_subjects_to_stack(STACK_OF(X509_NAME) *stack,
         char buf[1024];
         int r;
 
-        if (strlen(dir) + strlen(filename) + 2 > sizeof buf) {
+        if (strlen(dir) + strlen(filename) + 2 > sizeof(buf)) {
             SSLerr(SSL_F_SSL_ADD_DIR_CERT_SUBJECTS_TO_STACK,
                    SSL_R_PATH_TOO_LONG);
             goto err;
         }
 #ifdef OPENSSL_SYS_VMS
-        r = BIO_snprintf(buf, sizeof buf, "%s%s", dir, filename);
+        r = BIO_snprintf(buf, sizeof(buf), "%s%s", dir, filename);
 #else
-        r = BIO_snprintf(buf, sizeof buf, "%s/%s", dir, filename);
+        r = BIO_snprintf(buf, sizeof(buf), "%s/%s", dir, filename);
 #endif
         if (r <= 0 || r >= (int)sizeof(buf))
             goto err;
@@ -1002,6 +998,6 @@ const SSL_CERT_LOOKUP *ssl_cert_lookup_by_pkey(const EVP_PKEY *pk, size_t *pidx)
 const SSL_CERT_LOOKUP *ssl_cert_lookup_by_idx(size_t idx)
 {
     if (idx >= OSSL_NELEM(ssl_cert_info))
-        return 0;
+        return NULL;
     return &ssl_cert_info[idx];
 }

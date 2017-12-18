@@ -198,7 +198,7 @@ static int psk_use_session_cb(SSL *s, const EVP_MD *md,
 
         if (key_len == EVP_MD_size(EVP_sha256()))
             cipher = SSL_CIPHER_find(s, tls13_aes128gcmsha256_id);
-        else if(key_len == EVP_MD_size(EVP_sha384()))
+        else if (key_len == EVP_MD_size(EVP_sha384()))
             cipher = SSL_CIPHER_find(s, tls13_aes256gcmsha384_id);
 
         if (cipher == NULL) {
@@ -417,10 +417,11 @@ static int serverinfo_cli_parse_cb(SSL *s, unsigned int ext_type,
     unsigned char ext_buf[4 + 65536];
 
     /* Reconstruct the type/len fields prior to extension data */
-    ext_buf[0] = ext_type >> 8;
-    ext_buf[1] = ext_type & 0xFF;
-    ext_buf[2] = inlen >> 8;
-    ext_buf[3] = inlen & 0xFF;
+    inlen &= 0xffff; /* for formal memcmpy correctness */
+    ext_buf[0] = (unsigned char)(ext_type >> 8);
+    ext_buf[1] = (unsigned char)(ext_type);
+    ext_buf[2] = (unsigned char)(inlen >> 8);
+    ext_buf[3] = (unsigned char)(inlen);
     memcpy(ext_buf + 4, in, inlen);
 
     BIO_snprintf(pem_name, sizeof(pem_name), "SERVERINFO FOR EXTENSION %d",
@@ -589,9 +590,9 @@ typedef enum OPTION_choice {
     OPT_KEY, OPT_RECONNECT, OPT_BUILD_CHAIN, OPT_CAFILE, OPT_NOCAFILE,
     OPT_CHAINCAFILE, OPT_VERIFYCAFILE, OPT_NEXTPROTONEG, OPT_ALPN,
     OPT_SERVERINFO, OPT_STARTTLS, OPT_SERVERNAME, OPT_NOSERVERNAME, OPT_ASYNC,
-    OPT_USE_SRTP, OPT_KEYMATEXPORT, OPT_KEYMATEXPORTLEN, OPT_SMTPHOST,
-    OPT_MAX_SEND_FRAG, OPT_SPLIT_SEND_FRAG, OPT_MAX_PIPELINES, OPT_READ_BUF,
-    OPT_KEYLOG_FILE, OPT_EARLY_DATA, OPT_REQCAFILE,
+    OPT_USE_SRTP, OPT_KEYMATEXPORT, OPT_KEYMATEXPORTLEN, OPT_PROTOHOST,
+    OPT_MAXFRAGLEN, OPT_MAX_SEND_FRAG, OPT_SPLIT_SEND_FRAG, OPT_MAX_PIPELINES,
+    OPT_READ_BUF, OPT_KEYLOG_FILE, OPT_EARLY_DATA, OPT_REQCAFILE,
     OPT_V_ENUM,
     OPT_X_ENUM,
     OPT_S_ENUM,
@@ -655,7 +656,7 @@ const OPTIONS s_client_options[] = {
     {"starttls", OPT_STARTTLS, 's',
      "Use the appropriate STARTTLS command before starting TLS"},
     {"xmpphost", OPT_XMPPHOST, 's',
-     "Host to use with \"-starttls xmpp[-server]\""},
+     "Alias of -name option for \"-starttls xmpp[-server]\""},
     OPT_R_OPTIONS,
     {"sess_out", OPT_SESS_OUT, '>', "File to write SSL session to"},
     {"sess_in", OPT_SESS_IN, '<', "File to read SSL session from"},
@@ -665,9 +666,11 @@ const OPTIONS s_client_options[] = {
      "Export keying material using label"},
     {"keymatexportlen", OPT_KEYMATEXPORTLEN, 'p',
      "Export len bytes of keying material (default 20)"},
+    {"maxfraglen", OPT_MAXFRAGLEN, 'p',
+     "Enable Maximum Fragment Length Negotiation (len values: 512, 1024, 2048 and 4096)"},
     {"fallback_scsv", OPT_FALLBACKSCSV, '-', "Send the fallback SCSV"},
-    {"name", OPT_SMTPHOST, 's',
-     "Hostname to use for \"-starttls lmtp\" or \"-starttls smtp\""},
+    {"name", OPT_PROTOHOST, 's',
+     "Hostname to use for \"-starttls lmtp\", \"-starttls smtp\" or \"-starttls xmpp[-server]\""},
     {"CRL", OPT_CRL, '<', "CRL file to use"},
     {"crl_download", OPT_CRL_DOWNLOAD, '-', "Download CRL from distribution points"},
     {"CRLform", OPT_CRLFORM, 'F', "CRL format (PEM or DER) PEM is default"},
@@ -885,8 +888,7 @@ int s_client_main(int argc, char **argv)
     char *passarg = NULL, *pass = NULL, *vfyCApath = NULL, *vfyCAfile = NULL;
     char *ReqCAfile = NULL;
     char *sess_in = NULL, *crl_file = NULL, *p;
-    char *xmpphost = NULL;
-    const char *ehlo = "mail.example.com";
+    const char *protohost = NULL;
     struct timeval timeout, *timeoutp;
     fd_set readfds, writefds;
     int noCApath = 0, noCAfile = 0;
@@ -917,7 +919,7 @@ int s_client_main(int argc, char **argv)
 #if defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_MSDOS)
     struct timeval tv;
 #endif
-    char *servername = NULL;
+    const char *servername = NULL;
     int noservername = 0;
     const char *alpn_in = NULL;
     tlsextctx tlsextcbp = { NULL, 0 };
@@ -943,6 +945,7 @@ int s_client_main(int argc, char **argv)
     unsigned int split_send_fragment = 0, max_pipelines = 0;
     enum { use_inet, use_unix, use_unknown } connect_type = use_unknown;
     int count4or6 = 0;
+    uint8_t maxfraglen = 0;
     int c_nbio = 0, c_msg = 0, c_ign_eof = 0, c_brief = 0;
     int c_tlsextdebug = 0;
 #ifndef OPENSSL_NO_OCSP
@@ -1058,10 +1061,9 @@ int s_client_main(int argc, char **argv)
             break;
 #endif
         case OPT_XMPPHOST:
-            xmpphost = opt_arg();
-            break;
-        case OPT_SMTPHOST:
-            ehlo = opt_arg();
+            /* fall through, since this is an alias */
+        case OPT_PROTOHOST:
+            protohost = opt_arg();
             break;
         case OPT_VERIFY:
             verify = SSL_VERIFY_PEER;
@@ -1426,6 +1428,28 @@ int s_client_main(int argc, char **argv)
         case OPT_ASYNC:
             async = 1;
             break;
+        case OPT_MAXFRAGLEN:
+            len = atoi(opt_arg());
+            switch (len) {
+            case 512:
+                maxfraglen = TLSEXT_max_fragment_length_512;
+                break;
+            case 1024:
+                maxfraglen = TLSEXT_max_fragment_length_1024;
+                break;
+            case 2048:
+                maxfraglen = TLSEXT_max_fragment_length_2048;
+                break;
+            case 4096:
+                maxfraglen = TLSEXT_max_fragment_length_4096;
+                break;
+            default:
+                BIO_printf(bio_err,
+                           "%s: Max Fragment Len %u is out of permitted values",
+                           prog, len);
+                goto opthelp;
+            }
+            break;
         case OPT_MAX_SEND_FRAG:
             max_send_fragment = atoi(opt_arg());
             break;
@@ -1679,6 +1703,14 @@ int s_client_main(int argc, char **argv)
         SSL_CTX_set_default_read_buffer_len(ctx, read_buf_len);
     }
 
+    if (maxfraglen > 0
+            && !SSL_CTX_set_tlsext_max_fragment_length(ctx, maxfraglen)) {
+        BIO_printf(bio_err,
+                   "%s: Max Fragment Length code %u is out of permitted values"
+                   "\n", prog, maxfraglen);
+        goto end;
+    }
+
     if (!config_ctx(cctx, ssl_args, ctx))
         goto end;
 
@@ -1868,6 +1900,9 @@ int s_client_main(int argc, char **argv)
         goto end;
 
     con = SSL_new(ctx);
+    if (con == NULL)
+        goto end;
+
     if (sess_in != NULL) {
         SSL_SESSION *sess;
         BIO *stmp = BIO_new_file(sess_in, "r");
@@ -1888,25 +1923,7 @@ int s_client_main(int argc, char **argv)
             ERR_print_errors(bio_err);
             goto end;
         }
-        /* By default the SNI should be the same as was set in the session */
-        if (!noservername && servername == NULL) {
-            const char *sni = SSL_SESSION_get0_hostname(sess);
 
-            if (sni != NULL) {
-                servername = OPENSSL_strdup(sni);
-                if (servername == NULL) {
-                    BIO_printf(bio_err, "Can't set server name\n");
-                    ERR_print_errors(bio_err);
-                    goto end;
-                }
-            } else {
-                /*
-                 * Force no SNI to be sent so we are consistent with the
-                 * session.
-                 */
-                noservername = 1;
-            }
-        }
         SSL_SESSION_free(sess);
     }
 
@@ -2098,10 +2115,12 @@ int s_client_main(int argc, char **argv)
             do {
                 mbuf_len = BIO_gets(fbio, mbuf, BUFSIZZ);
             } while (mbuf_len > 3 && mbuf[3] == '-');
+            if (protohost == NULL)
+                protohost = "mail.example.com";
             if (starttls_proto == (int)PROTO_LMTP)
-                BIO_printf(fbio, "LHLO %s\r\n", ehlo);
+                BIO_printf(fbio, "LHLO %s\r\n", protohost);
             else
-                BIO_printf(fbio, "EHLO %s\r\n", ehlo);
+                BIO_printf(fbio, "EHLO %s\r\n", protohost);
             (void)BIO_flush(fbio);
             /*
              * Wait for multi-line response to end LHLO LMTP or EHLO SMTP
@@ -2187,7 +2206,7 @@ int s_client_main(int argc, char **argv)
                        "xmlns:stream='http://etherx.jabber.org/streams' "
                        "xmlns='jabber:%s' to='%s' version='1.0'>",
                        starttls_proto == PROTO_XMPP ? "client" : "server",
-                       xmpphost ? xmpphost : host);
+                       protohost ? protohost : host);
             seen = BIO_read(sbio, mbuf, BUFSIZZ);
             if (seen < 0) {
                 BIO_printf(bio_err, "BIO_read failed\n");
@@ -3053,7 +3072,7 @@ int s_client_main(int argc, char **argv)
     bio_c_out = NULL;
     BIO_free(bio_c_msg);
     bio_c_msg = NULL;
-    return (ret);
+    return ret;
 }
 
 static void print_stuff(BIO *bio, SSL *s, int full)

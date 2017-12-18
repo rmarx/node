@@ -676,7 +676,7 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
         int gai_ret = 0;
         struct addrinfo hints;
 
-        memset(&hints, 0, sizeof hints);
+        memset(&hints, 0, sizeof(hints));
 
         hints.ai_family = family;
         hints.ai_socktype = socktype;
@@ -821,7 +821,7 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
 
             if (endp != service && *endp == '\0'
                     && portnum > 0 && portnum < 65536) {
-                se_fallback.s_port = htons(portnum);
+                se_fallback.s_port = htons((unsigned short)portnum);
                 se_fallback.s_proto = proto;
                 se = &se_fallback;
             } else if (endp == service) {

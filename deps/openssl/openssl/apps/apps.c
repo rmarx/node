@@ -663,7 +663,7 @@ X509 *load_cert(const char *file, int format, const char *cert_descrip)
         ERR_print_errors(bio_err);
     }
     BIO_free(cert);
-    return (x);
+    return x;
 }
 
 X509_CRL *load_crl(const char *infile, int format)
@@ -697,7 +697,7 @@ X509_CRL *load_crl(const char *infile, int format)
 
  end:
     BIO_free(in);
-    return (x);
+    return x;
 }
 
 EVP_PKEY *load_key(const char *file, int format, int maybe_stdin,
@@ -769,7 +769,7 @@ EVP_PKEY *load_key(const char *file, int format, int maybe_stdin,
         BIO_printf(bio_err, "unable to load %s\n", key_descrip);
         ERR_print_errors(bio_err);
     }
-    return (pkey);
+    return pkey;
 }
 
 EVP_PKEY *load_pubkey(const char *file, int format, int maybe_stdin,
@@ -855,7 +855,7 @@ EVP_PKEY *load_pubkey(const char *file, int format, int maybe_stdin,
     BIO_free(key);
     if (pkey == NULL)
         BIO_printf(bio_err, "unable to load %s\n", key_descrip);
-    return (pkey);
+    return pkey;
 }
 
 static int load_certs_crls(const char *file, int format,
@@ -1334,7 +1334,7 @@ static int index_serial_cmp(const OPENSSL_CSTRING *a,
 
     for (aa = a[DB_serial]; *aa == '0'; aa++) ;
     for (bb = b[DB_serial]; *bb == '0'; bb++) ;
-    return (strcmp(aa, bb));
+    return strcmp(aa, bb);
 }
 
 static int index_name_qual(char **a)
@@ -1349,7 +1349,7 @@ static unsigned long index_name_hash(const OPENSSL_CSTRING *a)
 
 int index_name_cmp(const OPENSSL_CSTRING *a, const OPENSSL_CSTRING *b)
 {
-    return (strcmp(a[DB_name], b[DB_name]));
+    return strcmp(a[DB_name], b[DB_name]);
 }
 
 static IMPLEMENT_LHASH_HASH_FN(index_serial, OPENSSL_CSTRING)
@@ -1400,7 +1400,7 @@ BIGNUM *load_serial(const char *serialfile, int create, ASN1_INTEGER **retai)
  err:
     BIO_free(in);
     ASN1_INTEGER_free(ai);
-    return (ret);
+    return ret;
 }
 
 int save_serial(const char *serialfile, const char *suffix, const BIGNUM *serial,
@@ -1425,9 +1425,9 @@ int save_serial(const char *serialfile, const char *suffix, const BIGNUM *serial
         OPENSSL_strlcpy(buf[0], serialfile, BSIZE);
     else {
 #ifndef OPENSSL_SYS_VMS
-        j = BIO_snprintf(buf[0], sizeof buf[0], "%s.%s", serialfile, suffix);
+        j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s.%s", serialfile, suffix);
 #else
-        j = BIO_snprintf(buf[0], sizeof buf[0], "%s-%s", serialfile, suffix);
+        j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s-%s", serialfile, suffix);
 #endif
     }
     out = BIO_new_file(buf[0], "w");
@@ -1450,7 +1450,7 @@ int save_serial(const char *serialfile, const char *suffix, const BIGNUM *serial
  err:
     BIO_free_all(out);
     ASN1_INTEGER_free(ai);
-    return (ret);
+    return ret;
 }
 
 int rotate_serial(const char *serialfile, const char *new_suffix,
@@ -1468,11 +1468,11 @@ int rotate_serial(const char *serialfile, const char *new_suffix,
         goto err;
     }
 #ifndef OPENSSL_SYS_VMS
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s.%s", serialfile, new_suffix);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s.%s", serialfile, old_suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s.%s", serialfile, new_suffix);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s.%s", serialfile, old_suffix);
 #else
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s-%s", serialfile, new_suffix);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s-%s", serialfile, old_suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s-%s", serialfile, new_suffix);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s-%s", serialfile, old_suffix);
 #endif
     if (rename(serialfile, buf[1]) < 0 && errno != ENOENT
 #ifdef ENOTDIR
@@ -1537,9 +1537,9 @@ CA_DB *load_index(const char *dbfile, DB_ATTR *db_attr)
         goto err;
 
 #ifndef OPENSSL_SYS_VMS
-    BIO_snprintf(buf, sizeof buf, "%s.attr", dbfile);
+    BIO_snprintf(buf, sizeof(buf), "%s.attr", dbfile);
 #else
-    BIO_snprintf(buf, sizeof buf, "%s-attr", dbfile);
+    BIO_snprintf(buf, sizeof(buf), "%s-attr", dbfile);
 #endif
     dbattr_conf = app_load_config(buf);
 
@@ -1600,13 +1600,13 @@ int save_index(const char *dbfile, const char *suffix, CA_DB *db)
         goto err;
     }
 #ifndef OPENSSL_SYS_VMS
-    j = BIO_snprintf(buf[2], sizeof buf[2], "%s.attr", dbfile);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s.attr.%s", dbfile, suffix);
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s.%s", dbfile, suffix);
+    j = BIO_snprintf(buf[2], sizeof(buf[2]), "%s.attr", dbfile);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s.attr.%s", dbfile, suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s.%s", dbfile, suffix);
 #else
-    j = BIO_snprintf(buf[2], sizeof buf[2], "%s-attr", dbfile);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s-attr-%s", dbfile, suffix);
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s-%s", dbfile, suffix);
+    j = BIO_snprintf(buf[2], sizeof(buf[2]), "%s-attr", dbfile);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s-attr-%s", dbfile, suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s-%s", dbfile, suffix);
 #endif
     out = BIO_new_file(buf[0], "w");
     if (out == NULL) {
@@ -1649,17 +1649,17 @@ int rotate_index(const char *dbfile, const char *new_suffix,
         goto err;
     }
 #ifndef OPENSSL_SYS_VMS
-    j = BIO_snprintf(buf[4], sizeof buf[4], "%s.attr", dbfile);
-    j = BIO_snprintf(buf[3], sizeof buf[3], "%s.attr.%s", dbfile, old_suffix);
-    j = BIO_snprintf(buf[2], sizeof buf[2], "%s.attr.%s", dbfile, new_suffix);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s.%s", dbfile, old_suffix);
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s.%s", dbfile, new_suffix);
+    j = BIO_snprintf(buf[4], sizeof(buf[4]), "%s.attr", dbfile);
+    j = BIO_snprintf(buf[3], sizeof(buf[3]), "%s.attr.%s", dbfile, old_suffix);
+    j = BIO_snprintf(buf[2], sizeof(buf[2]), "%s.attr.%s", dbfile, new_suffix);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s.%s", dbfile, old_suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s.%s", dbfile, new_suffix);
 #else
-    j = BIO_snprintf(buf[4], sizeof buf[4], "%s-attr", dbfile);
-    j = BIO_snprintf(buf[3], sizeof buf[3], "%s-attr-%s", dbfile, old_suffix);
-    j = BIO_snprintf(buf[2], sizeof buf[2], "%s-attr-%s", dbfile, new_suffix);
-    j = BIO_snprintf(buf[1], sizeof buf[1], "%s-%s", dbfile, old_suffix);
-    j = BIO_snprintf(buf[0], sizeof buf[0], "%s-%s", dbfile, new_suffix);
+    j = BIO_snprintf(buf[4], sizeof(buf[4]), "%s-attr", dbfile);
+    j = BIO_snprintf(buf[3], sizeof(buf[3]), "%s-attr-%s", dbfile, old_suffix);
+    j = BIO_snprintf(buf[2], sizeof(buf[2]), "%s-attr-%s", dbfile, new_suffix);
+    j = BIO_snprintf(buf[1], sizeof(buf[1]), "%s-%s", dbfile, old_suffix);
+    j = BIO_snprintf(buf[0], sizeof(buf[0]), "%s-%s", dbfile, new_suffix);
 #endif
     if (rename(dbfile, buf[1]) < 0 && errno != ENOENT
 #ifdef ENOTDIR
@@ -1926,7 +1926,7 @@ unsigned char *next_protos_parse(size_t *outlen, const char *in)
                 OPENSSL_free(out);
                 return NULL;
             }
-            out[start] = i - start;
+            out[start] = (unsigned char)(i - start);
             start = i + 1;
         } else {
             out[i + 1] = in[i];
@@ -2153,7 +2153,7 @@ double app_tminterval(int stop, int usertime)
         ret = (__int64)(tmstop.QuadPart - tmstart.QuadPart) * 1e-7;
     }
 
-    return (ret);
+    return ret;
 }
 #elif defined(OPENSSL_SYSTEM_VXWORKS)
 # include <time.h>
@@ -2189,7 +2189,7 @@ double app_tminterval(int stop, int usertime)
     else
         ret = (now - tmstart) / (double)sysClkRateGet();
 # endif
-    return (ret);
+    return ret;
 }
 
 #elif defined(OPENSSL_SYSTEM_VMS)
@@ -2223,7 +2223,7 @@ double app_tminterval(int stop, int usertime)
     else
         ret = (now - tmstart) / (double)(CLK_TCK);
 
-    return (ret);
+    return ret;
 }
 
 #elif defined(_SC_CLK_TCK)      /* by means of unistd.h */
@@ -2246,7 +2246,7 @@ double app_tminterval(int stop, int usertime)
         ret = (now - tmstart) / (double)tck;
     }
 
-    return (ret);
+    return ret;
 }
 
 #else
@@ -2371,9 +2371,9 @@ int raw_read_stdin(void *buf, int siz)
 {
     DWORD n;
     if (ReadFile(GetStdHandle(STD_INPUT_HANDLE), buf, siz, &n, NULL))
-        return (n);
+        return n;
     else
-        return (-1);
+        return -1;
 }
 #elif defined(__VMS)
 # include <sys/socket.h>
@@ -2394,9 +2394,9 @@ int raw_write_stdout(const void *buf, int siz)
 {
     DWORD n;
     if (WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf, siz, &n, NULL))
-        return (n);
+        return n;
     else
-        return (-1);
+        return -1;
 }
 #else
 int raw_write_stdout(const void *buf, int siz)

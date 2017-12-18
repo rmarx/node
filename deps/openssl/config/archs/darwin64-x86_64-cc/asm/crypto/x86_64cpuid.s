@@ -42,7 +42,7 @@ _OPENSSL_ia32_cpuid:
 
 
 	xorl	%eax,%eax
-	movl	%eax,8(%rdi)
+	movq	%rax,8(%rdi)
 	cpuid
 	movl	%eax,%r11d
 
@@ -113,6 +113,7 @@ L$intel:
 L$nocacheinfo:
 	movl	$1,%eax
 	cpuid
+	movd	%eax,%xmm0
 	andl	$0xbfefffff,%edx
 	cmpl	$0,%r9d
 	jne	L$notintel
@@ -160,7 +161,15 @@ L$generic:
 	jc	L$notknights
 	andl	$0xfff7ffff,%ebx
 L$notknights:
+	movd	%xmm0,%eax
+	andl	$0x0fff0ff0,%eax
+	cmpl	$0x00050650,%eax
+	jne	L$notskylakex
+	andl	$0xfffeffff,%ebx
+
+L$notskylakex:
 	movl	%ebx,8(%rdi)
+	movl	%ecx,12(%rdi)
 L$no_extended_info:
 
 	btl	$27,%r9d
@@ -170,7 +179,8 @@ L$no_extended_info:
 	andl	$0xe6,%eax
 	cmpl	$0xe6,%eax
 	je	L$done
-	andl	$0xfffeffff,8(%rdi)
+	andl	$0x3fdeffff,8(%rdi)
+
 
 
 

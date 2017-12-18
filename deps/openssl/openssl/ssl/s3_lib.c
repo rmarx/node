@@ -3241,9 +3241,23 @@ static int cipher_compare(const void *a, const void *b)
 
 void ssl_sort_cipher_list(void)
 {
-    qsort(ssl3_ciphers, SSL3_NUM_CIPHERS, sizeof ssl3_ciphers[0],
+    qsort(ssl3_ciphers, SSL3_NUM_CIPHERS, sizeof(ssl3_ciphers[0]),
           cipher_compare);
-    qsort(ssl3_scsvs, SSL3_NUM_SCSVS, sizeof ssl3_scsvs[0], cipher_compare);
+    qsort(ssl3_scsvs, SSL3_NUM_SCSVS, sizeof(ssl3_scsvs[0]), cipher_compare);
+}
+
+static int ssl_undefined_function_1(SSL *ssl, unsigned char *r, size_t s,
+                                    const char * t, size_t u,
+                                    const unsigned char * v, size_t w, int x)
+{
+    (void)r;
+    (void)s;
+    (void)t;
+    (void)u;
+    (void)v;
+    (void)w;
+    (void)x;
+    return ssl_undefined_function(ssl);
 }
 
 const SSL3_ENC_METHOD SSLv3_enc_data = {
@@ -3256,9 +3270,7 @@ const SSL3_ENC_METHOD SSLv3_enc_data = {
     SSL3_MD_CLIENT_FINISHED_CONST, 4,
     SSL3_MD_SERVER_FINISHED_CONST, 4,
     ssl3_alert_code,
-    (int (*)(SSL *, unsigned char *, size_t, const char *,
-             size_t, const unsigned char *, size_t,
-             int use_context))ssl_undefined_function,
+    ssl_undefined_function_1,
     0,
     ssl3_set_handshake_header,
     tls_close_construct_packet,
@@ -3276,15 +3288,15 @@ long ssl3_default_timeout(void)
 
 int ssl3_num_ciphers(void)
 {
-    return (SSL3_NUM_CIPHERS);
+    return SSL3_NUM_CIPHERS;
 }
 
 const SSL_CIPHER *ssl3_get_cipher(unsigned int u)
 {
     if (u < SSL3_NUM_CIPHERS)
-        return (&(ssl3_ciphers[SSL3_NUM_CIPHERS - 1 - u]));
+        return &(ssl3_ciphers[SSL3_NUM_CIPHERS - 1 - u]);
     else
-        return (NULL);
+        return NULL;
 }
 
 int ssl3_set_handshake_header(SSL *s, WPACKET *pkt, int htype)
@@ -3429,7 +3441,7 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
             EVP_PKEY *pkdh = NULL;
             if (dh == NULL) {
                 SSLerr(SSL_F_SSL3_CTRL, ERR_R_PASSED_NULL_PARAMETER);
-                return (ret);
+                return ret;
             }
             pkdh = ssl_dh_to_pkey(dh);
             if (pkdh == NULL) {
@@ -3450,7 +3462,7 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
     case SSL_CTRL_SET_TMP_DH_CB:
         {
             SSLerr(SSL_F_SSL3_CTRL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-            return (ret);
+            return ret;
         }
     case SSL_CTRL_SET_DH_AUTO:
         s->cert->dh_tmp_auto = larg;
@@ -3715,7 +3727,7 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
     default:
         break;
     }
-    return (ret);
+    return ret;
 }
 
 long ssl3_callback_ctrl(SSL *s, int cmd, void (*fp) (void))
@@ -3743,7 +3755,7 @@ long ssl3_callback_ctrl(SSL *s, int cmd, void (*fp) (void))
     default:
         break;
     }
-    return (ret);
+    return ret;
 }
 
 long ssl3_ctx_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
@@ -3776,7 +3788,7 @@ long ssl3_ctx_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
     case SSL_CTRL_SET_TMP_DH_CB:
         {
             SSLerr(SSL_F_SSL3_CTX_CTRL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-            return (0);
+            return 0;
         }
     case SSL_CTRL_SET_DH_AUTO:
         ctx->cert->dh_tmp_auto = larg;
@@ -3984,7 +3996,7 @@ long ssl3_ctx_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
         return ssl_cert_set_current(ctx->cert, larg);
 
     default:
-        return (0);
+        return 0;
     }
     return 1;
 }
@@ -4036,7 +4048,7 @@ long ssl3_ctx_callback_ctrl(SSL_CTX *ctx, int cmd, void (*fp) (void))
         }
         break;
     default:
-        return (0);
+        return 0;
     }
     return 1;
 }
@@ -4120,6 +4132,9 @@ const SSL_CIPHER *ssl3_choose_cipher(SSL *s, STACK_OF(SSL_CIPHER) *clnt,
     STACK_OF(SSL_CIPHER) *prio, *allow;
     int i, ii, ok;
     unsigned long alg_k = 0, alg_a = 0, mask_k = 0, mask_a = 0;
+#ifndef OPENSSL_NO_CHACHA
+    STACK_OF(SSL_CIPHER) *prio_chacha = NULL;
+#endif
 
     /* Let's see which ciphers we can support */
 
@@ -4145,9 +4160,53 @@ const SSL_CIPHER *ssl3_choose_cipher(SSL *s, STACK_OF(SSL_CIPHER) *clnt,
     }
 #endif
 
-    if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE || tls1_suiteb(s)) {
+    /* SUITE-B takes precedence over server preference and ChaCha priortiy */
+    if (tls1_suiteb(s)) {
         prio = srvr;
         allow = clnt;
+    } else if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE) {
+        prio = srvr;
+        allow = clnt;
+#ifndef OPENSSL_NO_CHACHA
+        /* If ChaCha20 is at the top of the client preference list,
+           and there are ChaCha20 ciphers in the server list, then
+           temporarily prioritize all ChaCha20 ciphers in the servers list. */
+        if (s->options & SSL_OP_PRIORITIZE_CHACHA && sk_SSL_CIPHER_num(clnt) > 0) {
+            c = sk_SSL_CIPHER_value(clnt, 0);
+            if (c->algorithm_enc == SSL_CHACHA20POLY1305) {
+                /* ChaCha20 is client preferred, check server... */
+                int num = sk_SSL_CIPHER_num(srvr);
+                int found = 0;
+                for (i = 0; i < num; i++) {
+                    c = sk_SSL_CIPHER_value(srvr, i);
+                    if (c->algorithm_enc == SSL_CHACHA20POLY1305) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (found) {
+                    prio_chacha = sk_SSL_CIPHER_new_reserve(NULL, num);
+                    /* if reserve fails, then there's likely a memory issue */
+                    if (prio_chacha != NULL) {
+                        /* Put all ChaCha20 at the top, starting with the one we just found */
+                        sk_SSL_CIPHER_push(prio_chacha, c);
+                        for (i++; i < num; i++) {
+                            c = sk_SSL_CIPHER_value(srvr, i);
+                            if (c->algorithm_enc == SSL_CHACHA20POLY1305)
+                                sk_SSL_CIPHER_push(prio_chacha, c);
+                        }
+                        /* Pull in the rest */
+                        for (i = 0; i < num; i++) {
+                            c = sk_SSL_CIPHER_value(srvr, i);
+                            if (c->algorithm_enc != SSL_CHACHA20POLY1305)
+                                sk_SSL_CIPHER_push(prio_chacha, c);
+                        }
+                        prio = prio_chacha;
+                    }
+                }
+            }
+        }
+# endif
     } else {
         prio = clnt;
         allow = srvr;
@@ -4229,7 +4288,10 @@ const SSL_CIPHER *ssl3_choose_cipher(SSL *s, STACK_OF(SSL_CIPHER) *clnt,
             break;
         }
     }
-    return (ret);
+#ifndef OPENSSL_NO_CHACHA
+    sk_SSL_CIPHER_free(prio_chacha);
+#endif
+    return ret;
 }
 
 int ssl3_get_req_cert_type(SSL *s, WPACKET *pkt)
@@ -4321,7 +4383,7 @@ int ssl3_shutdown(SSL *s)
          * written, s->s3->alert_dispatch will be true
          */
         if (s->s3->alert_dispatch)
-            return (-1);        /* return WANT_WRITE */
+            return -1;        /* return WANT_WRITE */
     } else if (s->s3->alert_dispatch) {
         /* resend it if not sent */
         ret = s->method->ssl_dispatch_alert(s);
@@ -4331,7 +4393,7 @@ int ssl3_shutdown(SSL *s)
              * have already signalled return 0 upon a previous invocation,
              * return WANT_WRITE
              */
-            return (ret);
+            return ret;
         }
     } else if (!(s->shutdown & SSL_RECEIVED_SHUTDOWN)) {
         size_t readbytes;
@@ -4348,7 +4410,7 @@ int ssl3_shutdown(SSL *s)
         !s->s3->alert_dispatch)
         return 1;
     else
-        return (0);
+        return 0;
 }
 
 int ssl3_write(SSL *s, const void *buf, size_t len, size_t *written)
@@ -4540,8 +4602,10 @@ int ssl_generate_master_secret(SSL *s, unsigned char *pms, size_t pmslen,
         s->s3->tmp.psk = NULL;
         if (!s->method->ssl3_enc->generate_master_secret(s,
                     s->session->master_key,pskpms, pskpmslen,
-                    &s->session->master_key_length))
+                    &s->session->master_key_length)) {
+            /* SSLfatal() already called */
             goto err;
+        }
         OPENSSL_clear_free(pskpms, pskpmslen);
 #else
         /* Should never happen */
@@ -4550,8 +4614,10 @@ int ssl_generate_master_secret(SSL *s, unsigned char *pms, size_t pmslen,
     } else {
         if (!s->method->ssl3_enc->generate_master_secret(s,
                 s->session->master_key, pms, pmslen,
-                &s->session->master_key_length))
+                &s->session->master_key_length)) {
+            /* SSLfatal() already called */
             goto err;
+        }
     }
 
     ret = 1;
@@ -4591,28 +4657,42 @@ EVP_PKEY *ssl_generate_pkey(EVP_PKEY *pm)
 }
 #ifndef OPENSSL_NO_EC
 /* Generate a private key from a group ID */
-EVP_PKEY *ssl_generate_pkey_group(uint16_t id)
+EVP_PKEY *ssl_generate_pkey_group(SSL *s, uint16_t id)
 {
     EVP_PKEY_CTX *pctx = NULL;
     EVP_PKEY *pkey = NULL;
     const TLS_GROUP_INFO *ginf = tls1_group_id_lookup(id);
     uint16_t gtype;
 
-    if (ginf == NULL)
+    if (ginf == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_GENERATE_PKEY_GROUP,
+                 ERR_R_INTERNAL_ERROR);
         goto err;
+    }
     gtype = ginf->flags & TLS_CURVE_TYPE;
     if (gtype == TLS_CURVE_CUSTOM)
         pctx = EVP_PKEY_CTX_new_id(ginf->nid, NULL);
     else
         pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
-    if (pctx == NULL)
+    if (pctx == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_GENERATE_PKEY_GROUP,
+                 ERR_R_MALLOC_FAILURE);
         goto err;
-    if (EVP_PKEY_keygen_init(pctx) <= 0)
+    }
+    if (EVP_PKEY_keygen_init(pctx) <= 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_GENERATE_PKEY_GROUP,
+                 ERR_R_EVP_LIB);
         goto err;
+    }
     if (gtype != TLS_CURVE_CUSTOM
-            && EVP_PKEY_CTX_set_ec_paramgen_curve_nid(pctx, ginf->nid) <= 0)
+            && EVP_PKEY_CTX_set_ec_paramgen_curve_nid(pctx, ginf->nid) <= 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_GENERATE_PKEY_GROUP,
+                 ERR_R_EVP_LIB);
         goto err;
+    }
     if (EVP_PKEY_keygen(pctx, &pkey) <= 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_GENERATE_PKEY_GROUP,
+                 ERR_R_EVP_LIB);
         EVP_PKEY_free(pkey);
         pkey = NULL;
     }
@@ -4668,25 +4748,37 @@ int ssl_derive(SSL *s, EVP_PKEY *privkey, EVP_PKEY *pubkey, int gensecret)
     size_t pmslen = 0;
     EVP_PKEY_CTX *pctx;
 
-    if (privkey == NULL || pubkey == NULL)
+    if (privkey == NULL || pubkey == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_DERIVE,
+                 ERR_R_INTERNAL_ERROR);
         return 0;
+    }
 
     pctx = EVP_PKEY_CTX_new(privkey, NULL);
 
     if (EVP_PKEY_derive_init(pctx) <= 0
         || EVP_PKEY_derive_set_peer(pctx, pubkey) <= 0
         || EVP_PKEY_derive(pctx, NULL, &pmslen) <= 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_DERIVE,
+                 ERR_R_INTERNAL_ERROR);
         goto err;
     }
 
     pms = OPENSSL_malloc(pmslen);
-    if (pms == NULL)
+    if (pms == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_DERIVE,
+                 ERR_R_MALLOC_FAILURE);
         goto err;
+    }
 
-    if (EVP_PKEY_derive(pctx, pms, &pmslen) <= 0)
+    if (EVP_PKEY_derive(pctx, pms, &pmslen) <= 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_DERIVE,
+                 ERR_R_INTERNAL_ERROR);
         goto err;
+    }
 
     if (gensecret) {
+        /* SSLfatal() called as appropriate in the below functions */
         if (SSL_IS_TLS13(s)) {
             /*
              * If we are resuming then we already generated the early secret

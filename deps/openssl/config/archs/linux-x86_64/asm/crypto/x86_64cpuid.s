@@ -41,7 +41,7 @@ OPENSSL_ia32_cpuid:
 .cfi_register	%rbx,%r8
 
 	xorl	%eax,%eax
-	movl	%eax,8(%rdi)
+	movq	%rax,8(%rdi)
 	cpuid
 	movl	%eax,%r11d
 
@@ -112,6 +112,7 @@ OPENSSL_ia32_cpuid:
 .Lnocacheinfo:
 	movl	$1,%eax
 	cpuid
+	movd	%eax,%xmm0
 	andl	$0xbfefffff,%edx
 	cmpl	$0,%r9d
 	jne	.Lnotintel
@@ -159,7 +160,15 @@ OPENSSL_ia32_cpuid:
 	jc	.Lnotknights
 	andl	$0xfff7ffff,%ebx
 .Lnotknights:
+	movd	%xmm0,%eax
+	andl	$0x0fff0ff0,%eax
+	cmpl	$0x00050650,%eax
+	jne	.Lnotskylakex
+	andl	$0xfffeffff,%ebx
+
+.Lnotskylakex:
 	movl	%ebx,8(%rdi)
+	movl	%ecx,12(%rdi)
 .Lno_extended_info:
 
 	btl	$27,%r9d
@@ -169,7 +178,8 @@ OPENSSL_ia32_cpuid:
 	andl	$0xe6,%eax
 	cmpl	$0xe6,%eax
 	je	.Ldone
-	andl	$0xfffeffff,8(%rdi)
+	andl	$0x3fdeffff,8(%rdi)
+
 
 
 

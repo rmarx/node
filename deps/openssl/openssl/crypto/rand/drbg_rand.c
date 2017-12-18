@@ -301,7 +301,7 @@ int ctr_generate(RAND_DRBG *drbg,
 
 int ctr_uninstantiate(RAND_DRBG *drbg)
 {
-    memset(&drbg->ctr, 0, sizeof(drbg->ctr));
+    OPENSSL_cleanse(&drbg->ctr, sizeof(drbg->ctr));
     return 1;
 }
 
@@ -313,7 +313,7 @@ int ctr_init(RAND_DRBG *drbg)
     switch (drbg->nid) {
     default:
         /* This can't happen, but silence the compiler warning. */
-        return -1;
+        return 0;
     case NID_aes_128_ctr:
         keylen = 16;
         break;
@@ -341,9 +341,9 @@ int ctr_init(RAND_DRBG *drbg)
         AES_set_encrypt_key(df_key, drbg->strength, &ctr->df_ks);
 
         drbg->min_entropylen = ctr->keylen;
-        drbg->max_entropylen = DRBG_MAX_LENGTH;
+        drbg->max_entropylen = DRBG_MINMAX_FACTOR * drbg->min_entropylen;
         drbg->min_noncelen = drbg->min_entropylen / 2;
-        drbg->max_noncelen = DRBG_MAX_LENGTH;
+        drbg->max_noncelen = DRBG_MINMAX_FACTOR * drbg->min_noncelen;
         drbg->max_perslen = DRBG_MAX_LENGTH;
         drbg->max_adinlen = DRBG_MAX_LENGTH;
     } else {
@@ -357,6 +357,6 @@ int ctr_init(RAND_DRBG *drbg)
     }
 
     drbg->max_request = 1 << 16;
-    drbg->reseed_interval = MAX_RESEED;
+    drbg->reseed_interval = MAX_RESEED_INTERVAL;
     return 1;
 }

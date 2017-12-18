@@ -747,7 +747,7 @@ redo_accept:
     OPENSSL_free(tport);
     OPENSSL_free(tpath);
 
-    return (ret);
+    return ret;
 }
 
 static int add_ocsp_cert(OCSP_REQUEST **req, X509 *cert,
@@ -1088,7 +1088,7 @@ static int do_responder(OCSP_REQUEST **preq, BIO **pcbio, BIO *acbio)
     *pcbio = cbio;
 
     /* Read the request line. */
-    len = BIO_gets(cbio, reqbuf, sizeof reqbuf);
+    len = BIO_gets(cbio, reqbuf, sizeof(reqbuf));
     if (len <= 0)
         return 1;
     if (strncmp(reqbuf, "GET ", 4) == 0) {
@@ -1106,7 +1106,7 @@ static int do_responder(OCSP_REQUEST **preq, BIO **pcbio, BIO *acbio)
             if (*q == ' ')
                 break;
         if (strncmp(q, " HTTP/1.", 8) != 0) {
-            BIO_printf(bio_err, "Invalid request -- bad HTTP vesion\n");
+            BIO_printf(bio_err, "Invalid request -- bad HTTP version\n");
             return 1;
         }
         *q = '\0';
@@ -1130,7 +1130,7 @@ static int do_responder(OCSP_REQUEST **preq, BIO **pcbio, BIO *acbio)
 
     /* Read and skip past the headers. */
     for (;;) {
-        len = BIO_gets(cbio, inbuf, sizeof inbuf);
+        len = BIO_gets(cbio, inbuf, sizeof(inbuf));
         if (len <= 0)
             return 1;
         if ((inbuf[0] == '\r') || (inbuf[0] == '\n'))

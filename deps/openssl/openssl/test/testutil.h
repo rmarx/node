@@ -186,6 +186,7 @@ DECLARE_COMPARISONS(char, char)
 DECLARE_COMPARISONS(unsigned char, uchar)
 DECLARE_COMPARISONS(long, long)
 DECLARE_COMPARISONS(unsigned long, ulong)
+DECLARE_COMPARISONS(time_t, time_t)
 /*
  * Because this comparison uses a printf format specifier that's not
  * universally known (yet), we provide an option to not have it declared.
@@ -282,18 +283,11 @@ void test_perror(const char *s);
  * a default description that indicates the file and line number of the error.
  *
  * The following macros guarantee to evaluate each argument exactly once.
- * This allows constructs such as: if(!TEST_ptr(ptr = OPENSSL_malloc(..)))
+ * This allows constructs such as: if (!TEST_ptr(ptr = OPENSSL_malloc(..)))
  * to produce better contextual output than:
  *      ptr = OPENSSL_malloc(..);
  *      if (!TEST_ptr(ptr))
  */
-# define TEST_int_eq(a, b)    test_int_eq(__FILE__, __LINE__, #a, #b, a, b)
-# define TEST_int_ne(a, b)    test_int_ne(__FILE__, __LINE__, #a, #b, a, b)
-# define TEST_int_lt(a, b)    test_int_lt(__FILE__, __LINE__, #a, #b, a, b)
-# define TEST_int_le(a, b)    test_int_le(__FILE__, __LINE__, #a, #b, a, b)
-# define TEST_int_gt(a, b)    test_int_gt(__FILE__, __LINE__, #a, #b, a, b)
-# define TEST_int_ge(a, b)    test_int_ge(__FILE__, __LINE__, #a, #b, a, b)
-
 # define TEST_int_eq(a, b)    test_int_eq(__FILE__, __LINE__, #a, #b, a, b)
 # define TEST_int_ne(a, b)    test_int_ne(__FILE__, __LINE__, #a, #b, a, b)
 # define TEST_int_lt(a, b)    test_int_lt(__FILE__, __LINE__, #a, #b, a, b)
@@ -342,6 +336,13 @@ void test_perror(const char *s);
 # define TEST_size_t_le(a, b) test_size_t_le(__FILE__, __LINE__, #a, #b, a, b)
 # define TEST_size_t_gt(a, b) test_size_t_gt(__FILE__, __LINE__, #a, #b, a, b)
 # define TEST_size_t_ge(a, b) test_size_t_ge(__FILE__, __LINE__, #a, #b, a, b)
+
+# define TEST_time_t_eq(a, b) test_time_t_eq(__FILE__, __LINE__, #a, #b, a, b)
+# define TEST_time_t_ne(a, b) test_time_t_ne(__FILE__, __LINE__, #a, #b, a, b)
+# define TEST_time_t_lt(a, b) test_time_t_lt(__FILE__, __LINE__, #a, #b, a, b)
+# define TEST_time_t_le(a, b) test_time_t_le(__FILE__, __LINE__, #a, #b, a, b)
+# define TEST_time_t_gt(a, b) test_time_t_gt(__FILE__, __LINE__, #a, #b, a, b)
+# define TEST_time_t_ge(a, b) test_time_t_ge(__FILE__, __LINE__, #a, #b, a, b)
 
 # define TEST_ptr_eq(a, b)    test_ptr_eq(__FILE__, __LINE__, #a, #b, a, b)
 # define TEST_ptr_ne(a, b)    test_ptr_ne(__FILE__, __LINE__, #a, #b, a, b)
@@ -446,5 +447,11 @@ int test_readstanza(STANZA *s);
  * Clear a stanza, release all allocated memory.
  */
 void test_clearstanza(STANZA *s);
+
+/*
+ * Glue an array of strings together and return it as an allocated string.
+ * Optionally return the whole length of this string in |out_len|
+ */
+char *glue_strings(const char *list[], size_t *out_len);
 
 #endif                          /* HEADER_TESTUTIL_H */

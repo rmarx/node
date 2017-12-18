@@ -39,6 +39,7 @@ void HANDSHAKE_RESULT_free(HANDSHAKE_RESULT *result)
     OPENSSL_free(result->server_alpn_negotiated);
     sk_X509_NAME_pop_free(result->server_ca_names, X509_NAME_free);
     sk_X509_NAME_pop_free(result->client_ca_names, X509_NAME_free);
+    OPENSSL_free(result->cipher);
     OPENSSL_free(result);
 }
 
@@ -350,14 +351,14 @@ static int parse_protos(const char *protos, unsigned char **out, size_t *outlen)
         if ((*out)[i] == ',') {
             if (!TEST_int_gt(i - 1, prefix))
                 goto err;
-            (*out)[prefix] = i - 1 - prefix;
+            (*out)[prefix] = (unsigned char)(i - 1 - prefix);
             prefix = i;
         }
         i++;
     }
     if (!TEST_int_gt(len, prefix))
         goto err;
-    (*out)[prefix] = len - prefix;
+    (*out)[prefix] = (unsigned char)(len - prefix);
     return 1;
 
 err:
@@ -487,6 +488,17 @@ static int configure_handshake_ctx(SSL_CTX *server_ctx, SSL_CTX *server2_ctx,
         SSL_CTX_set_cert_verify_callback(client_ctx, &verify_reject_cb, NULL);
         break;
     case SSL_TEST_VERIFY_NONE:
+        break;
+    }
+
+    switch (extra->client.max_fragment_len_mode) {
+    case TLSEXT_max_fragment_length_512:
+    case TLSEXT_max_fragment_length_1024:
+    case TLSEXT_max_fragment_length_2048:
+    case TLSEXT_max_fragment_length_4096:
+    case TLSEXT_max_fragment_length_DISABLED:
+        SSL_CTX_set_tlsext_max_fragment_length(
+              client_ctx, extra->client.max_fragment_len_mode);
         break;
     }
 
@@ -1313,6 +1325,7 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     EVP_PKEY *tmp_key;
     const STACK_OF(X509_NAME) *names;
     time_t start;
+    const char* cipher;
 
     if (ret == NULL)
         return NULL;
@@ -1531,6 +1544,9 @@ static HANDSHAKE_RESULT *do_handshake_internal(
 
     ret->client_resumed = SSL_session_reused(client.ssl);
     ret->server_resumed = SSL_session_reused(server.ssl);
+
+    cipher = SSL_CIPHER_get_name(SSL_get_current_cipher(client.ssl));
+    ret->cipher = dup_str((const unsigned char*)cipher, strlen(cipher));
 
     if (session_out != NULL)
         *session_out = SSL_get1_session(client.ssl);

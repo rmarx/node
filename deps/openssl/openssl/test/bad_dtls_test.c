@@ -19,7 +19,7 @@
  * Note that unlike other SSL tests, we don't test against our own SSL
  * server method. Firstly because we don't have one; we *only* support
  * DTLS1_BAD_VER as a client. And secondly because even if that were
- * fixed up it's the wrong thing to test against — because if changes
+ * fixed up it's the wrong thing to test against - because if changes
  * are made in generic DTLS code which don't take DTLS1_BAD_VER into
  * account, there's plenty of scope for making those changes such that
  * they break *both* the client and the server in the same way.
@@ -306,8 +306,8 @@ static int send_record(BIO *rbio, unsigned char type, uint64_t seqnr,
     HMAC_Update(ctx, seq, 6);
     HMAC_Update(ctx, &type, 1);
     HMAC_Update(ctx, ver, 2); /* Version */
-    lenbytes[0] = len >> 8;
-    lenbytes[1] = len & 0xff;
+    lenbytes[0] = (unsigned char)(len >> 8);
+    lenbytes[1] = (unsigned char)(len);
     HMAC_Update(ctx, lenbytes, 2); /* Length */
     HMAC_Update(ctx, enc, len); /* Finally the data itself */
     HMAC_Final(ctx, enc + len, NULL);
@@ -331,8 +331,8 @@ static int send_record(BIO *rbio, unsigned char type, uint64_t seqnr,
     BIO_write(rbio, ver, 2);
     BIO_write(rbio, epoch, 2);
     BIO_write(rbio, seq, 6);
-    lenbytes[0] = (len + sizeof(iv)) >> 8;
-    lenbytes[1] = (len + sizeof(iv)) & 0xff;
+    lenbytes[0] = (unsigned char)((len + sizeof(iv)) >> 8);
+    lenbytes[1] = (unsigned char)(len + sizeof(iv));
     BIO_write(rbio, lenbytes, 2);
 
     BIO_write(rbio, iv, sizeof(iv));

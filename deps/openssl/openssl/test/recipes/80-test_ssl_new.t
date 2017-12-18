@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2015-2017 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -28,7 +28,7 @@ map { s/\^// } @conf_files if $^O eq "VMS";
 
 # We hard-code the number of tests to double-check that the globbing above
 # finds all files as expected.
-plan tests => 24;  # = scalar @conf_srcs
+plan tests => 25;  # = scalar @conf_srcs
 
 # Some test results depend on the configuration of enabled protocols. We only
 # verify generated sources in the default configuration.
@@ -66,6 +66,7 @@ my %conf_dependent_tests = (
   "19-mac-then-encrypt.conf" => !$is_default_tls,
   "20-cert-select.conf" => !$is_default_tls || $no_dh || $no_dsa,
   "22-compression.conf" => !$is_default_tls,
+  "25-cipher.conf" => disabled("poly1305") || disabled("chacha"),
 );
 
 # Add your test here if it should be skipped for some compile-time
@@ -81,7 +82,7 @@ my %skip = (
   # We could run some of these tests without TLS 1.2 if we had a per-test
   # disable instruction but that's a bizarre configuration not worth
   # special-casing for.
-  # We should review this once we have TLS 1.3.
+  # TODO(TLS 1.3): We should review this once we have TLS 1.3.
   "13-fragmentation.conf" => disabled("tls1_2"),
   "14-curves.conf" => disabled("tls1_2") || $no_ec || $no_ec2m,
   "15-certstatus.conf" => $no_tls || $no_ocsp,
@@ -94,6 +95,7 @@ my %skip = (
   "23-srp.conf" => (disabled("tls1") && disabled ("tls1_1")
                     && disabled("tls1_2")) || disabled("srp"),
   "24-padding.conf" => disabled("tls1_3"),
+  "25-cipher.conf" => disabled("ec") || disabled("tls1_2"),
 );
 
 foreach my $conf (@conf_files) {

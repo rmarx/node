@@ -102,7 +102,7 @@ int rand_main(int argc, char **argv)
 
         chunk = num;
         if (chunk > (int)sizeof(buf))
-            chunk = sizeof buf;
+            chunk = sizeof(buf);
         r = RAND_bytes(buf, chunk);
         if (r <= 0)
             goto end;
@@ -128,5 +128,5 @@ int rand_main(int argc, char **argv)
         ERR_print_errors(bio_err);
     release_engine(e);
     BIO_free_all(out);
-    return (ret);
+    return ret;
 }

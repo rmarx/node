@@ -58,7 +58,8 @@ static int fd_free(BIO *data);
 int BIO_fd_should_retry(int s);
 
 static const BIO_METHOD methods_fdp = {
-    BIO_TYPE_FD, "file descriptor",
+    BIO_TYPE_FD,
+    "file descriptor",
     /* TODO: Convert to new style write function */
     bwrite_conv,
     fd_write,
@@ -70,12 +71,12 @@ static const BIO_METHOD methods_fdp = {
     fd_ctrl,
     fd_new,
     fd_free,
-    NULL,
+    NULL,                       /* fd_callback_ctrl */
 };
 
 const BIO_METHOD *BIO_s_fd(void)
 {
-    return (&methods_fdp);
+    return &methods_fdp;
 }
 
 BIO *BIO_new_fd(int fd, int close_flag)
@@ -83,9 +84,9 @@ BIO *BIO_new_fd(int fd, int close_flag)
     BIO *ret;
     ret = BIO_new(BIO_s_fd());
     if (ret == NULL)
-        return (NULL);
+        return NULL;
     BIO_set_fd(ret, fd, close_flag);
-    return (ret);
+    return ret;
 }
 
 static int fd_new(BIO *bi)
@@ -100,7 +101,7 @@ static int fd_new(BIO *bi)
 static int fd_free(BIO *a)
 {
     if (a == NULL)
-        return (0);
+        return 0;
     if (a->shutdown) {
         if (a->init) {
             UP_close(a->num);
@@ -124,7 +125,7 @@ static int fd_read(BIO *b, char *out, int outl)
                 BIO_set_retry_read(b);
         }
     }
-    return (ret);
+    return ret;
 }
 
 static int fd_write(BIO *b, const char *in, int inl)
@@ -137,7 +138,7 @@ static int fd_write(BIO *b, const char *in, int inl)
         if (BIO_fd_should_retry(ret))
             BIO_set_retry_write(b);
     }
-    return (ret);
+    return ret;
 }
 
 static long fd_ctrl(BIO *b, int cmd, long num, void *ptr)
@@ -189,7 +190,7 @@ static long fd_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = 0;
         break;
     }
-    return (ret);
+    return ret;
 }
 
 static int fd_puts(BIO *bp, const char *str)
@@ -198,7 +199,7 @@ static int fd_puts(BIO *bp, const char *str)
 
     n = strlen(str);
     ret = fd_write(bp, str, n);
-    return (ret);
+    return ret;
 }
 
 static int fd_gets(BIO *bp, char *buf, int size)
@@ -216,7 +217,7 @@ static int fd_gets(BIO *bp, char *buf, int size)
 
     if (buf[0] != '\0')
         ret = strlen(buf);
-    return (ret);
+    return ret;
 }
 
 int BIO_fd_should_retry(int i)
@@ -226,9 +227,9 @@ int BIO_fd_should_retry(int i)
     if ((i == 0) || (i == -1)) {
         err = get_last_sys_error();
 
-        return (BIO_fd_non_fatal_error(err));
+        return BIO_fd_non_fatal_error(err);
     }
-    return (0);
+    return 0;
 }
 
 int BIO_fd_non_fatal_error(int err)
@@ -274,6 +275,6 @@ int BIO_fd_non_fatal_error(int err)
     default:
         break;
     }
-    return (0);
+    return 0;
 }
 #endif

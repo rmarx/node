@@ -68,7 +68,7 @@ OPENSSL_ia32_cpuid:
 .cfi_register	%rbx,%r8
 
 	xor	%eax,%eax
-	mov	%eax,8(%rdi)		# clear extended feature flags
+	mov	%rax,8(%rdi)		# clear extended feature flags
 	cpuid
 	mov	%eax,%r11d		# max value for standard query level
 
@@ -139,6 +139,7 @@ OPENSSL_ia32_cpuid:
 .Lnocacheinfo:
 	mov	\$1,%eax
 	cpuid
+	movd	%eax,%xmm0		# put aside processor id
 	and	\$0xbfefffff,%edx	# force reserved bits to 0
 	cmp	\$0,%r9d
 	jne	.Lnotintel
@@ -186,7 +187,15 @@ OPENSSL_ia32_cpuid:
 	jc	.Lnotknights
 	and	\$0xfff7ffff,%ebx	# clear ADCX/ADOX flag
 .Lnotknights:
+	movd	%xmm0,%eax		# restore processor id
+	and	\$0x0fff0ff0,%eax
+	cmp	\$0x00050650,%eax	# Skylake-X
+	jne	.Lnotskylakex
+	and	\$0xfffeffff,%ebx	# ~(1<<16)
+					# suppress AVX512F flag on Skylake-X
+.Lnotskylakex:
 	mov	%ebx,8(%rdi)		# save extended feature flags
+	mov	%ecx,12(%rdi)
 .Lno_extended_info:
 
 	bt	\$27,%r9d		# check OSXSAVE bit
@@ -196,10 +205,11 @@ OPENSSL_ia32_cpuid:
 	and	\$0xe6,%eax		# isolate XMM, YMM and ZMM state support
 	cmp	\$0xe6,%eax
 	je	.Ldone
-	andl	\$0xfffeffff,8(%rdi)	# clear AVX512F, ~(1<<16)
-					# note that we don't touch other AVX512
-					# extensions, because they can be used
-					# with YMM (without opmasking though)
+	andl	\$0x3fdeffff,8(%rdi)	# ~(1<<31|1<<30|1<<21|1<<16)
+					# clear AVX512F+BW+VL+FIMA, all of
+					# them are EVEX-encoded, which requires
+					# ZMM state support even if one uses
+					# only XMM and YMM :-(
 	and	\$6,%eax		# isolate XMM and YMM state support
 	cmp	\$6,%eax
 	je	.Ldone

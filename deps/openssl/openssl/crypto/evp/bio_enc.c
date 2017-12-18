@@ -19,7 +19,7 @@ static int enc_read(BIO *h, char *buf, int size);
 static long enc_ctrl(BIO *h, int cmd, long arg1, void *arg2);
 static int enc_new(BIO *h);
 static int enc_free(BIO *data);
-static long enc_callback_ctrl(BIO *h, int cmd, bio_info_cb *fps);
+static long enc_callback_ctrl(BIO *h, int cmd, BIO_info_cb *fps);
 #define ENC_BLOCK_SIZE  (1024*4)
 #define ENC_MIN_CHUNK   (256)
 #define BUF_OFFSET      (ENC_MIN_CHUNK + EVP_MAX_BLOCK_LENGTH)
@@ -40,7 +40,8 @@ typedef struct enc_struct {
 } BIO_ENC_CTX;
 
 static const BIO_METHOD methods_enc = {
-    BIO_TYPE_CIPHER, "cipher",
+    BIO_TYPE_CIPHER,
+    "cipher",
     /* TODO: Convert to new style write function */
     bwrite_conv,
     enc_write,
@@ -57,7 +58,7 @@ static const BIO_METHOD methods_enc = {
 
 const BIO_METHOD *BIO_f_cipher(void)
 {
-    return (&methods_enc);
+    return &methods_enc;
 }
 
 static int enc_new(BIO *bi)
@@ -108,7 +109,7 @@ static int enc_read(BIO *b, char *out, int outl)
     BIO *next;
 
     if (out == NULL)
-        return (0);
+        return 0;
     ctx = BIO_get_data(b);
 
     next = BIO_next(b);
@@ -248,7 +249,7 @@ static int enc_write(BIO *b, const char *in, int inl)
         i = BIO_write(next, &(ctx->buf[ctx->buf_off]), n);
         if (i <= 0) {
             BIO_copy_next_retry(b);
-            return (i);
+            return i;
         }
         ctx->buf_off += i;
         n -= i;
@@ -256,7 +257,7 @@ static int enc_write(BIO *b, const char *in, int inl)
     /* at this point all pending data has been written */
 
     if ((in == NULL) || (inl <= 0))
-        return (0);
+        return 0;
 
     ctx->buf_off = 0;
     while (inl > 0) {
@@ -286,7 +287,7 @@ static int enc_write(BIO *b, const char *in, int inl)
         ctx->buf_off = 0;
     }
     BIO_copy_next_retry(b);
-    return (ret);
+    return ret;
 }
 
 static long enc_ctrl(BIO *b, int cmd, long num, void *ptr)
@@ -381,22 +382,22 @@ static long enc_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = BIO_ctrl(next, cmd, num, ptr);
         break;
     }
-    return (ret);
+    return ret;
 }
 
-static long enc_callback_ctrl(BIO *b, int cmd, bio_info_cb *fp)
+static long enc_callback_ctrl(BIO *b, int cmd, BIO_info_cb *fp)
 {
     long ret = 1;
     BIO *next = BIO_next(b);
 
     if (next == NULL)
-        return (0);
+        return 0;
     switch (cmd) {
     default:
         ret = BIO_callback_ctrl(next, cmd, fp);
         break;
     }
-    return (ret);
+    return ret;
 }
 
 int BIO_set_cipher(BIO *b, const EVP_CIPHER *c, const unsigned char *k,

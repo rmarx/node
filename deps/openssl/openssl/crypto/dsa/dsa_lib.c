@@ -7,8 +7,6 @@
  * https://www.openssl.org/source/license.html
  */
 
-/* Original version from Steven Schoch <schoch@sheba.arc.nasa.gov> */
-
 #include <stdio.h>
 #include "internal/cryptlib.h"
 #include "internal/refcount.h"
@@ -162,17 +160,17 @@ int DSA_size(const DSA *r)
     i = i2d_ASN1_INTEGER(&bs, NULL);
     i += i;                     /* r and s */
     ret = ASN1_object_size(1, i, V_ASN1_SEQUENCE);
-    return (ret);
+    return ret;
 }
 
 int DSA_set_ex_data(DSA *d, int idx, void *arg)
 {
-    return (CRYPTO_set_ex_data(&d->ex_data, idx, arg));
+    return CRYPTO_set_ex_data(&d->ex_data, idx, arg);
 }
 
 void *DSA_get_ex_data(DSA *d, int idx)
 {
-    return (CRYPTO_get_ex_data(&d->ex_data, idx));
+    return CRYPTO_get_ex_data(&d->ex_data, idx);
 }
 
 int DSA_security_bits(const DSA *d)

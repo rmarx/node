@@ -159,7 +159,7 @@ int req_main(int argc, char **argv)
     char *template = default_config_file, *keyout = NULL;
     const char *keyalg = NULL;
     OPTION_CHOICE o;
-    int ret = 1, x509 = 0, days = 30, i = 0, newreq = 0, verbose = 0;
+    int ret = 1, x509 = 0, days = 0, i = 0, newreq = 0, verbose = 0;
     int pkey_type = -1, private = 0;
     int informat = FORMAT_PEM, outformat = FORMAT_PEM, keyform = FORMAT_PEM;
     int modulus = 0, multirdn = 0, verify = 0, noout = 0, text = 0;
@@ -333,6 +333,8 @@ int req_main(int argc, char **argv)
     if (argc != 0)
         goto opthelp;
 
+    if (days && !x509)
+        BIO_printf(bio_err, "Ignoring -days; not generating a certificate\n");
     if (x509 && infile == NULL)
         newreq = 1;
 
@@ -615,6 +617,10 @@ int req_main(int argc, char **argv)
 
             if (!X509_set_issuer_name(x509ss, X509_REQ_get_subject_name(req)))
                 goto end;
+            if (days == 0) {
+                /* set default days if it's not specified */
+                days = 30;
+            }
             if (!set_cert_times(x509ss, NULL, NULL, days))
                 goto end;
             if (!X509_set_subject_name
@@ -1166,7 +1172,7 @@ static int add_DN_object(X509_NAME *n, char *text, const char *def,
     } else {
         buf[0] = '\0';
         if (!batch) {
-            if (!fgets(buf, sizeof buf, stdin))
+            if (!fgets(buf, sizeof(buf), stdin))
                 return 0;
         } else {
             buf[0] = '\n';
@@ -1226,7 +1232,7 @@ static int add_attribute_object(X509_REQ *req, char *text, const char *def,
     } else {
         buf[0] = '\0';
         if (!batch) {
-            if (!fgets(buf, sizeof buf, stdin))
+            if (!fgets(buf, sizeof(buf), stdin))
                 return 0;
         } else {
             buf[0] = '\n';

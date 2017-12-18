@@ -180,11 +180,11 @@ int dsaparam_main(int argc, char **argv)
                             "\n");
         BIO_printf(bio_out, "    if (dsa == NULL)\n"
                             "        return NULL;\n");
-        BIO_printf(bio_out, "    dsa->p = BN_bin2bn(dsap_%d, sizeof (dsap_%d), NULL);\n",
+        BIO_printf(bio_out, "    dsa->p = BN_bin2bn(dsap_%d, sizeof(dsap_%d), NULL);\n",
                bits_p, bits_p);
-        BIO_printf(bio_out, "    dsa->q = BN_bin2bn(dsaq_%d, sizeof (dsaq_%d), NULL);\n",
+        BIO_printf(bio_out, "    dsa->q = BN_bin2bn(dsaq_%d, sizeof(dsaq_%d), NULL);\n",
                bits_p, bits_p);
-        BIO_printf(bio_out, "    dsa->g = BN_bin2bn(dsag_%d, sizeof (dsag_%d), NULL);\n",
+        BIO_printf(bio_out, "    dsa->g = BN_bin2bn(dsag_%d, sizeof(dsag_%d), NULL);\n",
                bits_p, bits_p);
         BIO_printf(bio_out, "    if (!dsa->p || !dsa->q || !dsa->g) {\n"
                             "        DSA_free(dsa);\n"
@@ -230,7 +230,7 @@ int dsaparam_main(int argc, char **argv)
     BIO_free_all(out);
     DSA_free(dsa);
     release_engine(e);
-    return (ret);
+    return ret;
 }
 
 static int dsa_cb(int p, int n, BN_GENCB *cb)
