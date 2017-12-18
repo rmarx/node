@@ -224,7 +224,7 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   *out = qtlsWrap->transport_parameters;
   *outlen = qtlsWrap->transport_parameters_length;
 
-  return 0;
+  return 1;
 }
 
 void QTLSWrap::FreeTransportParamsCallback(SSL *ssl, unsigned int ext_type,
@@ -250,7 +250,7 @@ int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   memcpy(qtlsWrap->transport_parameters, in, inlen);
   qtlsWrap->transport_parameters_length = inlen;
   // probably call callback from JS land
-  return 0;
+  return 1;
 }
 
 void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
@@ -342,7 +342,7 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
   }*/
 
   // Return client initial data as buffer
-  args.GetReturnValue().Set(Buffer::New(env, data[0], write_size_).ToLocalChecked());
+  args.GetReturnValue().Set(Buffer::Copy(env, data[0], write_size_).ToLocalChecked());
 }
 
 void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -386,7 +386,7 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   size_t size[arraysize(data)];
   size_t count = arraysize(data);
   size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
-  args.GetReturnValue().Set(Buffer::New(env, data[0], write_size_).ToLocalChecked());
+  args.GetReturnValue().Set(Buffer::Copy(env, data[0], write_size_).ToLocalChecked());
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)
