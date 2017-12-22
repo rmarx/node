@@ -72,6 +72,7 @@ protected:
   static void WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -81,8 +82,10 @@ private:
   BIO *enc_out_;
   bool started_;
 
-  unsigned char* transport_parameters;
-  size_t transport_parameters_length;
+  unsigned char* local_transport_parameters;
+  size_t local_transport_parameters_length;
+  unsigned char* remote_transport_parameters;
+  size_t remote_transport_parameters_length;
 };
 
 } // namespace node

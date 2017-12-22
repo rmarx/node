@@ -60,6 +60,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   // example: env->SetProtoMethod(t, "receive", Receive);
   env->SetProtoMethod(t, "getClientInitial", GetClientInitial);
   env->SetProtoMethod(t, "setTransportParams", SetTransportParams);
+  env->SetProtoMethod(t, "getTransportParams", GetTransportParams);
   env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
   env->SetProtoMethod(t, "writeHandshakeData", WriteHandshakeData);
@@ -81,8 +82,10 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
       SSLWrap<QTLSWrap>(env, QTLSWrap::AddContextCallbacks(sc), kind),
       sc_(sc),
       started_(false),
-      transport_parameters(nullptr),
-      transport_parameters_length(0)
+      local_transport_parameters(nullptr),
+      local_transport_parameters_length(0),
+      remote_transport_parameters(nullptr),
+      remote_transport_parameters_length(0)
 {
   node::Wrap(object(), this);
   MakeWeak(this);
@@ -216,13 +219,13 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
 
   // add transport parameters
-  if (qtlsWrap->transport_parameters == nullptr)
+  if (qtlsWrap->local_transport_parameters == nullptr)
   {
-    return 0;
+    return 1;
   }
 
-  *out = qtlsWrap->transport_parameters;
-  *outlen = qtlsWrap->transport_parameters_length;
+  *out = qtlsWrap->local_transport_parameters;
+  *outlen = qtlsWrap->local_transport_parameters_length;
 
   return 1;
 }
@@ -242,13 +245,15 @@ int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
   QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
   // parse transport params
   // add transport parameters
-  if (qtlsWrap->transport_parameters != nullptr)
+  if (qtlsWrap->remote_transport_parameters != nullptr)
   {
-    return 0;
+    delete[] qtlsWrap->remote_transport_parameters;
+    qtlsWrap->remote_transport_parameters = nullptr;
   }
 
-  memcpy(qtlsWrap->transport_parameters, in, inlen);
-  qtlsWrap->transport_parameters_length = inlen;
+  qtlsWrap->remote_transport_parameters = new unsigned char[inlen];
+  memcpy(qtlsWrap->remote_transport_parameters, in, inlen);
+  qtlsWrap->remote_transport_parameters_length = inlen;
   // probably call callback from JS land
   return 1;
 }
@@ -406,8 +411,20 @@ void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &arg
   size_t length = Buffer::Length(bufferObj);
 
   //store data in variables to write in addtransportparamscb
-  wrap->transport_parameters = data;
-  wrap->transport_parameters_length = length;
+  wrap->local_transport_parameters = new unsigned char[length];
+  memcpy(wrap->local_transport_parameters, data, length);
+  wrap->local_transport_parameters_length = length;
+}
+
+void QTLSWrap::GetTransportParams(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  // Return client initial data as buffer
+  args.GetReturnValue().Set(Buffer::Copy(env, (char*)wrap->remote_transport_parameters, wrap->remote_transport_parameters_length).ToLocalChecked());
 }
 
 void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
