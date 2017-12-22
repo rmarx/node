@@ -325,10 +325,9 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
     delete[] error_str;
     return;
   }
-  char *data[1];
-  size_t size[arraysize(data)];
-  size_t count = arraysize(data);
-  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
+  int pending = BIO_pending(wrap->enc_out_);
+  char *data = new char[pending];
+  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->Read(data, pending);
 
   /*
   // Code to call a callback function
@@ -347,7 +346,7 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
   }*/
 
   // Return client initial data as buffer
-  args.GetReturnValue().Set(Buffer::Copy(env, data[0], write_size_).ToLocalChecked());
+  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
 }
 
 void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -387,11 +386,10 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
     delete[] error_str;
     return;
   }
-  char *data[1];
-  size_t size[arraysize(data)];
-  size_t count = arraysize(data);
-  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->PeekMultiple(data, size, &count);
-  args.GetReturnValue().Set(Buffer::Copy(env, data[0], write_size_).ToLocalChecked());
+  int pending = BIO_pending(wrap->enc_out_);
+  char *data = new char[pending];
+  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->Read(data, pending);
+  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)
