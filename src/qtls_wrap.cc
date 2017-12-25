@@ -65,6 +65,8 @@ void QTLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
   env->SetProtoMethod(t, "writeHandshakeData", WriteHandshakeData);
   env->SetProtoMethod(t, "readHandshakeData", ReadHandshakeData);
+  env->SetProtoMethod(t, "exportKeyingMaterial", ExportKeyingMaterial);
+  env->SetProtoMethod(t, "getNegotiatedCipher", GetNegotiatedCipher);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
@@ -425,6 +427,43 @@ void QTLSWrap::GetTransportParams(const FunctionCallbackInfo<Value> &args)
   args.GetReturnValue().Set(Buffer::Copy(env, (char*)wrap->remote_transport_parameters, wrap->remote_transport_parameters_length).ToLocalChecked());
 }
 
+void QTLSWrap::ExportKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  if (!args[0]->IsUint8Array())
+  {
+    env->ThrowTypeError("First argument must be a buffer");
+    return;
+  }
+  const char *label = Buffer::Data(args[0]);
+  size_t labelsize = Buffer::Length(args[0]);
+
+  unsigned char *data;
+  size_t datasize;
+  SSL_export_keying_material(wrap->ssl_, data, datasize, label, labelsize,reinterpret_cast<const uint8_t *>(""), 0, 1);
+  args.GetReturnValue().Set(Buffer::Copy(env, (char*) data, datasize).ToLocalChecked());
+}
+
+void QTLSWrap::GetNegotiatedCipher(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  const SSL_CIPHER *c = SSL_get_current_cipher(wrap->ssl_);
+  if (c == nullptr)
+    return;
+
+  const char *cipher_name = SSL_CIPHER_get_name(c);
+
+  args.GetReturnValue().Set(OneByteString(args.GetIsolate(), cipher_name));
+}
+
 void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
 {
   Environment *env = Environment::GetCurrent(args);
@@ -436,7 +475,7 @@ void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
     return env->ThrowTypeError("Bad arguments, expected two booleans");
 
   if (wrap->ssl_ == nullptr)
-    return env->ThrowTypeError("SetVerifyMode after destroySSL");
+    return env->ThrowTypeError("SetVerifyMode after destroyS,SL");
 
   int verify_mode;
   if (wrap->is_server())

@@ -75,6 +75,8 @@ protected:
   static void GetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ExportKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
   crypto::SecureContext *sc_;
