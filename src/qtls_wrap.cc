@@ -279,9 +279,10 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
 
   if (where & SSL_CB_HANDSHAKE_DONE)
   {
-    // handshake done
-    // dummy statement
-    int x = 0;
+    Local<Value> callback = object->Get(env->onhandshakedone_string());
+    if (callback->IsFunction()) {
+      c->MakeCallback(callback.As<Function>(), 0, nullptr);
+    }
   }
 }
 
