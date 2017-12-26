@@ -442,8 +442,9 @@ void QTLSWrap::ExportKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value> &a
   const char *label = Buffer::Data(args[0]);
   size_t labelsize = Buffer::Length(args[0]);
 
-  unsigned char *data;
-  size_t datasize;
+  size_t datasize = args[1]->NumberValue();
+  unsigned char *data = new unsigned char[datasize];
+  
   SSL_export_keying_material(wrap->ssl_, data, datasize, label, labelsize,reinterpret_cast<const uint8_t *>(""), 0, 1);
   args.GetReturnValue().Set(Buffer::Copy(env, (char*) data, datasize).ToLocalChecked());
 }
