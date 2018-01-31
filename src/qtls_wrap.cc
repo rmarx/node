@@ -106,8 +106,7 @@ SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
 {
 
   SSL_CTX_add_custom_ext(sc->ctx_, 26,
-                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS |
-                             SSL_EXT_TLS1_3_NEW_SESSION_TICKET | SSL_EXT_IGNORE_ON_RESUMPTION,
+                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS | SSL_EXT_IGNORE_ON_RESUMPTION,
                          QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
                          QTLSWrap::ParseTransportParamsCallback, nullptr);
   return sc;
@@ -236,7 +235,9 @@ void QTLSWrap::FreeTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                                            unsigned int context, const unsigned char *out,
                                            void *add_arg)
 {
-  delete[] const_cast<unsigned char *>(out);
+  if (out != nullptr) {
+    delete[] const_cast<unsigned char *>(out);
+  }
 }
 
 int QTLSWrap::ParseTransportParamsCallback(SSL *ssl, unsigned int ext_type,
