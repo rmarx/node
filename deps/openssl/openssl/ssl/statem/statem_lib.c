@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -43,12 +43,15 @@ int ssl3_do_write(SSL *s, int type)
         /*
          * should not be done for 'Hello Request's, but in that case we'll
          * ignore the result anyway
+         * TLS1.3 KeyUpdate and NewSessionTicket do not need to be added
          */
-        if (!ssl3_finish_mac(s,
-                             (unsigned char *)&s->init_buf->data[s->init_off],
-                             written))
-            return -1;
-
+        if (!SSL_IS_TLS13(s) || (s->statem.hand_state != TLS_ST_SW_SESSION_TICKET
+                                 && s->statem.hand_state != TLS_ST_CW_KEY_UPDATE
+                                 && s->statem.hand_state != TLS_ST_SW_KEY_UPDATE))
+            if (!ssl3_finish_mac(s,
+                                 (unsigned char *)&s->init_buf->data[s->init_off],
+                                 written))
+                return -1;
     if (written == s->init_num) {
         if (s->msg_callback)
             s->msg_callback(1, s->version, type, s->init_buf->data,
@@ -123,20 +126,6 @@ int tls_setup_handshake(SSL *s)
             /* N.B. s->session_ctx == s->ctx here */
             CRYPTO_atomic_add(&s->session_ctx->stats.sess_accept, 1, &i,
                               s->session_ctx->lock);
-        } else if ((s->options & SSL_OP_NO_RENEGOTIATION)) {
-            /* Renegotiation is disabled */
-            ssl3_send_alert(s, SSL3_AL_WARNING, SSL_AD_NO_RENEGOTIATION);
-            return 0;
-        } else if (!s->s3->send_connection_binding &&
-                   !(s->options &
-                     SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)) {
-            /*
-             * Server attempting to renegotiate with client that doesn't
-             * support secure renegotiation.
-             */
-            SSLfatal(s, SSL_AD_HANDSHAKE_FAILURE, SSL_F_TLS_SETUP_HANDSHAKE,
-                     SSL_R_UNSAFE_LEGACY_RENEGOTIATION_DISABLED);
-            return 0;
         } else {
             /* N.B. s->ctx may not equal s->session_ctx */
             CRYPTO_atomic_add(&s->ctx->stats.sess_accept_renegotiate, 1, &i,
@@ -518,7 +507,7 @@ int tls_construct_finished(SSL *s, WPACKET *pkt)
     size_t slen;
 
     /* This is a real handshake so make sure we clean it up at the end */
-    if (!s->server)
+    if (!s->server && s->post_handshake_auth != SSL_PHA_REQUESTED)
         s->statem.cleanuphand = 1;
 
     /*
@@ -755,8 +744,14 @@ MSG_PROCESS_RETURN tls_process_finished(SSL *s, PACKET *pkt)
 
 
     /* This is a real handshake so make sure we clean it up at the end */
-    if (s->server)
-        s->statem.cleanuphand = 1;
+    if (s->server) {
+        if (s->post_handshake_auth != SSL_PHA_REQUESTED)
+            s->statem.cleanuphand = 1;
+        if (SSL_IS_TLS13(s) && !tls13_save_handshake_digest_for_pha(s)) {
+                /* SSLfatal() already called */
+                return MSG_PROCESS_ERROR;
+        }
+    }
 
     /*
      * In TLSv1.3 a Finished message signals a key change so the end of the
@@ -815,7 +810,8 @@ MSG_PROCESS_RETURN tls_process_finished(SSL *s, PACKET *pkt)
      */
     if (SSL_IS_TLS13(s)) {
         if (s->server) {
-            if (!s->method->ssl3_enc->change_cipher_state(s,
+            if (s->post_handshake_auth != SSL_PHA_REQUESTED &&
+                    !s->method->ssl3_enc->change_cipher_state(s,
                     SSL3_CC_APPLICATION | SSL3_CHANGE_CIPHER_SERVER_READ)) {
                 /* SSLfatal() already called */
                 return MSG_PROCESS_ERROR;
@@ -1004,7 +1000,7 @@ unsigned long ssl3_output_cert_chain(SSL *s, WPACKET *pkt, CERT_PKEY *cpk)
  * in NBIO events. If |clearbufs| is set then init_buf and the wbio buffer is
  * freed up as well.
  */
-WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs)
+WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs, int stop)
 {
     int discard;
     void (*cb) (const SSL *ssl, int type, int val) = NULL;
@@ -1034,6 +1030,10 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs)
         }
         s->init_num = 0;
     }
+
+    if (SSL_IS_TLS13(s) && !s->server
+            && s->post_handshake_auth == SSL_PHA_REQUESTED)
+        s->post_handshake_auth = SSL_PHA_EXT_SENT;
 
     if (s->statem.cleanuphand) {
         /* skipped if we just sent a HelloRequest */
@@ -1083,11 +1083,7 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs)
         }
     }
 
-    /*
-     * If we've not cleared the buffers its because we've got more work to do,
-     * so continue.
-     */
-    if (!clearbufs)
+    if (!stop)
         return WORK_FINISHED_CONTINUE;
 
     ossl_statem_set_in_init(s, 0);
@@ -1122,6 +1118,17 @@ int tls_get_message_header(SSL *s, int *mt)
                     SSLfatal(s, SSL_AD_UNEXPECTED_MESSAGE,
                              SSL_F_TLS_GET_MESSAGE_HEADER,
                              SSL_R_BAD_CHANGE_CIPHER_SPEC);
+                    return 0;
+                }
+                if (s->statem.hand_state == TLS_ST_BEFORE
+                        && (s->s3->flags & TLS1_FLAGS_STATELESS) != 0) {
+                    /*
+                     * We are stateless and we received a CCS. Probably this is
+                     * from a client between the first and second ClientHellos.
+                     * We should ignore this, but return an error because we do
+                     * not return success until we see the second ClientHello
+                     * with a valid cookie.
+                     */
                     return 0;
                 }
                 s->s3->tmp.message_type = *mt = SSL3_MT_CHANGE_CIPHER_SPEC;
@@ -1244,18 +1251,24 @@ int tls_get_message_body(SSL *s, size_t *len)
         /*
          * We defer feeding in the HRR until later. We'll do it as part of
          * processing the message
+         * The TLsv1.3 handshake transcript stops at the ClientFinished
+         * message.
          */
 #define SERVER_HELLO_RANDOM_OFFSET  (SSL3_HM_HEADER_LENGTH + 2)
-        if (s->s3->tmp.message_type != SSL3_MT_SERVER_HELLO
-                || s->init_num < SERVER_HELLO_RANDOM_OFFSET + SSL3_RANDOM_SIZE
-                || memcmp(hrrrandom,
-                          s->init_buf->data + SERVER_HELLO_RANDOM_OFFSET,
-                          SSL3_RANDOM_SIZE) != 0) {
-            if (!ssl3_finish_mac(s, (unsigned char *)s->init_buf->data,
-                                 s->init_num + SSL3_HM_HEADER_LENGTH)) {
-                /* SSLfatal() already called */
-                *len = 0;
-                return 0;
+        /* KeyUpdate and NewSessionTicket do not need to be added */
+        if (!SSL_IS_TLS13(s) || (s->s3->tmp.message_type != SSL3_MT_NEWSESSION_TICKET
+                                 && s->s3->tmp.message_type != SSL3_MT_KEY_UPDATE)) {
+            if (s->s3->tmp.message_type != SSL3_MT_SERVER_HELLO
+                    || s->init_num < SERVER_HELLO_RANDOM_OFFSET + SSL3_RANDOM_SIZE
+                    || memcmp(hrrrandom,
+                              s->init_buf->data + SERVER_HELLO_RANDOM_OFFSET,
+                              SSL3_RANDOM_SIZE) != 0) {
+                if (!ssl3_finish_mac(s, (unsigned char *)s->init_buf->data,
+                                     s->init_num + SSL3_HM_HEADER_LENGTH)) {
+                    /* SSLfatal() already called */
+                    *len = 0;
+                    return 0;
+                }
             }
         }
         if (s->msg_callback)
@@ -2037,19 +2050,25 @@ int check_in_list(SSL *s, uint16_t group_id, const uint16_t *groups,
 #endif
 
 /* Replace ClientHello1 in the transcript hash with a synthetic message */
-int create_synthetic_message_hash(SSL *s)
+int create_synthetic_message_hash(SSL *s, const unsigned char *hashval,
+                                  size_t hashlen, const unsigned char *hrr,
+                                  size_t hrrlen)
 {
-    unsigned char hashval[EVP_MAX_MD_SIZE];
-    size_t hashlen = 0;
+    unsigned char hashvaltmp[EVP_MAX_MD_SIZE];
     unsigned char msghdr[SSL3_HM_HEADER_LENGTH];
 
     memset(msghdr, 0, sizeof(msghdr));
 
-    /* Get the hash of the initial ClientHello */
-    if (!ssl3_digest_cached_records(s, 0)
-            || !ssl_handshake_hash(s, hashval, sizeof(hashval), &hashlen)) {
-        /* SSLfatal() already called */
-        return 0;
+    if (hashval == NULL) {
+        hashval = hashvaltmp;
+        hashlen = 0;
+        /* Get the hash of the initial ClientHello */
+        if (!ssl3_digest_cached_records(s, 0)
+                || !ssl_handshake_hash(s, hashvaltmp, sizeof(hashvaltmp),
+                                       &hashlen)) {
+            /* SSLfatal() already called */
+            return 0;
+        }
     }
 
     /* Reinitialise the transcript hash */
@@ -2063,6 +2082,20 @@ int create_synthetic_message_hash(SSL *s)
     msghdr[SSL3_HM_HEADER_LENGTH - 1] = (unsigned char)hashlen;
     if (!ssl3_finish_mac(s, msghdr, SSL3_HM_HEADER_LENGTH)
             || !ssl3_finish_mac(s, hashval, hashlen)) {
+        /* SSLfatal() already called */
+        return 0;
+    }
+
+    /*
+     * Now re-inject the HRR and current message if appropriate (we just deleted
+     * it when we reinitialised the transcript hash above). Only necessary after
+     * receiving a ClientHello2 with a cookie.
+     */
+    if (hrr != NULL
+            && (!ssl3_finish_mac(s, hrr, hrrlen)
+                || !ssl3_finish_mac(s, (unsigned char *)s->init_buf->data,
+                                    s->s3->tmp.message_size
+                                    + SSL3_HM_HEADER_LENGTH))) {
         /* SSLfatal() already called */
         return 0;
     }
@@ -2194,4 +2227,55 @@ size_t construct_key_exchange_tbs(SSL *s, unsigned char **ptbs,
 
     *ptbs = tbs;
     return tbslen;
+}
+
+/*
+ * Saves the current handshake digest for Post-Handshake Auth,
+ * Done after ClientFinished is processed, done exactly once
+ */
+int tls13_save_handshake_digest_for_pha(SSL *s)
+{
+    if (s->pha_dgst == NULL) {
+        if (!ssl3_digest_cached_records(s, 1))
+            /* SSLfatal() already called */
+            return 0;
+
+        s->pha_dgst = EVP_MD_CTX_new();
+        if (s->pha_dgst == NULL) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_TLS13_SAVE_HANDSHAKE_DIGEST_FOR_PHA,
+                     ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
+        if (!EVP_MD_CTX_copy_ex(s->pha_dgst,
+                                s->s3->handshake_dgst)) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_TLS13_SAVE_HANDSHAKE_DIGEST_FOR_PHA,
+                     ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/*
+ * Restores the Post-Handshake Auth handshake digest
+ * Done just before sending/processing the Cert Request
+ */
+int tls13_restore_handshake_digest_for_pha(SSL *s)
+{
+    if (s->pha_dgst == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                 SSL_F_TLS13_RESTORE_HANDSHAKE_DIGEST_FOR_PHA,
+                 ERR_R_INTERNAL_ERROR);
+        return 0;
+    }
+    if (!EVP_MD_CTX_copy_ex(s->s3->handshake_dgst,
+                            s->pha_dgst)) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                 SSL_F_TLS13_RESTORE_HANDSHAKE_DIGEST_FOR_PHA,
+                 ERR_R_INTERNAL_ERROR);
+        return 0;
+    }
+    return 1;
 }

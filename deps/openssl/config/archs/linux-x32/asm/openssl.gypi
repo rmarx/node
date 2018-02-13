@@ -503,8 +503,8 @@
       'openssl/crypto/poly1305/poly1305.c',
       'openssl/crypto/poly1305/poly1305_ameth.c',
       'openssl/crypto/poly1305/poly1305_pmeth.c',
+      'openssl/crypto/rand/drbg_ctr.c',
       'openssl/crypto/rand/drbg_lib.c',
-      'openssl/crypto/rand/drbg_rand.c',
       'openssl/crypto/rand/rand_egd.c',
       'openssl/crypto/rand/rand_err.c',
       'openssl/crypto/rand/rand_lib.c',
@@ -698,7 +698,6 @@
       'DSO_DLFCN',
       'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_THREADS',
       'OPENSSL_NO_DYNAMIC_ENGINE',
       'OPENSSL_PIC',
       'OPENSSL_IA32_SSE2',
@@ -719,10 +718,10 @@
       'POLY1305_ASM',
     ],
     'openssl_cflags_linux-x32': [
-      '-Wall -O3 -pthread -mx32 -DL_ENDIAN',
+      '-Wall -O3 -pthread -mx32',
     ],
     'openssl_ex_libs_linux-x32': [
-      '-ldl',
+      '-ldl -pthread',
     ],
   },
   'include_dirs': [

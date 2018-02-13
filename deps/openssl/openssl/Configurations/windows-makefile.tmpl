@@ -159,35 +159,47 @@ OPENSSLDIR=$(OPENSSLDIR_dev)$(OPENSSLDIR_dir)
 ENGINESDIR=$(ENGINESDIR_dev)$(ENGINESDIR_dir)
 !ENDIF
 
-CC={- $target{cc} -}
-CFLAGS={- join(" ",(map { "-D".$_} @{$target{defines}}, @{$config{defines}})) -} {- join(" ", quotify_l("-DENGINESDIR=\"$enginesdir\"", "-DOPENSSLDIR=\"$openssldir\"")) -} {- $target{cflags} -} {- $config{cflags} -}
+CC={- $config{cc} -}
+CPPFLAGS={- our $cppflags = join(" ",
+                                 (map { "-D".$_} @{$config{defines}}),
+                                 (map { " /I ".$_} @{$config{includes}}),
+                                 @{$config{cppflags}}) -}
+CPPFLAGS_Q={- $cppflags =~ s|([\\"])|\\$1|g; $cppflags -}
+CFLAGS={- join(' ', @{$config{cflags}}) -}
 COUTFLAG={- $target{coutflag} || "/Fo" -}$(OSSL_EMPTY)
-RC={- $target{rc} || "rc" -}
+RC={- $config{rc} -}
 RCOUTFLAG={- $target{rcoutflag} || "/fo" -}$(OSSL_EMPTY)
-LD={- $target{ld} || "link" -}
-LDFLAGS={- $target{lflags} -}
+LD={- $config{ld} -}
+LDFLAGS={- join(' ', @{$config{lflags}}) -}
 LDOUTFLAG={- $target{loutflag} || "/out:" -}$(OSSL_EMPTY)
-EX_LIBS={- $target{ex_libs} -}
-LIB_CFLAGS={- join(" ", $target{lib_cflags}, $target{shared_cflag}) || "" -}
-LIB_LDFLAGS={- $target{shared_ldflag} || "" -}
+EX_LIBS={- join(' ', @{$config{ex_libs}}) -}
+LIB_CPPFLAGS={- join(" ",
+                     $target{shared_cppflag} || "",
+                     (map { quotify_l("-D".$_) }
+                      "OPENSSLDIR=\"$openssldir\"",
+                      "ENGINESDIR=\"$enginesdir\"")) -}
+LIB_CFLAGS={- join(" ", $target{lib_cflags}, $target{shared_cflag}) -}
+LIB_LDFLAGS={- join(' ', $target{shared_ldflag}, $config{shared_ldflag}) -}
+DSO_CPPFLAGS={- $target{dso_cppflags} || "" -}
 DSO_CFLAGS={- $target{dso_cflags} || "" -}
 DSO_LDFLAGS={- $target{dso_ldflag} || "" -}
+BIN_CPPFLAGS={- $target{dso_cppflags} || "" -}
 BIN_CFLAGS={- $target{bin_cflags} -}
 BIN_LDFLAGS={- $target{bin_lflags} -}
 
 PERL={- $config{perl} -}
 
-AR={- $target{ar} -}
-ARFLAGS= {- $target{arflags} -}
+AR={- $config{ar} -}
+ARFLAGS= {- join(' ', @{$config{arflags}}) -}
 AROUTFLAG={- $target{aroutflag} || "/out:" -}$(OSSL_EMPTY)
 
-MT={- $target{mt} -}
-MTFLAGS= {- $target{mtflags} -}
+MT={- $config{mt} -}
+MTFLAGS= {- join(' ', @{$config{mtflags}}) -}
 MTINFLAG={- $target{mtinflag} || "-manifest " -}$(OSSL_EMPTY)
 MTOUTFLAG={- $target{mtoutflag} || "-outputresource:" -}$(OSSL_EMPTY)
 
-AS={- $target{as} -}
-ASFLAGS={- $target{asflags} -}
+AS={- $config{as} -}
+ASFLAGS={- join(' ', @{$config{asflags}}) -}
 ASOUTFLAG={- $target{asoutflag} -}$(OSSL_EMPTY)
 PERLASM_SCHEME= {- $target{perlasm_scheme} -}
 
@@ -220,6 +232,7 @@ test: tests
 	set BLDTOP=$(BLDDIR)
 	set RESULT_D=$(BLDDIR)\test\test-runs
 	set PERL=$(PERL)
+	set OPENSSL_ENGINES=$(MAKEDIR)\engines
 	set OPENSSL_DEBUG_MEMORY=on
 	"$(PERL)" "$(SRCDIR)\test\run_tests.pl" $(TESTS)
 	@rem {- if ($disabled{tests}) { output_on(); } else { output_off(); } "" -}
@@ -301,10 +314,10 @@ install_dev:
 	@if "$(INSTALLTOP)"=="" ( echo INSTALLTOP should not be empty & exit 1 )
 	@echo *** Installing development files
 	@"$(PERL)" "$(SRCDIR)\util\mkdir-p.pl" "$(INSTALLTOP)\include\openssl"
-	@rem {- output_off() unless grep { $_ eq "OPENSSL_USE_APPLINK" } @{$target{defines}}; "" -}
+	@rem {- output_off() unless grep { $_ eq "OPENSSL_USE_APPLINK" } @{$config{defines}}; "" -}
 	@"$(PERL)" "$(SRCDIR)\util\copy.pl" "$(SRCDIR)\ms\applink.c" \
 				       "$(INSTALLTOP)\include\openssl"
-	@rem {- output_on() unless grep { $_ eq "OPENSSL_USE_APPLINK" } @{$target{defines}}; "" -}
+	@rem {- output_on() unless grep { $_ eq "OPENSSL_USE_APPLINK" } @{$config{defines}}; "" -}
 	@"$(PERL)" "$(SRCDIR)\util\copy.pl" "$(SRCDIR)\include\openssl\*.h" \
 				       "$(INSTALLTOP)\include\openssl"
 	@"$(PERL)" "$(SRCDIR)\util\copy.pl" $(BLDDIR)\include\openssl\*.h \
@@ -357,14 +370,16 @@ uninstall_html_docs:
 
 configdata.pm: "$(SRCDIR)\Configure" {- join(" ", map { '"'.$_.'"' } @{$config{build_file_templates}}, @{$config{build_infos}}, @{$config{conf_files}}) -}
 	@echo "Detected changed: $?"
-	@echo "Reconfiguring..."
-	"$(PERL)" "$(SRCDIR)\Configure" reconf
+	"$(PERL)" configdata.pm -r -v
 	@echo "**************************************************"
 	@echo "***                                            ***"
 	@echo "***   Please run the same make command again   ***"
 	@echo "***                                            ***"
 	@echo "**************************************************"
 	@exit 1
+
+reconfigure reconf:
+	"$(PERL)" configdata.pm -r -v
 
 {-
  use File::Basename;
@@ -426,7 +441,7 @@ EOF
 $target: "$args{generator}->[0]" $deps
 	set ASM=\$(AS)
 	$generator \$@.S
-	\$(CC) $incs \$(CFLAGS) /EP /C \$@.S > \$@.i && move /Y \$@.i \$@
+	\$(CC) $incs \$(CFLAGS) \$(CPPFLAGS) /EP /C \$@.S > \$@.i && move /Y \$@.i \$@
         del /Q \$@.S
 EOF
               }
@@ -439,7 +454,7 @@ EOF
           }
           return <<"EOF";
 $target: "$args{generator}->[0]" $deps
-	\$(CC) $incs \$(CFLAGS) /EP /C "$args{generator}->[0]" > \$@.i && move /Y \$@.i \$@
+	\$(CC) $incs \$(CFLAGS) \$(CPPFLAGS) /EP /C "$args{generator}->[0]" > \$@.i && move /Y \$@.i \$@
 EOF
       }
   }
@@ -456,9 +471,15 @@ EOF
              $incs .= ' /I "'.$withargs{zlib_include}.'"';
          }
      }
-     my $ecflags = { lib => '$(LIB_CFLAGS)',
-		     dso => '$(DSO_CFLAGS)',
-		     bin => '$(BIN_CFLAGS)' } -> {$args{intent}};
+     my $cflags = '$(CFLAGS)';
+     $cflags .= { lib => ' $(LIB_CFLAGS)',
+		  dso => ' $(DSO_CFLAGS)',
+		  bin => ' $(BIN_CFLAGS)' } -> {$args{intent}};
+     $cflags .= $incs;
+     $cflags .= ' $(CPPFLAGS)';
+     $cflags .= { lib => ' $(LIB_CPPFLAGS)',
+		  dso => ' $(DSO_CPPFLAGS)',
+		  bin => ' $(BIN_CPPFLAGS)' } -> {$args{intent}};
      my $makedepprog = $config{makedepprog};
      if ($srcs[0] =~ /\.rc$/) {
          return <<"EOF";
@@ -475,7 +496,7 @@ EOF
      }
      return <<"EOF"	if (!$disabled{makedepend});
 $obj$depext: $deps
-	\$(CC) \$(CFLAGS) $ecflags$inc /Zs /showIncludes $srcs 2>&1 | \\
+	\$(CC) $cflags /Zs /showIncludes $srcs 2>&1 | \\
 	    "\$(PERL)" -n << > $obj$depext
 chomp;
 s/^Note: including file: *//;
@@ -483,13 +504,13 @@ s/^Note: including file: *//;
 END { print '$obj$objext: ',join(" ", sort keys \%collect),"\\n" }
 <<
 $obj$objext: $obj$depext
-	\$(CC) $incs \$(CFLAGS) $ecflags -c \$(COUTFLAG)\$\@ @<<
+	\$(CC) $cflags -c \$(COUTFLAG)\$\@ @<<
 $srcs
 <<
 EOF
     return <<"EOF"	if ($disabled{makedepend});
 $obj$objext: $deps
-	\$(CC) $incs \$(CFLAGS) $ecflags -c \$(COUTFLAG)\$\@ $srcs
+	\$(CC) $cflags -c \$(COUTFLAG)\$\@ $srcs
 EOF
  }
 
@@ -501,7 +522,7 @@ EOF
      my $lib = $args{lib};
      my $shlib = $args{shlib};
      my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x }
-                grep { $_ =~ m|\.o$| }
+                grep { $_ =~ m/\.(?:o|res)$/ }
                 @{$args{objs}};
      my @defs = grep { $_ =~ /\.def$/ } @{$args{objs}};
      my @deps = compute_lib_depends(@{$args{deps}});

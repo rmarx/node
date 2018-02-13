@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2011-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -438,7 +438,7 @@ static int error_check(DRBG_SELFTEST_DATA *td)
         goto err;
 
     /* Standard says we have to check uninstantiate really zeroes */
-    if (!TEST_mem_eq(zero, sizeof(drbg->ctr), &drbg->ctr, sizeof(drbg->ctr)))
+    if (!TEST_mem_eq(zero, sizeof(drbg->data), &drbg->data, sizeof(drbg->data)))
         goto err;
 
     ret = 1;

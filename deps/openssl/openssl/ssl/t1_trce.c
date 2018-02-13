@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2012-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -481,7 +481,8 @@ static const ssl_trace_tbl ssl_exts_tbl[] = {
     {TLSEXT_TYPE_padding, "padding"},
     {TLSEXT_TYPE_encrypt_then_mac, "encrypt_then_mac"},
     {TLSEXT_TYPE_extended_master_secret, "extended_master_secret"},
-    {TLSEXT_TYPE_early_data, "early_data"}
+    {TLSEXT_TYPE_early_data, "early_data"},
+    {TLSEXT_TYPE_post_handshake_auth, "post_handshake_auth"}
 };
 
 static const ssl_trace_tbl ssl_groups_tbl[] = {
@@ -544,9 +545,12 @@ static const ssl_trace_tbl ssl_sigalg_tbl[] = {
     {TLSEXT_SIGALG_ecdsa_sha224, "ecdsa_sha224"},
     {TLSEXT_SIGALG_ed25519, "ed25519"},
     {TLSEXT_SIGALG_ecdsa_sha1, "ecdsa_sha1"},
-    {TLSEXT_SIGALG_rsa_pss_sha256, "rsa_pss_sha256"},
-    {TLSEXT_SIGALG_rsa_pss_sha384, "rsa_pss_sha384"},
-    {TLSEXT_SIGALG_rsa_pss_sha512, "rsa_pss_sha512"},
+    {TLSEXT_SIGALG_rsa_pss_rsae_sha256, "rsa_pss_rsae_sha256"},
+    {TLSEXT_SIGALG_rsa_pss_rsae_sha384, "rsa_pss_rsae_sha384"},
+    {TLSEXT_SIGALG_rsa_pss_rsae_sha512, "rsa_pss_rsae_sha512"},
+    {TLSEXT_SIGALG_rsa_pss_pss_sha256, "rsa_pss_pss_sha256"},
+    {TLSEXT_SIGALG_rsa_pss_pss_sha384, "rsa_pss_pss_sha384"},
+    {TLSEXT_SIGALG_rsa_pss_pss_sha512, "rsa_pss_pss_sha512"},
     {TLSEXT_SIGALG_rsa_pkcs1_sha256, "rsa_pkcs1_sha256"},
     {TLSEXT_SIGALG_rsa_pkcs1_sha384, "rsa_pkcs1_sha384"},
     {TLSEXT_SIGALG_rsa_pkcs1_sha512, "rsa_pkcs1_sha512"},
@@ -1244,6 +1248,10 @@ static int ssl_print_cert_request(BIO *bio, int indent, const SSL *ssl,
     if (SSL_IS_TLS13(ssl)) {
         if (!ssl_print_hexbuf(bio, indent, "request_context", 1, &msg, &msglen))
             return 0;
+        if (!ssl_print_extensions(bio, indent, 1,
+                                  SSL3_MT_CERTIFICATE_REQUEST, &msg, &msglen))
+            return 0;
+        return 1;
     } else {
         if (msglen < 1)
             return 0;

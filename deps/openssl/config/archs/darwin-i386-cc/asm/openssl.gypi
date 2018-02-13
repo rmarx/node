@@ -497,8 +497,8 @@
       'openssl/crypto/poly1305/poly1305.c',
       'openssl/crypto/poly1305/poly1305_ameth.c',
       'openssl/crypto/poly1305/poly1305_pmeth.c',
+      'openssl/crypto/rand/drbg_ctr.c',
       'openssl/crypto/rand/drbg_lib.c',
-      'openssl/crypto/rand/drbg_rand.c',
       'openssl/crypto/rand/rand_egd.c',
       'openssl/crypto/rand/rand_err.c',
       'openssl/crypto/rand/rand_lib.c',
@@ -688,7 +688,6 @@
       'DSO_DLFCN',
       'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_THREADS',
       'OPENSSL_NO_DYNAMIC_ENGINE',
       'OPENSSL_PIC',
       'OPENSSL_BN_ASM_PART_WORDS',
@@ -710,7 +709,7 @@
       'POLY1305_ASM',
     ],
     'openssl_cflags_darwin-i386-cc': [
-      '-O3 -D_REENTRANT -arch i386 -DL_ENDIAN -fomit-frame-pointer',
+      '-O3 -arch i386 -fomit-frame-pointer',
     ],
     'openssl_ex_libs_darwin-i386-cc': [
       '',

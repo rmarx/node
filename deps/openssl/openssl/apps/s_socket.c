@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -34,6 +34,9 @@ typedef unsigned int u_int;
 
 # include <openssl/bio.h>
 # include <openssl/err.h>
+
+/* Keep track of our peer's address for the cookie callback */
+BIO_ADDR *ourpeer = NULL;
 
 /*
  * init_client - helper routine to set up socket communication
@@ -158,6 +161,10 @@ int do_server(int *accept_sock, const char *host, const char *port,
     int sock;
     int i;
     BIO_ADDRINFO *res = NULL;
+    const BIO_ADDRINFO *next;
+    int sock_family, sock_type, sock_protocol;
+    const BIO_ADDR *sock_address;
+    int sock_options = BIO_SOCK_REUSEADDR;
     int ret = 0;
 
     if (BIO_sock_init() != 1)
@@ -175,10 +182,29 @@ int do_server(int *accept_sock, const char *host, const char *port,
                    && (type == 0 || type == BIO_ADDRINFO_socktype(res))
                    && (protocol == 0 || protocol == BIO_ADDRINFO_protocol(res)));
 
-    asock = BIO_socket(BIO_ADDRINFO_family(res), BIO_ADDRINFO_socktype(res),
-                       BIO_ADDRINFO_protocol(res), 0);
+    sock_family = BIO_ADDRINFO_family(res);
+    sock_type = BIO_ADDRINFO_socktype(res);
+    sock_protocol = BIO_ADDRINFO_protocol(res);
+    sock_address = BIO_ADDRINFO_address(res);
+    next = BIO_ADDRINFO_next(res);
+    if (sock_family == AF_INET6)
+        sock_options |= BIO_SOCK_V6_ONLY;
+    if (next != NULL
+            && BIO_ADDRINFO_socktype(next) == sock_type
+            && BIO_ADDRINFO_protocol(next) == sock_protocol) {
+        if (sock_family == AF_INET
+                && BIO_ADDRINFO_family(next) == AF_INET6) {
+            sock_family = AF_INET6;
+            sock_address = BIO_ADDRINFO_address(next);
+        } else if (sock_family == AF_INET6
+                   && BIO_ADDRINFO_family(next) == AF_INET) {
+            sock_options &= ~BIO_SOCK_V6_ONLY;
+        }
+    }
+
+    asock = BIO_socket(sock_family, sock_type, sock_protocol, 0);
     if (asock == INVALID_SOCKET
-        || !BIO_listen(asock, BIO_ADDRINFO_address(res), BIO_SOCK_REUSEADDR)) {
+        || !BIO_listen(asock, sock_address, sock_options)) {
         BIO_ADDRINFO_free(res);
         ERR_print_errors(bio_err);
         if (asock != INVALID_SOCKET)
@@ -212,8 +238,15 @@ int do_server(int *accept_sock, const char *host, const char *port,
         *accept_sock = asock;
     for (;;) {
         if (type == SOCK_STREAM) {
+            BIO_ADDR_free(ourpeer);
+            ourpeer = BIO_ADDR_new();
+            if (ourpeer == NULL) {
+                BIO_closesocket(asock);
+                ERR_print_errors(bio_err);
+                goto end;
+            }
             do {
-                sock = BIO_accept_ex(asock, NULL, 0);
+                sock = BIO_accept_ex(asock, ourpeer, 0);
             } while (sock < 0 && BIO_sock_should_retry(sock));
             if (sock < 0) {
                 ERR_print_errors(bio_err);
@@ -221,6 +254,20 @@ int do_server(int *accept_sock, const char *host, const char *port,
                 break;
             }
             i = (*cb)(sock, type, protocol, context);
+
+            /*
+             * Give the socket time to send its last data before we close it.
+             * No amount of setting SO_LINGER etc on the socket seems to
+             * persuade Windows to send the data before closing the socket...
+             * but sleeping for a short time seems to do it (units in ms)
+             * TODO: Find a better way to do this
+             */
+#if defined(OPENSSL_SYS_WINDOWS)
+            Sleep(50);
+#elif defined(OPENSSL_SYS_CYGWIN)
+            usleep(50000);
+#endif
+
             /*
              * If we ended with an alert being sent, but still with data in the
              * network buffer to be read, then calling BIO_closesocket() will
@@ -231,13 +278,7 @@ int do_server(int *accept_sock, const char *host, const char *port,
              * and then closing the socket sends TCP-FIN first followed by
              * TCP-RST. This seems to allow the peer to read the alert data.
              */
-#ifdef _WIN32
-# ifdef SD_SEND
-            shutdown(sock, SD_SEND);
-# endif
-#elif defined(SHUT_WR)
-            shutdown(sock, SHUT_WR);
-#endif
+            shutdown(sock, 1); /* SHUT_WR */
             BIO_closesocket(sock);
         } else {
             i = (*cb)(asock, type, protocol, context);
@@ -256,6 +297,8 @@ int do_server(int *accept_sock, const char *host, const char *port,
     if (family == AF_UNIX)
         unlink(host);
 # endif
+    BIO_ADDR_free(ourpeer);
+    ourpeer = NULL;
     return ret;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -20,6 +20,7 @@
 #include <string.h>
 #include <math.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/crypto.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
@@ -121,13 +122,13 @@
 #define MAX_ECDH_SIZE   256
 #define MISALIGN        64
 
-typedef struct sec_st {
+typedef struct openssl_speed_sec_st {
     int sym;
     int rsa;
     int dsa;
     int ecdsa;
     int ecdh;
-} SEC;
+} openssl_speed_sec_t;
 
 static volatile int run = 0;
 
@@ -334,7 +335,7 @@ static double Time_F(int s)
 #endif
 
 static void multiblock_speed(const EVP_CIPHER *evp_cipher,
-                             const SEC *seconds);
+                             const openssl_speed_sec_t *seconds);
 
 static int found(const char *name, const OPT_PAIR *pairs, int *result)
 {
@@ -1277,6 +1278,9 @@ int speed_main(int argc, char **argv)
     || !defined(OPENSSL_NO_EC)
     long rsa_count = 1;
 #endif
+#ifndef OPENSSL_NO_EC
+    size_t loop;
+#endif
 
     /* What follows are the buffers and key material. */
 #ifndef OPENSSL_NO_RC5
@@ -1400,8 +1404,8 @@ int speed_main(int argc, char **argv)
     int ecdh_doit[EC_NUM] = { 0 };
 #endif                          /* ndef OPENSSL_NO_EC */
 
-    SEC seconds = {SECONDS, RSA_SECONDS, DSA_SECONDS, ECDSA_SECONDS,
-                   ECDH_SECONDS};
+    openssl_speed_sec_t seconds = { SECONDS, RSA_SECONDS, DSA_SECONDS,
+                                    ECDSA_SECONDS, ECDH_SECONDS };
 
     prog = opt_init(argc, argv, speed_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -1561,8 +1565,8 @@ int speed_main(int argc, char **argv)
 #endif
 #ifndef OPENSSL_NO_EC
         if (strcmp(*argv, "ecdsa") == 0) {
-            for (i = 0; i < EC_NUM; i++)
-                ecdsa_doit[i] = 1;
+            for (loop = 0; loop < OSSL_NELEM(ecdsa_choices); loop++)
+                ecdsa_doit[ecdsa_choices[loop].retval] = 1;
             continue;
         }
         if (found(*argv, ecdsa_choices, &i)) {
@@ -1570,8 +1574,8 @@ int speed_main(int argc, char **argv)
             continue;
         }
         if (strcmp(*argv, "ecdh") == 0) {
-            for (i = 0; i < EC_NUM; i++)
-                ecdh_doit[i] = 1;
+            for (loop = 0; loop < OSSL_NELEM(ecdh_choices); loop++)
+                ecdh_doit[ecdh_choices[loop].retval] = 1;
             continue;
         }
         if (found(*argv, ecdh_choices, &i)) {
@@ -1643,10 +1647,10 @@ int speed_main(int argc, char **argv)
             dsa_doit[i] = 1;
 #endif
 #ifndef OPENSSL_NO_EC
-        for (i = 0; i < EC_NUM; i++)
-            ecdsa_doit[i] = 1;
-        for (i = 0; i < EC_NUM; i++)
-            ecdh_doit[i] = 1;
+        for (loop = 0; loop < OSSL_NELEM(ecdsa_choices); loop++)
+            ecdsa_doit[ecdsa_choices[loop].retval] = 1;
+        for (loop = 0; loop < OSSL_NELEM(ecdh_choices); loop++)
+            ecdh_doit[ecdh_choices[loop].retval] = 1;
 #endif
     }
     for (i = 0; i < ALGOR_NUM; i++)
@@ -3243,7 +3247,8 @@ static int do_multi(int multi, int size_num)
 }
 #endif
 
-static void multiblock_speed(const EVP_CIPHER *evp_cipher, const SEC *seconds)
+static void multiblock_speed(const EVP_CIPHER *evp_cipher,
+                             const openssl_speed_sec_t *seconds)
 {
     static const int mblengths_list[] =
         { 8 * 1024, 2 * 8 * 1024, 4 * 8 * 1024, 8 * 8 * 1024, 8 * 16 * 1024 };

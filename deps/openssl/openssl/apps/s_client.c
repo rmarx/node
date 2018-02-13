@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright 2005 Nokia. All rights reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -30,6 +30,7 @@ typedef unsigned int u_int;
 #endif
 
 #include "apps.h"
+#include "progs.h"
 #include <openssl/x509.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -601,6 +602,7 @@ typedef enum OPTION_choice {
     OPT_CT, OPT_NOCT, OPT_CTLOG_FILE,
 #endif
     OPT_DANE_TLSA_RRDATA, OPT_DANE_EE_NO_NAME,
+    OPT_FORCE_PHA,
     OPT_R_ENUM
 } OPTION_CHOICE;
 
@@ -787,6 +789,7 @@ const OPTIONS s_client_options[] = {
 #endif
     {"keylogfile", OPT_KEYLOG_FILE, '>', "Write TLS secrets to file"},
     {"early_data", OPT_EARLY_DATA, '<', "File to send as early data"},
+    {"force_pha", OPT_FORCE_PHA, '-', "Force-enable post-handshake-authentication"},
     {NULL, OPT_EOF, 0x00, NULL}
 };
 
@@ -957,6 +960,7 @@ int s_client_main(int argc, char **argv)
     int isdtls = 0;
 #endif
     char *psksessf = NULL;
+    int force_pha = 0;
 
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
@@ -1468,6 +1472,9 @@ int s_client_main(int argc, char **argv)
         case OPT_EARLY_DATA:
             early_data_file = opt_arg();
             break;
+        case OPT_FORCE_PHA:
+            force_pha = 1;
+            break;
         }
     }
     if (count4or6 >= 2) {
@@ -1902,6 +1909,9 @@ int s_client_main(int argc, char **argv)
     con = SSL_new(ctx);
     if (con == NULL)
         goto end;
+
+    if (force_pha)
+        SSL_force_post_handshake_auth(con);
 
     if (sess_in != NULL) {
         SSL_SESSION *sess;
@@ -3025,7 +3035,7 @@ int s_client_main(int argc, char **argv)
     if (in_init)
         print_stuff(bio_c_out, con, full_log);
     do_ssl_shutdown(con);
-#if defined(OPENSSL_SYS_WINDOWS)
+
     /*
      * Give the socket time to send its last data before we close it.
      * No amount of setting SO_LINGER etc on the socket seems to persuade
@@ -3033,8 +3043,23 @@ int s_client_main(int argc, char **argv)
      * for a short time seems to do it (units in ms)
      * TODO: Find a better way to do this
      */
+#if defined(OPENSSL_SYS_WINDOWS)
     Sleep(50);
+#elif defined(OPENSSL_SYS_CYGWIN)
+    usleep(50000);
 #endif
+
+    /*
+     * If we ended with an alert being sent, but still with data in the
+     * network buffer to be read, then calling BIO_closesocket() will
+     * result in a TCP-RST being sent. On some platforms (notably
+     * Windows) then this will result in the peer immediately abandoning
+     * the connection including any buffered alert data before it has
+     * had a chance to be read. Shutting down the sending side first,
+     * and then closing the socket sends TCP-FIN first followed by
+     * TCP-RST. This seems to allow the peer to read the alert data.
+     */
+    shutdown(SSL_get_fd(con), 1); /* SHUT_WR */
     BIO_closesocket(SSL_get_fd(con));
  end:
     if (con != NULL) {

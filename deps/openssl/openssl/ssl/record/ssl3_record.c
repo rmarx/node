@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -1875,8 +1875,11 @@ int dtls1_get_record(SSL *s)
 
         n2s(p, rr->length);
 
-        /* Lets check version */
-        if (!s->first_packet) {
+        /*
+         * Lets check the version. We tolerate alerts that don't have the exact
+         * version number (e.g. because of protocol version errors)
+         */
+        if (!s->first_packet && rr->type != SSL3_RT_ALERT) {
             if (version != s->version) {
                 /* unexpected version, silently discard */
                 rr->length = 0;

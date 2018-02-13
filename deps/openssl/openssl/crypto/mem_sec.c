@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright 2004-2014, Akamai Technologies. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -20,7 +20,9 @@
 
 #include <string.h>
 
-#if defined(OPENSSL_SYS_LINUX) || defined(OPENSSL_SYS_UNIX)
+/* e_os.h includes unistd.h, which defines _POSIX_VERSION */
+#if !defined(OPENSSL_NO_SECURE_MEMORY) && defined(OPENSSL_SYS_UNIX) \
+    && defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L
 # define IMPLEMENTED
 # include <stdlib.h>
 # include <assert.h>
@@ -66,7 +68,7 @@ int CRYPTO_secure_malloc_init(size_t size, int minsize)
     int ret = 0;
 
     if (!secure_mem_initialized) {
-        sec_malloc_lock = CRYPTO_THREAD_glock_new("sec_malloc");
+        sec_malloc_lock = CRYPTO_THREAD_lock_new();
         if (sec_malloc_lock == NULL)
             return 0;
         if ((ret = sh_init(size, minsize)) != 0) {

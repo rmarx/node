@@ -2552,6 +2552,95 @@ static int test_tls13_psk(void)
     return testresult;
 }
 
+static unsigned char cookie_magic_value[] = "cookie magic";
+
+static int generate_cookie_callback(SSL *ssl, unsigned char *cookie,
+                                    unsigned int *cookie_len)
+{
+    /*
+     * Not suitable as a real cookie generation function but good enough for
+     * testing!
+     */
+    memcpy(cookie, cookie_magic_value, sizeof(cookie_magic_value) - 1);
+    *cookie_len = sizeof(cookie_magic_value) - 1;
+
+    return 1;
+}
+
+static int verify_cookie_callback(SSL *ssl, const unsigned char *cookie,
+                                  unsigned int cookie_len)
+{
+    if (cookie_len == sizeof(cookie_magic_value) - 1
+        && memcmp(cookie, cookie_magic_value, cookie_len) == 0)
+        return 1;
+
+    return 0;
+}
+
+static int test_stateless(void)
+{
+    SSL_CTX *sctx = NULL, *cctx = NULL;
+    SSL *serverssl = NULL, *clientssl = NULL;
+    int testresult = 0;
+
+    if (!TEST_true(create_ssl_ctx_pair(TLS_server_method(),
+                                       TLS_client_method(), &sctx,
+                                       &cctx, cert, privkey)))
+        goto end;
+
+    /* Set up the cookie generation and verification callbacks */
+    SSL_CTX_set_cookie_generate_cb(sctx, generate_cookie_callback);
+    SSL_CTX_set_cookie_verify_cb(sctx, verify_cookie_callback);
+
+    /* The arrival of CCS messages can confuse the test */
+    SSL_CTX_clear_options(cctx, SSL_OP_ENABLE_MIDDLEBOX_COMPAT);
+
+    if (!TEST_true(create_ssl_objects(sctx, cctx, &serverssl, &clientssl,
+                                             NULL, NULL))
+               /* Send the first ClientHello */
+            || !TEST_false(create_ssl_connection(serverssl, clientssl,
+                                                SSL_ERROR_WANT_READ))
+               /* This should fail because there is no cookie */
+            || !TEST_false(SSL_stateless(serverssl)))
+        goto end;
+
+    /* Abandon the connection from this client */
+    SSL_free(clientssl);
+    clientssl = NULL;
+
+    /*
+     * Now create a connection from a new client but with the same server SSL
+     * object
+     */
+    if (!TEST_true(create_ssl_objects(sctx, cctx, &serverssl, &clientssl,
+                                             NULL, NULL))
+               /* Send the first ClientHello */
+            || !TEST_false(create_ssl_connection(serverssl, clientssl,
+                                                SSL_ERROR_WANT_READ))
+               /* This should fail because there is no cookie */
+            || !TEST_false(SSL_stateless(serverssl))
+               /* Send the second ClientHello */
+            || !TEST_false(create_ssl_connection(serverssl, clientssl,
+                                                SSL_ERROR_WANT_READ))
+               /* This should succeed because a cookie is now present */
+            || !TEST_true(SSL_stateless(serverssl))
+               /* Complete the connection */
+            || !TEST_true(create_ssl_connection(serverssl, clientssl,
+                                                SSL_ERROR_NONE)))
+        goto end;
+
+    shutdown_ssl_connection(serverssl, clientssl);
+    serverssl = clientssl = NULL;
+    testresult = 1;
+
+ end:
+    SSL_free(serverssl);
+    SSL_free(clientssl);
+    SSL_CTX_free(sctx);
+    SSL_CTX_free(cctx);
+    return testresult;
+
+}
 #endif /* OPENSSL_NO_TLS1_3 */
 
 static int clntaddoldcb = 0;
@@ -3056,6 +3145,120 @@ static int test_export_key_mat(int tst)
     return testresult;
 }
 
+#ifndef OPENSSL_NO_TLS1_3
+/*
+ * Test that SSL_export_keying_material_early() produces expected
+ * results. There are no test vectors so all we do is test that both
+ * sides of the communication produce the same results for different
+ * protocol versions.
+ */
+static int test_export_key_mat_early(int idx)
+{
+    int testresult = 0;
+    SSL_CTX *cctx = NULL, *sctx = NULL;
+    SSL *clientssl = NULL, *serverssl = NULL;
+    SSL_SESSION *sess = NULL;
+    const char label[] = "test label";
+    const unsigned char context[] = "context";
+    const unsigned char *emptycontext = NULL;
+    unsigned char ckeymat1[80], ckeymat2[80], ckeymat3[80];
+    unsigned char skeymat1[80], skeymat2[80], skeymat3[80];
+    unsigned char buf[1];
+    size_t readbytes, written;
+
+    if (!TEST_true(setupearly_data_test(&cctx, &sctx, &clientssl, &serverssl,
+                                        &sess, idx)))
+        goto end;
+
+    /* Here writing 0 length early data is enough. */
+    if (!TEST_true(SSL_write_early_data(clientssl, NULL, 0, &written))
+            || !TEST_int_eq(SSL_read_early_data(serverssl, buf, sizeof(buf),
+                                                &readbytes),
+                            SSL_READ_EARLY_DATA_ERROR)
+            || !TEST_int_eq(SSL_get_early_data_status(serverssl),
+                            SSL_EARLY_DATA_ACCEPTED))
+        goto end;
+
+    if (!TEST_int_eq(SSL_export_keying_material_early(clientssl, ckeymat1,
+                                                      sizeof(ckeymat1), label,
+                                                      sizeof(label) - 1,
+                                                      context,
+                                                      sizeof(context) - 1, 1),
+                     1)
+            || !TEST_int_eq(SSL_export_keying_material_early(clientssl,
+                                                             ckeymat2,
+                                                             sizeof(ckeymat2),
+                                                             label,
+                                                             sizeof(label) - 1,
+                                                             emptycontext,
+                                                             0, 1), 1)
+            || !TEST_int_eq(SSL_export_keying_material_early(clientssl,
+                                                             ckeymat3,
+                                                             sizeof(ckeymat3),
+                                                             label,
+                                                             sizeof(label) - 1,
+                                                             NULL, 0, 0), 1)
+            || !TEST_int_eq(SSL_export_keying_material_early(serverssl,
+                                                             skeymat1,
+                                                             sizeof(skeymat1),
+                                                             label,
+                                                             sizeof(label) - 1,
+                                                             context,
+                                                             sizeof(context) -1,
+                                                             1),
+                            1)
+            || !TEST_int_eq(SSL_export_keying_material_early(serverssl,
+                                                             skeymat2,
+                                                             sizeof(skeymat2),
+                                                             label,
+                                                             sizeof(label) - 1,
+                                                             emptycontext, 0,
+                                                             1), 1)
+            || !TEST_int_eq(SSL_export_keying_material_early(serverssl,
+                                                             skeymat3,
+                                                             sizeof(skeymat3),
+                                                             label,
+                                                             sizeof(label) - 1,
+                                                             NULL, 0, 0), 1)
+               /*
+                * Check that both sides created the same key material with the
+                * same context.
+                */
+            || !TEST_mem_eq(ckeymat1, sizeof(ckeymat1), skeymat1,
+                            sizeof(skeymat1))
+               /*
+                * Check that both sides created the same key material with an
+                * empty context.
+                */
+            || !TEST_mem_eq(ckeymat2, sizeof(ckeymat2), skeymat2,
+                            sizeof(skeymat2))
+               /*
+                * Check that both sides created the same key material without a
+                * context.
+                */
+            || !TEST_mem_eq(ckeymat3, sizeof(ckeymat3), skeymat3,
+                            sizeof(skeymat3))
+               /* Different contexts should produce different results */
+            || !TEST_mem_ne(ckeymat1, sizeof(ckeymat1), ckeymat2,
+                            sizeof(ckeymat2)))
+        goto end;
+
+    testresult = 1;
+
+ end:
+    if (sess != clientpsk)
+        SSL_SESSION_free(sess);
+    SSL_SESSION_free(clientpsk);
+    SSL_SESSION_free(serverpsk);
+    SSL_free(serverssl);
+    SSL_free(clientssl);
+    SSL_CTX_free(sctx);
+    SSL_CTX_free(cctx);
+
+    return testresult;
+}
+#endif /* OPENSSL_NO_TLS1_3 */
+
 static int test_ssl_clear(int idx)
 {
     SSL_CTX *cctx = NULL, *sctx = NULL;
@@ -3217,6 +3420,65 @@ end:
     return testresult;
 }
 
+#ifndef OPENSSL_NO_TLS1_3
+static int test_pha_key_update(void)
+{
+    SSL_CTX *cctx = NULL, *sctx = NULL;
+    SSL *clientssl = NULL, *serverssl = NULL;
+    int testresult = 0;
+
+    if (!TEST_true(create_ssl_ctx_pair(TLS_server_method(),
+                                       TLS_client_method(),
+                                       &sctx, &cctx, cert, privkey)))
+        return 0;
+
+    if (!TEST_true(SSL_CTX_set_min_proto_version(sctx, TLS1_3_VERSION))
+        || !TEST_true(SSL_CTX_set_max_proto_version(sctx, TLS1_3_VERSION))
+        || !TEST_true(SSL_CTX_set_min_proto_version(cctx, TLS1_3_VERSION))
+        || !TEST_true(SSL_CTX_set_max_proto_version(cctx, TLS1_3_VERSION)))
+        goto end;
+
+
+    if (!TEST_true(create_ssl_objects(sctx, cctx, &serverssl, &clientssl,
+                                      NULL, NULL)))
+        goto end;
+
+    SSL_force_post_handshake_auth(clientssl);
+
+    if (!TEST_true(create_ssl_connection(serverssl, clientssl,
+                                         SSL_ERROR_NONE)))
+        goto end;
+
+    SSL_set_verify(serverssl, SSL_VERIFY_PEER, NULL);
+    if (!TEST_true(SSL_verify_client_post_handshake(serverssl)))
+        goto end;
+
+    if (!TEST_true(SSL_key_update(clientssl, SSL_KEY_UPDATE_NOT_REQUESTED)))
+        goto end;
+
+    /* Start handshake on the server */
+    if (!TEST_int_eq(SSL_do_handshake(serverssl), 1))
+        goto end;
+
+    /* Starts with SSL_connect(), but it's really just SSL_do_handshake() */
+    if (!TEST_true(create_ssl_connection(serverssl, clientssl,
+                                         SSL_ERROR_NONE)))
+        goto end;
+
+    SSL_shutdown(clientssl);
+    SSL_shutdown(serverssl);
+
+    testresult = 1;
+
+ end:
+    SSL_free(serverssl);
+    SSL_free(clientssl);
+    SSL_CTX_free(sctx);
+    SSL_CTX_free(cctx);
+    return testresult;
+}
+#endif
+
 int setup_tests(void)
 {
     if (!TEST_ptr(cert = test_get_argument(0))
@@ -3262,11 +3524,16 @@ int setup_tests(void)
     ADD_TEST(test_ciphersuite_change);
     ADD_TEST(test_tls13_psk);
     ADD_ALL_TESTS(test_custom_exts, 5);
+    ADD_TEST(test_stateless);
+    ADD_TEST(test_pha_key_update);
 #else
     ADD_ALL_TESTS(test_custom_exts, 3);
 #endif
     ADD_ALL_TESTS(test_serverinfo, 8);
     ADD_ALL_TESTS(test_export_key_mat, 4);
+#ifndef OPENSSL_NO_TLS1_3
+    ADD_ALL_TESTS(test_export_key_mat_early, 3);
+#endif
     ADD_ALL_TESTS(test_ssl_clear, 2);
     ADD_ALL_TESTS(test_max_fragment_len_ext, OSSL_NELEM(max_fragment_len_test));
     return 1;

@@ -7,7 +7,6 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include "../e_os.h"
 #include <string.h>
 
 #include <openssl/e_os2.h>
@@ -16,6 +15,10 @@
 #include "internal/nelem.h"
 #include "ssl_test_ctx.h"
 #include "testutil.h"
+
+#ifdef OPENSSL_SYS_WINDOWS
+# define strcasecmp _stricmp
+#endif
 
 static const int default_app_data_size = 256;
 /* Default set to be as small as possible to exercise fragmentation. */
@@ -366,6 +369,7 @@ static const test_enum ssl_handshake_modes[] = {
     {"RenegotiateClient", SSL_TEST_HANDSHAKE_RENEG_CLIENT},
     {"KeyUpdateServer", SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER},
     {"KeyUpdateClient", SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT},
+    {"PostHandshakeAuth", SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH},
 };
 
 __owur static int parse_handshake_mode(SSL_TEST_CTX *test_ctx, const char *value)
@@ -619,6 +623,11 @@ __owur static int parse_expected_client_ca_names(SSL_TEST_CTX *test_ctx,
 
 IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_CTX, test, expected_cipher)
 
+/* Client and Server ForcePHA */
+
+IMPLEMENT_SSL_TEST_BOOL_OPTION(SSL_TEST_CLIENT_CONF, client, force_pha)
+IMPLEMENT_SSL_TEST_BOOL_OPTION(SSL_TEST_SERVER_CONF, server, force_pha)
+
 /* Known test options and their corresponding parse methods. */
 
 /* Top-level options. */
@@ -673,6 +682,7 @@ static const ssl_test_client_option ssl_test_client_options[] = {
     { "SRPUser", &parse_client_srp_user },
     { "SRPPassword", &parse_client_srp_password },
     { "MaxFragmentLenExt", &parse_max_fragment_len_mode },
+    { "ForcePHA", &parse_client_force_pha },
 };
 
 /* Nested server options. */
@@ -689,6 +699,7 @@ static const ssl_test_server_option ssl_test_server_options[] = {
     { "CertStatus", &parse_certstatus },
     { "SRPUser", &parse_server_srp_user },
     { "SRPPassword", &parse_server_srp_password },
+    { "ForcePHA", &parse_server_force_pha },
 };
 
 SSL_TEST_CTX *SSL_TEST_CTX_new()

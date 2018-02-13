@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -13,6 +13,7 @@
 #include "../ssl_locl.h"
 #include "statem_locl.h"
 #include "internal/constant_time_locl.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/rand.h>
 #include <openssl/objects.h>
@@ -106,6 +107,13 @@ static int ossl_statem_server13_read_transition(SSL *s, int mt)
          */
         if (s->early_data_state == SSL_EARLY_DATA_READING)
             break;
+
+        if (mt == SSL3_MT_CERTIFICATE
+                && s->post_handshake_auth == SSL_PHA_REQUESTED) {
+            st->hand_state = TLS_ST_SR_CERT;
+            return 1;
+        }
+
         if (mt == SSL3_MT_KEY_UPDATE) {
             st->hand_state = TLS_ST_SR_KEY_UPDATE;
             return 1;
@@ -324,16 +332,22 @@ static int send_server_key_exchange(SSL *s)
  *   1: Yes
  *   0: No
  */
-static int send_certificate_request(SSL *s)
+int send_certificate_request(SSL *s)
 {
     if (
            /* don't request cert unless asked for it: */
            s->verify_mode & SSL_VERIFY_PEER
            /*
-            * if SSL_VERIFY_CLIENT_ONCE is set, don't request cert
-            * during re-negotiation:
+            * don't request if post-handshake-only unless doing
+            * post-handshake in TLSv1.3:
             */
-           && (s->s3->tmp.finish_md_len == 0 ||
+           && (!SSL_IS_TLS13(s) || !(s->verify_mode & SSL_VERIFY_POST_HANDSHAKE)
+               || s->post_handshake_auth == SSL_PHA_REQUEST_PENDING)
+           /*
+            * if SSL_VERIFY_CLIENT_ONCE is set, don't request cert
+            * a second time:
+            */
+           && (s->certreqs_sent < 1 ||
                !(s->verify_mode & SSL_VERIFY_CLIENT_ONCE))
            /*
             * never request cert in anonymous ciphersuites (see
@@ -387,6 +401,10 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
             st->hand_state = TLS_ST_SW_KEY_UPDATE;
             return WRITE_TRAN_CONTINUE;
         }
+        if (s->post_handshake_auth == SSL_PHA_REQUEST_PENDING) {
+            st->hand_state = TLS_ST_SW_CERT_REQ;
+            return WRITE_TRAN_CONTINUE;
+        }
         /* Try to read from the client instead */
         return WRITE_TRAN_FINISHED;
 
@@ -422,7 +440,12 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
         return WRITE_TRAN_CONTINUE;
 
     case TLS_ST_SW_CERT_REQ:
-        st->hand_state = TLS_ST_SW_CERT;
+        if (s->post_handshake_auth == SSL_PHA_REQUEST_PENDING) {
+            s->post_handshake_auth = SSL_PHA_REQUESTED;
+            st->hand_state = TLS_ST_OK;
+        } else {
+            st->hand_state = TLS_ST_SW_CERT;
+        }
         return WRITE_TRAN_CONTINUE;
 
     case TLS_ST_SW_CERT:
@@ -449,6 +472,8 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
          * and give the application the opportunity to delay sending the
          * session ticket?
          */
+        if (s->post_handshake_auth == SSL_PHA_REQUESTED)
+            s->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
         st->hand_state = TLS_ST_SW_SESSION_TICKET;
         return WRITE_TRAN_CONTINUE;
 
@@ -514,10 +539,15 @@ WRITE_TRAN ossl_statem_server_write_transition(SSL *s)
 
     case TLS_ST_SR_CLNT_HELLO:
         if (SSL_IS_DTLS(s) && !s->d1->cookie_verified
-            && (SSL_get_options(s) & SSL_OP_COOKIE_EXCHANGE))
+            && (SSL_get_options(s) & SSL_OP_COOKIE_EXCHANGE)) {
             st->hand_state = DTLS_ST_SW_HELLO_VERIFY_REQUEST;
-        else
+        } else if (s->renegotiate == 0 && !SSL_IS_FIRST_HANDSHAKE(s)) {
+            /* We must have rejected the renegotiation */
+            st->hand_state = TLS_ST_OK;
+            return WRITE_TRAN_CONTINUE;
+        } else {
             st->hand_state = TLS_ST_SW_SRVR_HELLO;
+        }
         return WRITE_TRAN_CONTINUE;
 
     case DTLS_ST_SW_HELLO_VERIFY_REQUEST:
@@ -657,7 +687,7 @@ WORK_STATE ossl_statem_server_pre_work(SSL *s, WORK_STATE wst)
              *
              * Calls SSLfatal as required.
              */
-            return tls_finish_handshake(s, wst, 0);
+            return tls_finish_handshake(s, wst, 0, 0);
         } if (SSL_IS_DTLS(s)) {
             /*
              * We're into the last flight. We don't retransmit the last flight
@@ -687,13 +717,14 @@ WORK_STATE ossl_statem_server_pre_work(SSL *s, WORK_STATE wst)
         return WORK_FINISHED_CONTINUE;
 
     case TLS_ST_EARLY_DATA:
-        if (s->early_data_state != SSL_EARLY_DATA_ACCEPTING)
+        if (s->early_data_state != SSL_EARLY_DATA_ACCEPTING
+                && (s->s3->flags & TLS1_FLAGS_STATELESS) == 0)
             return WORK_FINISHED_CONTINUE;
         /* Fall through */
 
     case TLS_ST_OK:
         /* Calls SSLfatal() as required */
-        return tls_finish_handshake(s, wst, 1);
+        return tls_finish_handshake(s, wst, 1, 1);
     }
 
     return WORK_FINISHED_CONTINUE;
@@ -853,6 +884,13 @@ WORK_STATE ossl_statem_server_post_work(SSL *s, WORK_STATE wst)
                         SSL3_CC_APPLICATION | SSL3_CHANGE_CIPHER_SERVER_WRITE))
             /* SSLfatal() already called */
             return WORK_ERROR;
+        }
+        break;
+
+    case TLS_ST_SW_CERT_REQ:
+        if (s->post_handshake_auth == SSL_PHA_REQUEST_PENDING) {
+            if (statem_flush(s) != 1)
+                return WORK_MORE_A;
         }
         break;
 
@@ -1253,22 +1291,31 @@ MSG_PROCESS_RETURN tls_process_client_hello(SSL *s, PACKET *pkt)
     /* |cookie| will only be initialized for DTLS. */
     PACKET session_id, compression, extensions, cookie;
     static const unsigned char null_compression = 0;
-    CLIENTHELLO_MSG *clienthello;
+    CLIENTHELLO_MSG *clienthello = NULL;
+
+    /* Check if this is actually an unexpected renegotiation ClientHello */
+    if (s->renegotiate == 0 && !SSL_IS_FIRST_HANDSHAKE(s)) {
+        if (!ossl_assert(!SSL_IS_TLS13(s))) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CLIENT_HELLO,
+                     ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
+        if ((s->options & SSL_OP_NO_RENEGOTIATION) != 0
+                || (!s->s3->send_connection_binding
+                    && (s->options
+                        & SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION) == 0)) {
+            ssl3_send_alert(s, SSL3_AL_WARNING, SSL_AD_NO_RENEGOTIATION);
+            return MSG_PROCESS_FINISHED_READING;
+        }
+        s->renegotiate = 1;
+        s->new_session = 1;
+    }
 
     clienthello = OPENSSL_zalloc(sizeof(*clienthello));
     if (clienthello == NULL) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CLIENT_HELLO,
                  ERR_R_INTERNAL_ERROR);
         goto err;
-    }
-    /* Check if this is actually an unexpected renegotiation ClientHello */
-    if (s->renegotiate == 0 && !SSL_IS_FIRST_HANDSHAKE(s)) {
-        if ((s->options & SSL_OP_NO_RENEGOTIATION)) {
-            ssl3_send_alert(s, SSL3_AL_WARNING, SSL_AD_NO_RENEGOTIATION);
-            goto err;
-        }
-        s->renegotiate = 1;
-        s->new_session = 1;
     }
 
     /*
@@ -2303,7 +2350,7 @@ int tls_construct_server_hello(SSL *s, WPACKET *pkt)
          * Re-initialise the Transcript Hash. We're going to prepopulate it with
          * a synthetic message_hash in place of ClientHello1.
          */
-        if (!create_synthetic_message_hash(s)) {
+        if (!create_synthetic_message_hash(s, NULL, 0, NULL, 0)) {
             /* SSLfatal() already called */
             return 0;
         }
@@ -2615,11 +2662,6 @@ int tls_construct_server_key_exchange(SSL *s, WPACKET *pkt)
                      ERR_R_INTERNAL_ERROR);
             goto err;
         }
-        /*
-         * n is the length of the params, they start at &(d[4]) and p
-         * points to the space at the end.
-         */
-
         /* Get length of the parameters we have written above */
         if (!WPACKET_get_length(pkt, &paramlen)) {
             SSLfatal(s, SSL_AD_INTERNAL_ERROR,
@@ -2691,12 +2733,30 @@ int tls_construct_server_key_exchange(SSL *s, WPACKET *pkt)
 int tls_construct_certificate_request(SSL *s, WPACKET *pkt)
 {
     if (SSL_IS_TLS13(s)) {
-        /* TODO(TLS1.3) for now send empty request context */
-        if (!WPACKET_put_bytes_u8(pkt, 0)) {
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                     SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST,
-                     ERR_R_INTERNAL_ERROR);
-            return 0;
+        /* Send random context when doing post-handshake auth */
+        if (s->post_handshake_auth == SSL_PHA_REQUEST_PENDING) {
+            OPENSSL_free(s->pha_context);
+            s->pha_context_len = 32;
+            if ((s->pha_context = OPENSSL_malloc(s->pha_context_len)) == NULL
+                    || ssl_randbytes(s, s->pha_context, s->pha_context_len) <= 0
+                    || !WPACKET_sub_memcpy_u8(pkt, s->pha_context, s->pha_context_len)) {
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                         SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST,
+                         ERR_R_INTERNAL_ERROR);
+                return 0;
+            }
+            /* reset the handshake hash back to just after the ClientFinished */
+            if (!tls13_restore_handshake_digest_for_pha(s)) {
+                /* SSLfatal() already called */
+                return 0;
+            }
+        } else {
+            if (!WPACKET_put_bytes_u8(pkt, 0)) {
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                         SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST,
+                         ERR_R_INTERNAL_ERROR);
+                return 0;
+            }
         }
 
         if (!tls_construct_extensions(s, pkt,
@@ -2737,6 +2797,7 @@ int tls_construct_certificate_request(SSL *s, WPACKET *pkt)
     }
 
  done:
+    s->certreqs_sent++;
     s->s3->tmp.cert_request = 1;
     return 1;
 }
@@ -3385,11 +3446,12 @@ MSG_PROCESS_RETURN tls_process_client_certificate(SSL *s, PACKET *pkt)
     int i;
     MSG_PROCESS_RETURN ret = MSG_PROCESS_ERROR;
     X509 *x = NULL;
-    unsigned long l, llen;
+    unsigned long l;
     const unsigned char *certstart, *certbytes;
     STACK_OF(X509) *sk = NULL;
     PACKET spkt, context;
     size_t chainidx;
+    SSL_SESSION *new_sess = NULL;
 
     if ((sk = sk_X509_new_null()) == NULL) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CLIENT_CERTIFICATE,
@@ -3397,10 +3459,16 @@ MSG_PROCESS_RETURN tls_process_client_certificate(SSL *s, PACKET *pkt)
         goto err;
     }
 
-    /* TODO(TLS1.3): For now we ignore the context. We need to verify this */
-    if ((SSL_IS_TLS13(s) && !PACKET_get_length_prefixed_1(pkt, &context))
-            || !PACKET_get_net_3(pkt, &llen)
-            || !PACKET_get_sub_packet(pkt, &spkt, llen)
+    if (SSL_IS_TLS13(s) && (!PACKET_get_length_prefixed_1(pkt, &context)
+                            || (s->pha_context == NULL && PACKET_remaining(&context) != 0)
+                            || (s->pha_context != NULL &&
+                                !PACKET_equal(&context, s->pha_context, s->pha_context_len)))) {
+        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_CLIENT_CERTIFICATE,
+                 SSL_R_INVALID_CONTEXT);
+        goto err;
+    }
+
+    if (!PACKET_get_length_prefixed_3(pkt, &spkt)
             || PACKET_remaining(pkt) != 0) {
         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_CLIENT_CERTIFICATE,
                  SSL_R_LENGTH_MISMATCH);
@@ -3505,12 +3573,44 @@ MSG_PROCESS_RETURN tls_process_client_certificate(SSL *s, PACKET *pkt)
         }
     }
 
+    /*
+     * Sessions must be immutable once they go into the session cache. Otherwise
+     * we can get multi-thread problems. Therefore we don't "update" sessions,
+     * we replace them with a duplicate. Here, we need to do this every time
+     * a new certificate is received via post-handshake authentication, as the
+     * session may have already gone into the session cache.
+     */
+
+    if (s->post_handshake_auth == SSL_PHA_REQUESTED) {
+        int m = s->session_ctx->session_cache_mode;
+
+        if ((new_sess = ssl_session_dup(s->session, 0)) == 0) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_TLS_PROCESS_CLIENT_CERTIFICATE,
+                     ERR_R_MALLOC_FAILURE);
+            goto err;
+        }
+
+        if (m & SSL_SESS_CACHE_SERVER) {
+            /*
+             * Remove the old session from the cache. We carry on if this fails
+             */
+            SSL_CTX_remove_session(s->session_ctx, s->session);
+        }
+
+        SSL_SESSION_free(s->session);
+        s->session = new_sess;
+    }
+
     X509_free(s->session->peer);
     s->session->peer = sk_X509_shift(sk);
     s->session->verify_result = s->verify_result;
 
     sk_X509_pop_free(s->session->peer_chain, X509_free);
     s->session->peer_chain = sk;
+
+    if (new_sess != NULL)
+        ssl_update_cache(s, SSL_SESS_CACHE_SERVER);
 
     /*
      * Freeze the handshake buffer. For <TLS1.3 we do this after the CKE

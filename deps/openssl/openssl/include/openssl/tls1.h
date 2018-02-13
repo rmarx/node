@@ -30,9 +30,9 @@ extern "C" {
 # define TLS1_3_VERSION                  0x0304
 # define TLS_MAX_VERSION                 TLS1_3_VERSION
 
-/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -22 */
-# define TLS1_3_VERSION_DRAFT            0x7f16
-# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 22)"
+/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -23 */
+# define TLS1_3_VERSION_DRAFT            0x7f17
+# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 23)"
 
 /* Special value for method supporting multiple versions */
 # define TLS_ANY_VERSION                 0x10000
@@ -140,13 +140,15 @@ extern "C" {
 # define TLSEXT_TYPE_session_ticket              35
 
 /* As defined for TLS1.3 */
-# define TLSEXT_TYPE_key_share                   40
 # define TLSEXT_TYPE_psk                         41
 # define TLSEXT_TYPE_early_data                  42
 # define TLSEXT_TYPE_supported_versions          43
 # define TLSEXT_TYPE_cookie                      44
 # define TLSEXT_TYPE_psk_kex_modes               45
 # define TLSEXT_TYPE_certificate_authorities     47
+# define TLSEXT_TYPE_post_handshake_auth         49
+# define TLSEXT_TYPE_signature_algorithms_cert   50
+# define TLSEXT_TYPE_key_share                   51
 
 /* Temporary extension type */
 # define TLSEXT_TYPE_renegotiate                 0xff01
@@ -229,6 +231,21 @@ __owur int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
                                       const char *label, size_t llen,
                                       const unsigned char *context,
                                       size_t contextlen, int use_context);
+
+/*
+ * SSL_export_keying_material_early exports a value derived from the
+ * early exporter master secret, as specified in
+ * https://tools.ietf.org/html/draft-ietf-tls-tls13-23. It writes
+ * |olen| bytes to |out| given a label and optional context. (Since a
+ * zero length context is allowed, the |use_context| flag controls
+ * whether a context is included.) It returns 1 on success and 0
+ * otherwise.
+ */
+__owur int SSL_export_keying_material_early(SSL *s, unsigned char *out,
+                                            size_t olen, const char *label,
+                                            size_t llen,
+                                            const unsigned char *context,
+                                            size_t contextlen, int use_context);
 
 int SSL_get_peer_signature_type_nid(const SSL *s, int *pnid);
 

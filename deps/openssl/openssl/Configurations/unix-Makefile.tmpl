@@ -184,32 +184,42 @@ HTMLSUFFIX=html
 ECHO = echo
 
 CROSS_COMPILE= {- $config{cross_compile_prefix} -}
-CC= $(CROSS_COMPILE){- $target{cc} -}
-CFLAGS={- our $cflags2 = join(" ",(map { "-D".$_} @{$target{defines}}, @{$config{defines}}),"-DOPENSSLDIR=\"\\\"\$(OPENSSLDIR)\\\"\"","-DENGINESDIR=\"\\\"\$(ENGINESDIR)\\\"\"") -} {- $target{cflags} -} {- $config{cflags} -}
-CFLAGS_Q={- $cflags2 =~ s|([\\"])|\\$1|g; $cflags2 -} {- $config{cflags} -}
-CXX= $(CROSS_COMPILE){- $target{cxx} -}
-CXXFLAGS={- our $cxxflags2 = join(" ",(map { "-D".$_} @{$target{defines}}, @{$config{defines}}),"-DOPENSSLDIR=\"\\\"\$(OPENSSLDIR)\\\"\"","-DENGINESDIR=\"\\\"\$(ENGINESDIR)\\\"\"") -} {- $target{cxxflags} -} {- $config{cxxflags} -} -std=c++11
-LDFLAGS= {- $target{lflags} -}
-PLIB_LDFLAGS= {- $target{plib_lflags} -}
-EX_LIBS= {- $target{ex_libs} -} {- $config{ex_libs} -}
+CPPFLAGS={- our $cppflags = join(" ",
+                                 (map { "-D".$_} @{$config{defines}}),
+                                 (map { "-I".$_} @{$config{includes}}),
+                                 @{$config{cppflags}}) -}
+CPPFLAGS_Q={- $cppflags =~ s|([\\"])|\\$1|g; $cppflags -}
+CC= $(CROSS_COMPILE){- $config{cc} -}
+CFLAGS={- join(' ', @{$config{cflags}}) -}
+CXX= $(CROSS_COMPILE){- $config{cxx} -}
+CXXFLAGS={- join(' ', @{$config{cxxflags}}) -}
+LDFLAGS= {- join(' ', @{$config{lflags}}) -}
+PLIB_LDFLAGS= {- join(' ', @{$config{plib_lflags}}) -}
+EX_LIBS= {- join(' ', @{$config{ex_libs}}) -}
+LIB_CPPFLAGS={- join(' ',
+                     (map { '-D'.$_ }
+                          ('OPENSSLDIR="\"$(OPENSSLDIR)\""',
+                           'ENGINESDIR="\"$(ENGINESDIR)\""')),
+                     $target{shared_cppflag}) || "" -}
 LIB_CFLAGS={- $target{shared_cflag} || "" -}
 LIB_CXXFLAGS={- $target{shared_cxxflag} || "" -}
 LIB_LDFLAGS={- $target{shared_ldflag}." ".$config{shared_ldflag} -}
+DSO_CPPFLAGS={- $target{dso_cppflags} || "" -}
 DSO_CFLAGS={- $target{dso_cflags} || "" -}
 DSO_CXXFLAGS={- $target{dso_cxxflags} || "" -}
 DSO_LDFLAGS={- $target{dso_lflags} || "" -}
+BIN_CPPFLAGS={- $target{bin_cppflags} || "" -}
 BIN_CFLAGS={- $target{bin_cflags} || "" -}
 BIN_CXXFLAGS={- $target{bin_cxxflags} || "" -}
 BIN_LDFLAGS={- $target{bin_lflags} || "" -}
 
 PERL={- $config{perl} -}
 
-ARFLAGS= {- $target{arflags} -}
-AR=$(CROSS_COMPILE){- $target{ar} || "ar" -} $(ARFLAGS) r
-RANLIB= {- $target{ranlib} -}
-NM= $(CROSS_COMPILE){- $target{nm} || "nm" -}
-RCFLAGS={- $target{shared_rcflag} -}
+AR=$(CROSS_COMPILE){- $config{ar} -}
+ARFLAGS= {- join(' ', @{$config{arflags}}) -}
+RANLIB= {- $config{ranlib} -}
 RC= $(CROSS_COMPILE){- $target{rc} || "windres" -}
+RCFLAGS={- join(' ', @{$config{rcflags}}) -} {- $target{shared_rcflag} -}
 RM= rm -f
 RMDIR= rmdir
 TAR= {- $target{tar} || "tar" -}
@@ -225,8 +235,8 @@ TARFILE=        ../$(NAME).tar
 # dependent assembler flags. E.g. if you throw -mcpu=ultrasparc at SPARC
 # gcc, then the driver will automatically translate it to -xarch=v8plus
 # and pass it down to assembler.
-AS=$(CC) -c
-ASFLAG=$(CFLAGS)
+AS={- $config{as} || '$(CC) -c' -}
+ASFLAGS={- join(' ', @{$config{asflags}}) || '$(CFLAGS)' -}
 PERLASM_SCHEME= {- $target{perlasm_scheme} -}
 
 # For x86 assembler: Set PROCESSOR to 386 if you want to support
@@ -760,7 +770,6 @@ libssl.pc:
 	    echo 'Version: '$(VERSION); \
 	    echo 'Requires.private: libcrypto'; \
 	    echo 'Libs: -L$${libdir} -lssl'; \
-	    echo 'Libs.private: $(EX_LIBS)'; \
 	    echo 'Cflags: -I$${includedir}' ) > libssl.pc
 
 openssl.pc:
@@ -776,14 +785,16 @@ openssl.pc:
 
 configdata.pm: $(SRCDIR)/Configure $(SRCDIR)/config {- join(" ", @{$config{build_file_templates}}, @{$config{build_infos}}, @{$config{conf_files}}) -}
 	@echo "Detected changed: $?"
-	@echo "Reconfiguring..."
-	$(PERL) $(SRCDIR)/Configure reconf
+	$(PERL) configdata.pm -r -v
 	@echo "**************************************************"
 	@echo "***                                            ***"
 	@echo "***   Please run the same make command again   ***"
 	@echo "***                                            ***"
 	@echo "**************************************************"
 	@false
+
+reconfigure reconf:
+	$(PERL) configdata.pm -r -v
 
 {-
   use File::Basename;
@@ -845,7 +856,7 @@ EOF
 $target: $args{generator}->[0] $deps
 	( trap "rm -f \$@.*" INT 0; \\
 	  $generator \$@.S; \\
-	  \$(CC) $incs \$(CFLAGS) -E \$@.S | \\
+	  \$(CC) $incs \$(CFLAGS) \$(CPPFLAGS) -E \$@.S | \\
 	  \$(PERL) -ne '/^#(line)?\\s*[0-9]+/ or print' > \$@.i && \\
 	  mv -f \$@.i \$@ )
 EOF
@@ -858,7 +869,7 @@ EOF
           }
           return <<"EOF";
 $args{src}: $args{generator}->[0] $deps
-	\$(CC) $incs \$(CFLAGS) -E $args{generator}->[0] | \\
+	\$(CC) $incs \$(CFLAGS) \$(CPPFLAGS) -E $args{generator}->[0] | \\
 	\$(PERL) -ne '/^#(line)?\\s*[0-9]+/ or print' > \$@
 EOF
       }
@@ -885,23 +896,34 @@ EOF
           }
       }
       my $cmd = '$(CC)';
-      my $cmdflags = '$(CFLAGS) -c';
+      my $cmdflags = '$(CFLAGS)';
+      my $cmdcompile = ' -c';
       my $makedepprog = $disabled{makedepend} ? undef : $config{makedepprog};
       if (grep /\.rc$/, @srcs) {
           $cmd = '$(RC)';
           $cmdflags = '$(RCFLAGS)';
+          $cmdcompile = '';
           $makedepprog = undef;
       } elsif (grep /\.(cc|cpp)$/, @srcs) {
           $cmd = '$(CXX)';
-          $cmdflags = '$(CXXFLAGS) -c';
+          $cmdflags = '$(CXXFLAGS)';
           $cmdflags .= ' ' . { lib => '$(LIB_CXXFLAGS)',
                                dso => '$(DSO_CXXFLAGS)',
                                bin => '$(BIN_CXXFLAGS)' } -> {$args{intent}};
+          $cmdflags .= ' $(CPPFLAGS)';
+          $cmdflags .= ' ' . { lib => '$(LIB_CPPFLAGS)',
+                               dso => '$(DSO_CPPFLAGS)',
+                               bin => '$(BIN_CPPFLAGS)' } -> {$args{intent}};
       } else {
           $cmdflags .= ' ' . { lib => '$(LIB_CFLAGS)',
                                dso => '$(DSO_CFLAGS)',
                                bin => '$(BIN_CFLAGS)' } -> {$args{intent}};
+          $cmdflags .= ' $(CPPFLAGS)';
+          $cmdflags .= ' ' . { lib => '$(LIB_CPPFLAGS)',
+                               dso => '$(DSO_CPPFLAGS)',
+                               bin => '$(BIN_CPPFLAGS)' } -> {$args{intent}};
       }
+      $cmdflags .= $cmdcompile;
       my $recipe = <<"EOF";
 $obj$objext: $deps
 EOF
@@ -944,10 +966,15 @@ EOF
       my $libd = dirname($lib);
       my $libn = basename($lib);
       (my $libname = $libn) =~ s/^lib//;
-      my $linklibs = join("", map { my $d = dirname($_);
-                                    my $f = basename($_);
+      my @linkdirs = ();
+      foreach (@{args{deps}}) {
+          my $d = dirname($_);
+          push @linkdirs, $d unless grep { $d eq $_ } @linkdirs;
+      }
+      my $linkflags = join("", map { "-L$_ " } @linkdirs);
+      my $linklibs = join("", map { my $f = basename($_);
                                     (my $l = $f) =~ s/^lib//;
-                                    " -L$d -l$l" } @{$args{deps}});
+                                    " -l$l" } @{$args{deps}});
       my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x }
                  grep { $_ =~ m|\.o$| }
                  @{$args{objs}};
@@ -974,7 +1001,7 @@ EOF
 # simplest, {libname}\$(SHLIB_EXT_IMPORT) for Windows POSIX layers and
 # {libname}\$(SHLIB_EXT_SIMPLE) for the Unix platforms.
 $target: $deps
-	\$(CC) \$(CFLAGS) \$(LIB_CFLAGS) \$(LIB_LDFLAGS)$shared_soname$shared_imp \\
+	\$(CC) \$(CFLAGS) \$(LIB_CFLAGS) $linkflags\$(LIB_LDFLAGS)$shared_soname$shared_imp \\
 		-o $target_full$shared_def $objs \\
                 \$(PLIB_LDFLAGS) $linklibs \$(EX_LIBS)
 EOF
@@ -989,8 +1016,10 @@ EOF
 EOF
       } else {
           $recipe .= <<"EOF";
-	rm -f $target
-	ln -s $target_full $target
+	if [ '$target' != '$target_full' ]; then \\
+		rm -f $target; \\
+		ln -s $target_full $target; \\
+	fi
 EOF
       }
   }
@@ -999,10 +1028,15 @@ EOF
       my $dso = $args{lib};
       my $dsod = dirname($dso);
       my $dson = basename($dso);
-      my $linklibs = join("", map { my $d = dirname($_);
-                                    my $f = basename($_);
+      my @linkdirs = ();
+      foreach (@{args{deps}}) {
+          my $d = dirname($_);
+          push @linkdirs, $d unless grep { $d eq $_ } @linkdirs;
+      }
+      my $linkflags = join("", map { "-L$_ " } @linkdirs);
+      my $linklibs = join("", map { my $f = basename($_);
                                     (my $l = $f) =~ s/^lib//;
-                                    " -L$d -l$l" } @{$args{deps}});
+                                    " -l$l" } @{$args{deps}});
       my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x } @{$args{objs}};
       my @deps = compute_lib_depends(@{$args{deps}});
       my $objs = join(" ", @objs);
@@ -1010,7 +1044,7 @@ EOF
       my $target = dso($dso);
       return <<"EOF";
 $target: $objs $deps
-	\$(CC) \$(CFLAGS) \$(DSO_CFLAGS) \$(DSO_LDFLAGS) \\
+	\$(CC) \$(CFLAGS) \$(DSO_CFLAGS) $linkflags\$(DSO_LDFLAGS) \\
 		-o $target $objs \\
                 \$(PLIB_LDFLAGS) $linklibs \$(EX_LIBS)
 EOF
@@ -1022,7 +1056,7 @@ EOF
       my $objs = join(" ", @objs);
       return <<"EOF";
 $lib$libext: $objs
-	\$(AR) \$\@ \$\?
+	\$(AR) \$(ARFLAGS) \$\@ \$\?
 	\$(RANLIB) \$\@ || echo Never mind.
 EOF
   }
@@ -1034,14 +1068,19 @@ EOF
       my $objs = join(" ", map { (my $x = $_) =~ s|\.o$|$objext|; $x }
                            @{$args{objs}});
       my $deps = join(" ",compute_lib_depends(@{$args{deps}}));
+      my @linkdirs = ();
+      foreach (@{args{deps}}) {
+          next if $_ =~ /\.a$/;
+          my $d = dirname($_);
+          push @linkdirs, $d unless grep { $d eq $_ } @linkdirs;
+      }
+      my $linkflags = join("", map { "-L$_ " } @linkdirs);
       my $linklibs = join("", map { if ($_ =~ /\.a$/) {
                                         " $_";
                                     } else {
-                                        my $d = dirname($_);
                                         my $f = basename($_);
-                                        $d = "." if $d eq $f;
                                         (my $l = $f) =~ s/^lib//;
-                                        " -L$d -l$l"
+                                        " -l$l"
                                     }
                                   } @{$args{deps}});
       my $cmd = '$(CC)';
@@ -1053,7 +1092,8 @@ EOF
       return <<"EOF";
 $bin$exeext: $objs $deps
 	rm -f $bin$exeext
-	\$\${LDCMD:-$cmd} $cmdflags \$(LDFLAGS) \$(BIN_LDFLAGS) -o $bin$exeext $objs \\
+	\$\${LDCMD:-$cmd} $cmdflags $linkflags\$(LDFLAGS) \$(BIN_LDFLAGS) \\
+		-o $bin$exeext $objs \\
 		\$(PLIB_LDFLAGS) $linklibs \$(EX_LIBS)
 EOF
   }

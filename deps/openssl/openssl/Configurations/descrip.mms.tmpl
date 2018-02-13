@@ -171,12 +171,21 @@ OPENSSLDIR_C={- $osslprefix -}DATAROOT:[000000]
 # Where installed engines reside, for C
 ENGINESDIR_C={- $osslprefix -}ENGINES{- $sover_dirname.$target{pointer_size} -}:
 
-CC= {- $target{cc} -}
-CFLAGS= /DEFINE=({- join(",", @{$target{defines}}, @{$config{defines}},"OPENSSLDIR=\"\"\"\$(OPENSSLDIR_C)\"\"\"","ENGINESDIR=\"\"\"\$(ENGINESDIR_C)\"\"\"") -}) {- $target{cflags} -} {- $config{cflags} -}
-CFLAGS_Q=$(CFLAGS)
-DEPFLAG= /DEFINE=({- join(",", @{$config{depdefines}}) -})
-LDFLAGS= {- $target{lflags} -}
-EX_LIBS= {- $target{ex_libs} ? ",".$target{ex_libs} : "" -}{- $config{ex_libs} ? ",".$config{ex_libs} : "" -}
+CC= {- $config{cc} -}
+DEFINES={- our $defines = join(",",
+                               '__dummy', # To make comma processing easier
+                               @{$config{defines}}) -}
+CPPFLAGS={- our $cppflags = join('', @{$config{cppflags}}) -}
+CPPFLAGS_Q={- $cppflags =~ s|"|""|g; $defines =~ s|"|""|g;
+              $cppflags."/DEFINE($defines)" -}
+CFLAGS={- join('', @{$config{cflags}}) -}
+LDFLAGS= {- join('', @{$config{lflags}}) -}
+EX_LIBS= {- join('', map { ','.$_ } @{$config{ex_libs}}) -}
+LIB_DEFINES={- join("",
+                    (map { ",$_" }
+                     @{$target{shared_defines}},
+                     'OPENSSLDIR="""$(OPENSSLDIR_C)"""',
+                     'ENGINESDIR="""$(ENGINESDIR_C)"""')) -}
 LIB_CFLAGS={- $target{lib_cflags} // "" -}
 DSO_CFLAGS={- $target{dso_cflags} // "" -}
 BIN_CFLAGS={- $target{bin_cflags} // "" -}
@@ -191,8 +200,8 @@ PERL={- $config{perl} -}
 # dependent assembler flags. E.g. if you throw -mcpu=ultrasparc at SPARC
 # gcc, then the driver will automatically translate it to -xarch=v8plus
 # and pass it down to assembler.
-AS={- $target{as} -}
-ASFLAG={- $target{asflags} -}
+AS={- $config{as} -}
+ASFLAGS={- join('', @{$config{asflags}}) -}
 
 # .FIRST and .LAST are special targets with MMS and MMK.
 # The defines in there are for C.  includes that look like
@@ -536,14 +545,16 @@ debug_logicals :
 # Building targets ###################################################
 
 configdata.pm : $(SRCDIR)Configure $(SRCDIR)config.com {- join(" ", @{$config{build_file_templates}}, @{$config{build_infos}}, @{$config{conf_files}}) -}
-        @ WRITE SYS$OUTPUT "Reconfiguring..."
-        perl $(SRCDIR)Configure reconf
+        perl configdata.pm -r -v
         @ WRITE SYS$OUTPUT "*************************************************"
         @ WRITE SYS$OUTPUT "***                                           ***"
         @ WRITE SYS$OUTPUT "***   Please run the same mms command again   ***"
         @ WRITE SYS$OUTPUT "***                                           ***"
         @ WRITE SYS$OUTPUT "*************************************************"
         @ PIPE ( EXIT %X10000000 )
+
+reconfigure reconf :
+	perl configdata.pm -r -v
 
 {-
   use File::Basename;
@@ -605,16 +616,26 @@ EOF
       my $srcs =
           join(", ",
                map { abs2rel(rel2abs($_), rel2abs($forward)) } @{$args{srcs}});
-      my $ecflags;
+      my $cflags = '$(CFLAGS)';
       if ($args{installed}) {
-          $ecflags = { lib => '$(LIB_CFLAGS)',
+          $cflags .= { lib => '$(LIB_CFLAGS)',
                        dso => '$(DSO_CFLAGS)',
                        bin => '$(BIN_CFLAGS)' } -> {$args{intent}};
       } else {
-          $ecflags = { lib => '$(NO_INST_LIB_CFLAGS)',
+          $cflags .= { lib => '$(NO_INST_LIB_CFLAGS)',
                        dso => '$(NO_INST_DSO_CFLAGS)',
                        bin => '$(NO_INST_BIN_CFLAGS)' } -> {$args{intent}};
       }
+      $cflags .= '$(CPPFLAGS)';
+      $cflags .= { lib => '$(LIB_CPPFLAGS)',
+		   dso => '$(DSO_CPPFLAGS)',
+		   bin => '$(BIN_CPPFLAGS)' } -> {$args{intent}};
+      my $defines = '$(DEFINES)';
+      $defines .= { lib => '$(LIB_DEFINES)',
+		    dso => '$(DSO_DEFINES)',
+		    bin => '$(BIN_DEFINES)' } -> {$args{intent}};
+      $cflags .= '/DEFINE=('.$defines.')';
+      
       my $incs_on = "\@ !";
       my $incs_off = "\@ !";
       my $incs = "";
@@ -645,7 +666,7 @@ $obj.OBJ : $deps
         ${before}
         SET DEFAULT $forward
         $incs_on
-        \$(CC) \$(CFLAGS)${ecflags}${incs}${depbuild} /OBJECT=${objd}${objn}.OBJ /REPOSITORY=$backward $srcs
+        \$(CC) ${cflags}${incs}${depbuild} /OBJECT=${objd}${objn}.OBJ /REPOSITORY=$backward $srcs
         $incs_off
         SET DEFAULT $backward
         ${after}
@@ -664,12 +685,14 @@ EOF
       my $shlib = $args{shlib};
       my $libd = dirname($lib);
       my $libn = basename($lib);
+      my @objs = map { (my $x = $_) =~ s|\.o$|.OBJ|; $x }
+                 grep { $_ =~ m|\.o$| }
+                 @{$args{objs}};
       my @defs = grep { $_ =~ /\.opt$/ } @{$args{objs}};
       my @deps = compute_lib_depends(@{$args{deps}});
       die "More than one symbol vector" if scalar @defs > 1;
       my $deps = join(", -\n\t\t", @defs, @deps);
       my $shlib_target = $disabled{shared} ? "" : $target{shared_target};
-      my $shared_def = join(",", map { "$_/OPT" } @defs);
       my $translatesyms_pl = abs2rel(rel2abs(catfile($config{sourcedir},
                                                      "VMS", "translatesyms.pl")),
                                      rel2abs($config{builddir}));
@@ -677,7 +700,11 @@ EOF
       # previous line's file spec as default, so if no directory spec
       # is present in the current line and the previous line has one that
       # doesn't apply, you're in for a surprise.
-      my $write_opt =
+      my $write_opt1 =
+          join(",-\"\n\t", map { my $x = $_ =~ /\[/ ? $_ : "[]".$_;
+                                 "WRITE OPT_FILE \"$x" } @objs).
+          "\"";
+      my $write_opt2 =
           join("\n\t", map { my $x = $_ =~ /\[/ ? $_ : "[]".$_;
                              $x =~ s|(\.EXE)|$1/SHARE|;
                              $x =~ s|(\.OLB)|$1/LIB|;
@@ -686,9 +713,13 @@ EOF
       return <<"EOF"
 $shlib.EXE : $lib.OLB $deps
         \$(PERL) $translatesyms_pl \$(BLDDIR)CXX\$DEMANGLER_DB. < $defs[0] > $defs[0]-translated
-        LINK \$(LDFLAGS)/SHARE=\$\@ $defs[0]-translated/OPT,$lib.OLB/LIBRARY
-             \$(EX_LIBS)
-        DELETE $defs[0]-translated;*
+        OPEN/WRITE/SHARE=READ OPT_FILE $lib-components.OPT
+        $write_opt1
+        $write_opt2
+        CLOSE OPT_FILE
+        LINK \$(LDFLAGS)/SHARE=\$\@ $defs[0]-translated/OPT,-
+                $lib-components.OPT/OPT \$(EX_LIBS)
+        DELETE $defs[0]-translated;*,$lib-components.OPT;*
         PURGE $shlib.EXE,$shlib.MAP
 EOF
         . ($config{target} =~ m|alpha| ? "" : <<"EOF"

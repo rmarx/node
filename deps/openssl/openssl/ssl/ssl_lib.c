@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -290,7 +290,7 @@ static const EVP_MD *tlsa_md_get(SSL_DANE *dane, uint8_t mtype)
 static int dane_tlsa_add(SSL_DANE *dane,
                          uint8_t usage,
                          uint8_t selector,
-                         uint8_t mtype, unsigned char *data, size_t dlen)
+                         uint8_t mtype, unsigned const char *data, size_t dlen)
 {
     danetls_record *t;
     const EVP_MD *md = NULL;
@@ -590,6 +590,7 @@ int SSL_clear(SSL *s)
     OPENSSL_free(s->psksession_id);
     s->psksession_id = NULL;
     s->psksession_id_len = 0;
+    s->hello_retry_request = 0;
 
     s->error = 0;
     s->hit = 0;
@@ -612,6 +613,9 @@ int SSL_clear(SSL *s)
     s->first_packet = 0;
 
     s->key_update = SSL_KEY_UPDATE_NONE;
+
+    EVP_MD_CTX_free(s->pha_dgst);
+    s->pha_dgst = NULL;
 
     /* Reset DANE verification result state */
     s->dane.mdpth = -1;
@@ -1089,7 +1093,7 @@ SSL_DANE *SSL_get0_dane(SSL *s)
 }
 
 int SSL_dane_tlsa_add(SSL *s, uint8_t usage, uint8_t selector,
-                      uint8_t mtype, unsigned char *data, size_t dlen)
+                      uint8_t mtype, unsigned const char *data, size_t dlen)
 {
     return dane_tlsa_add(&s->dane, usage, selector, mtype, data, dlen);
 }
@@ -1185,6 +1189,8 @@ void SSL_free(SSL *s)
     OPENSSL_free(s->ext.alpn);
     OPENSSL_free(s->ext.tls13_cookie);
     OPENSSL_free(s->clienthello);
+    OPENSSL_free(s->pha_context);
+    EVP_MD_CTX_free(s->pha_dgst);
 
     sk_X509_NAME_pop_free(s->ca_names, X509_NAME_free);
 
@@ -1969,6 +1975,8 @@ int SSL_write_ex(SSL *s, const void *buf, size_t num, size_t *written)
 int SSL_write_early_data(SSL *s, const void *buf, size_t num, size_t *written)
 {
     int ret, early_data_state;
+    size_t writtmp;
+    uint32_t partialwrite;
 
     switch (s->early_data_state) {
     case SSL_EARLY_DATA_NONE:
@@ -1994,9 +2002,29 @@ int SSL_write_early_data(SSL *s, const void *buf, size_t num, size_t *written)
 
     case SSL_EARLY_DATA_WRITE_RETRY:
         s->early_data_state = SSL_EARLY_DATA_WRITING;
-        ret = SSL_write_ex(s, buf, num, written);
+        /*
+         * We disable partial write for early data because we don't keep track
+         * of how many bytes we've written between the SSL_write_ex() call and
+         * the flush if the flush needs to be retried)
+         */
+        partialwrite = s->mode & SSL_MODE_ENABLE_PARTIAL_WRITE;
+        s->mode &= ~SSL_MODE_ENABLE_PARTIAL_WRITE;
+        ret = SSL_write_ex(s, buf, num, &writtmp);
+        s->mode |= partialwrite;
+        if (!ret) {
+            s->early_data_state = SSL_EARLY_DATA_WRITE_RETRY;
+            return ret;
+        }
+        s->early_data_state = SSL_EARLY_DATA_WRITE_FLUSH;
+        /* fall through */
+
+    case SSL_EARLY_DATA_WRITE_FLUSH:
+        /* The buffering BIO is still in place so we need to flush it */
+        if (statem_flush(s) != 1)
+            return 0;
+        *written = num;
         s->early_data_state = SSL_EARLY_DATA_WRITE_RETRY;
-        return ret;
+        return 1;
 
     case SSL_EARLY_DATA_FINISHED_READING:
     case SSL_EARLY_DATA_READ_RETRY:
@@ -2781,6 +2809,19 @@ int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
                                                        contextlen, use_context);
 }
 
+int SSL_export_keying_material_early(SSL *s, unsigned char *out, size_t olen,
+                                     const char *label, size_t llen,
+                                     const unsigned char *context,
+                                     size_t contextlen, int use_context)
+{
+    if (s->version != TLS1_3_VERSION) {
+        return 0;
+    }
+
+    return tls13_export_keying_material_early(s, out, olen, label, llen,
+                                              context, contextlen, use_context);
+}
+
 static unsigned long ssl_session_hash(const SSL_SESSION *a)
 {
     const unsigned char *session_id = a->session_id;
@@ -2916,6 +2957,10 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
         || (RAND_bytes(ret->ext.tick_aes_key,
                        sizeof(ret->ext.tick_aes_key)) <= 0))
         ret->options |= SSL_OP_NO_TICKET;
+
+    if (RAND_bytes(ret->ext.cookie_hmac_key,
+                   sizeof(ret->ext.cookie_hmac_key)) <= 0)
+        goto err;
 
 #ifndef OPENSSL_NO_SRP
     if (!SSL_CTX_SRP_CTX_init(ret))
@@ -5240,9 +5285,11 @@ int ssl_randbytes(SSL *s, unsigned char *rnd, size_t size)
          * serialization of SSL accesses for the needed concurrency protection
          * here.
          */
-         return RAND_DRBG_generate(s->drbg, rnd, size, 0, NULL, 0);
+        return RAND_DRBG_bytes(s->drbg, rnd, size);
     }
-    return RAND_bytes(rnd, (int)size);
+    if (size > INT_MAX)
+        return 0;
+    return RAND_bytes(rnd, size);
 }
 
 __owur unsigned int ssl_get_max_send_fragment(const SSL *ssl)
@@ -5268,4 +5315,76 @@ __owur unsigned int ssl_get_split_send_fragment(const SSL *ssl)
 
     /* return current SSL connection setting */
     return ssl->split_send_fragment;
+}
+
+int SSL_stateless(SSL *s)
+{
+    int ret;
+
+    /* Ensure there is no state left over from a previous invocation */
+    if (!SSL_clear(s))
+        return 0;
+
+    ERR_clear_error();
+
+    s->s3->flags |= TLS1_FLAGS_STATELESS;
+    ret = SSL_accept(s);
+    s->s3->flags &= ~TLS1_FLAGS_STATELESS;
+
+    if (ret > 0 && s->ext.cookieok)
+        return 1;
+
+    return 0;
+}
+
+void SSL_force_post_handshake_auth(SSL *ssl)
+{
+    ssl->pha_forced = 1;
+}
+
+int SSL_verify_client_post_handshake(SSL *ssl)
+{
+    if (!SSL_IS_TLS13(ssl)) {
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_WRONG_SSL_VERSION);
+        return 0;
+    }
+    if (!ssl->server) {
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_NOT_SERVER);
+        return 0;
+    }
+
+    if (!SSL_is_init_finished(ssl)) {
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_STILL_IN_INIT);
+        return 0;
+    }
+
+    switch (ssl->post_handshake_auth) {
+    case SSL_PHA_NONE:
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_EXTENSION_NOT_RECEIVED);
+        return 0;
+    default:
+    case SSL_PHA_EXT_SENT:
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, ERR_R_INTERNAL_ERROR);
+        return 0;
+    case SSL_PHA_EXT_RECEIVED:
+        break;
+    case SSL_PHA_REQUEST_PENDING:
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_REQUEST_PENDING);
+        return 0;
+    case SSL_PHA_REQUESTED:
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_REQUEST_SENT);
+        return 0;
+    }
+
+    ssl->post_handshake_auth = SSL_PHA_REQUEST_PENDING;
+
+    /* checks verify_mode and algorithm_auth */
+    if (!send_certificate_request(ssl)) {
+        ssl->post_handshake_auth = SSL_PHA_EXT_RECEIVED; /* restore on error */
+        SSLerr(SSL_F_SSL_VERIFY_CLIENT_POST_HANDSHAKE, SSL_R_INVALID_CONFIG);
+        return 0;
+    }
+
+    ossl_statem_set_in_init(ssl, 1);
+    return 1;
 }
