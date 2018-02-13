@@ -106,9 +106,19 @@ SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
 {
 
   SSL_CTX_add_custom_ext(sc->ctx_, 26,
-                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS | SSL_EXT_IGNORE_ON_RESUMPTION,
+                         SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS,
                          QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
                          QTLSWrap::ParseTransportParamsCallback, nullptr);
+
+  /**
+   * set to ffffffff according to QUIC to enable 0-RTT
+   */
+  SSL_CTX_set_max_early_data(sc->ctx_, std::numeric_limits<uint32_t>::max());
+
+  // min version of QUIC (v1) is TLS 1.3
+  SSL_CTX_set_min_proto_version(sc->ctx_, TLS1_3_VERSION);
+  SSL_CTX_set_max_proto_version(sc->ctx_, TLS1_3_VERSION);
+
   return sc;
 }
 
@@ -183,9 +193,6 @@ void QTLSWrap::InitSSL()
   SSL_set_app_data(ssl_, this);
   SSL_set_info_callback(ssl_, SSLInfoCallback);
   SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_RELEASE_BUFFERS);
-  SSL_CTX_set_min_proto_version(sc_->ctx_, TLS1_3_VERSION);
-  SSL_CTX_set_max_proto_version(sc_->ctx_, TLS1_3_VERSION);
-
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
   if (is_server())
