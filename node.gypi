@@ -122,7 +122,7 @@
             './deps/openssl/openssl.gyp:openssl',
 
             # For tests
-            './deps/openssl/openssl.gyp:openssl-cli',
+            #'./deps/openssl/openssl.gyp:openssl-cli',
           ],
           # Do not let unused OpenSSL symbols to slip away
           'conditions': [
