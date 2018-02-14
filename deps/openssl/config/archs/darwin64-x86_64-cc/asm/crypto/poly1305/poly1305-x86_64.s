@@ -1918,33 +1918,33 @@ L$blocks_avx512:
 	vmovdqa	96(%rcx),%ymm9
 
 
-	vmovdqu32	-64(%rdi),%zmm16{%k2}{z}
+	vmovdqu	-64(%rdi),%xmm11
 	andq	$-512,%rsp
-	vmovdqu32	-48(%rdi),%zmm17{%k2}{z}
+	vmovdqu	-48(%rdi),%xmm12
 	movq	$0x20,%rax
-	vmovdqu32	-32(%rdi),%zmm21{%k2}{z}
-	vmovdqu32	-16(%rdi),%zmm18{%k2}{z}
-	vmovdqu32	0(%rdi),%zmm22{%k2}{z}
-	vmovdqu32	16(%rdi),%zmm19{%k2}{z}
-	vmovdqu32	32(%rdi),%zmm23{%k2}{z}
-	vmovdqu32	48(%rdi),%zmm20{%k2}{z}
-	vmovdqu32	64(%rdi),%zmm24{%k2}{z}
-	vpermd	%zmm16,%zmm9,%zmm16
+	vmovdqu	-32(%rdi),%xmm7
+	vmovdqu	-16(%rdi),%xmm13
+	vmovdqu	0(%rdi),%xmm8
+	vmovdqu	16(%rdi),%xmm14
+	vmovdqu	32(%rdi),%xmm10
+	vmovdqu	48(%rdi),%xmm15
+	vmovdqu	64(%rdi),%xmm6
+	vpermd	%zmm11,%zmm9,%zmm16
 	vpbroadcastq	64(%rcx),%zmm5
-	vpermd	%zmm17,%zmm9,%zmm17
-	vpermd	%zmm21,%zmm9,%zmm21
-	vpermd	%zmm18,%zmm9,%zmm18
+	vpermd	%zmm12,%zmm9,%zmm17
+	vpermd	%zmm7,%zmm9,%zmm21
+	vpermd	%zmm13,%zmm9,%zmm18
 	vmovdqa64	%zmm16,0(%rsp){%k2}
 	vpsrlq	$32,%zmm16,%zmm7
-	vpermd	%zmm22,%zmm9,%zmm22
+	vpermd	%zmm8,%zmm9,%zmm22
 	vmovdqu64	%zmm17,0(%rsp,%rax,1){%k2}
 	vpsrlq	$32,%zmm17,%zmm8
-	vpermd	%zmm19,%zmm9,%zmm19
+	vpermd	%zmm14,%zmm9,%zmm19
 	vmovdqa64	%zmm21,64(%rsp){%k2}
-	vpermd	%zmm23,%zmm9,%zmm23
-	vpermd	%zmm20,%zmm9,%zmm20
+	vpermd	%zmm10,%zmm9,%zmm23
+	vpermd	%zmm15,%zmm9,%zmm20
 	vmovdqu64	%zmm18,64(%rsp,%rax,1){%k2}
-	vpermd	%zmm24,%zmm9,%zmm24
+	vpermd	%zmm6,%zmm9,%zmm24
 	vmovdqa64	%zmm22,128(%rsp){%k2}
 	vmovdqu64	%zmm19,128(%rsp,%rax,1){%k2}
 	vmovdqa64	%zmm23,192(%rsp){%k2}

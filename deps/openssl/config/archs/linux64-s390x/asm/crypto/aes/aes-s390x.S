@@ -1313,7 +1313,7 @@ AES_set_decrypt_key:
 	lhi	%r1,16
 	cr	%r0,%r1
 	jl	.Lgo
-	oill	%r0,0x80	# set "decrypt" bit
+	oill	%r0,S390X_DECRYPT	# set "decrypt" bit
 	st	%r0,240(%r4)
 	br	%r14
 .align	16
@@ -1429,7 +1429,7 @@ AES_cbc_encrypt:
 .align	16
 .Lkmc_truncated:
 	ahi	%r5,-1		# it's the way it's encoded in mvc
-	tmll	%r0,0x80
+	tmll	%r0,S390X_DECRYPT
 	jnz	.Lkmc_truncated_dec
 	lghi	%r1,0
 	stg	%r1,16*8(%r15)
@@ -1590,7 +1590,61 @@ AES_ctr32_encrypt:
 	clr	%r0,%r1
 	jl	.Lctr32_software
 
-	stmg	%r6,%r11,6*8(%r15)
+	stg	%r10,10*8(%r15)
+	stg	%r11,11*8(%r15)
+
+	clr	%r3,%r1		# does work even in 64-bit mode
+	jle	.Lctr32_nokma		# kma is slower for <= 16 blocks
+
+	larl	%r1,OPENSSL_s390xcap_P
+	lr	%r10,%r0
+	llihh	%r11,0x8000
+	srlg	%r11,%r11,0(%r10)
+	ng	%r11,S390X_KMA(%r1)		# check kma capability vector
+	jz	.Lctr32_nokma
+
+	lghi	%r1,-160-112
+	lgr	%r11,%r15
+	la	%r15,0(%r1,%r15)			# prepare parameter block
+
+	lhi	%r1,0x0600
+	sllg	%r3,%r3,4
+	or	%r0,%r1				# set HS and LAAD flags
+
+	stg	%r11,0(%r15)			# backchain
+	la	%r1,160(%r15)
+
+	lmg	%r10,%r11,0(%r5)			# copy key
+	stg	%r10,160+80(%r15)
+	stg	%r11,160+88(%r15)
+	lmg	%r10,%r11,16(%r5)
+	stg	%r10,160+96(%r15)
+	stg	%r11,160+104(%r15)
+
+	lmg	%r10,%r11,0(%r6)			# copy iv
+	stg	%r10,160+64(%r15)
+	ahi	%r11,-1				# kma requires counter-1
+	stg	%r11,160+72(%r15)
+	st	%r11,160+12(%r15)		# copy counter
+
+	lghi	%r10,0				# no AAD
+	lghi	%r11,0
+
+	.long	0xb929a042	# kma %r4,%r10,%r2
+	brc	1,.-4		# pay attention to "partial completion"
+
+	stg	%r0,160+80(%r15)		# wipe key
+	stg	%r0,160+88(%r15)
+	stg	%r0,160+96(%r15)
+	stg	%r0,160+104(%r15)
+	la	%r15,160+112(%r15)
+
+	lmg	%r10,%r11,10*8(%r15)
+	br	%r14
+
+.align	16
+.Lctr32_nokma:
+	stmg	%r6,%r9,6*8(%r15)
 
 	slgr	%r4,%r2
 	la	%r1,0(%r5)	# %r1 is permanent copy of %r5

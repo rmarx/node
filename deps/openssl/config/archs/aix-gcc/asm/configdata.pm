@@ -23,7 +23,7 @@ our %config = (
   build_type => "release",
   builddir => ".",
   cc => "gcc",
-  cflags => [ "-O -pthread", "-Qunused-arguments" ],
+  cflags => [ "-O -pthread" ],
   conf_files => [ "Configurations/00-base-templates.conf", "Configurations/10-main.conf", "Configurations/shared-info.pl" ],
   cppflags => [ "-DB_ENDIAN" ],
   cross_compile_prefix => "",
@@ -48,7 +48,7 @@ our %config = (
   openssl_thread_defines => [ "OPENSSL_THREADS" ],
   openssldir => "",
   options => "enable-tls1_3 no-afalgeng no-asan no-comp no-crypto-mdebug no-crypto-mdebug-backtrace no-devcryptoeng no-dynamic-engine no-ec_nistp_64_gcc_128 no-egd no-external-tests no-fuzz-afl no-fuzz-libfuzzer no-heartbeats no-md2 no-msan no-rc5 no-sctp no-shared no-ssl-trace no-ssl3 no-ssl3-method no-tls13downgrade no-ubsan no-unit-test no-weak-ssl-ciphers no-zlib no-zlib-dynamic",
-  perl => "/usr/local/Cellar/perl/5.24.0_1/bin/perl",
+  perl => "/usr/bin/perl",
   perlargv => [ "no-shared", "no-comp", "no-ssl3", "no-afalgeng", "enable-tls1_3", "aix-gcc" ],
   perlenv => {
       "AR" => undef,
@@ -1033,6 +1033,11 @@ our %unified_info = (
                     "libssl",
                 ],
             "test/buildtest_ocsperr" =>
+                [
+                    "libcrypto",
+                    "libssl",
+                ],
+            "test/buildtest_opensslconf" =>
                 [
                     "libcrypto",
                     "libssl",
@@ -2882,6 +2887,11 @@ our %unified_info = (
                 [
                     "test/generate_buildtest.pl",
                     "ocsperr",
+                ],
+            "test/buildtest_opensslconf.c" =>
+                [
+                    "test/generate_buildtest.pl",
+                    "opensslconf",
                 ],
             "test/buildtest_opensslv.c" =>
                 [
@@ -8009,6 +8019,10 @@ our %unified_info = (
                 [
                     "include",
                 ],
+            "test/buildtest_opensslconf.o" =>
+                [
+                    "include",
+                ],
             "test/buildtest_opensslv.o" =>
                 [
                     "include",
@@ -8689,6 +8703,7 @@ our %unified_info = (
             "test/buildtest_objectserr",
             "test/buildtest_ocsp",
             "test/buildtest_ocsperr",
+            "test/buildtest_opensslconf",
             "test/buildtest_opensslv",
             "test/buildtest_ossl_typ",
             "test/buildtest_pem",
@@ -9110,6 +9125,9 @@ our %unified_info = (
                 [
                 ],
             "test/buildtest_ocsperr" =>
+                [
+                ],
+            "test/buildtest_opensslconf" =>
                 [
                 ],
             "test/buildtest_opensslv" =>
@@ -13834,6 +13852,14 @@ our %unified_info = (
             "test/buildtest_ocsperr.o" =>
                 [
                     "test/buildtest_ocsperr.c",
+                ],
+            "test/buildtest_opensslconf" =>
+                [
+                    "test/buildtest_opensslconf.o",
+                ],
+            "test/buildtest_opensslconf.o" =>
+                [
+                    "test/buildtest_opensslconf.c",
                 ],
             "test/buildtest_opensslv" =>
                 [
