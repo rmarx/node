@@ -95,10 +95,6 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   // sc comes from an Unwrap. Make sure it was assigned.
   CHECK_NE(sc, nullptr);
 
-  // We've our own session callbacks
-  SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
-  SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
-
   InitSSL();
 }
 
@@ -118,6 +114,10 @@ SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
   // min version of QUIC (v1) is TLS 1.3
   SSL_CTX_set_min_proto_version(sc->ctx_, TLS1_3_VERSION);
   SSL_CTX_set_max_proto_version(sc->ctx_, TLS1_3_VERSION);
+  
+  // We've our own session callbacks
+  SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
+  SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
 
   return sc;
 }
@@ -192,7 +192,7 @@ void QTLSWrap::InitSSL()
 
   SSL_set_app_data(ssl_, this);
   SSL_set_info_callback(ssl_, SSLInfoCallback);
-  SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_RELEASE_BUFFERS);
+  //SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_RELEASE_BUFFERS);
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
   if (is_server())
