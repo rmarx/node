@@ -42,7 +42,7 @@ public:
   ////////////////////////////////////////////////
   //            SSL Callback methods            //
   ////////////////////////////////////////////////
-  static crypto::SecureContext* AddContextCallbacks(crypto::SecureContext *sc);
+  static crypto::SecureContext* AddContextCallbacks(crypto::SecureContext *sc, Kind kind);
   static int AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                          unsigned int content, const unsigned char **out,
                          size_t *outlen, X509 *x, size_t chainidx, int *al,
