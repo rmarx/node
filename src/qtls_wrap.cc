@@ -10,6 +10,7 @@
 #include "node_internals.h"
 #include "stream_base.h"
 #include "stream_base-inl.h"
+#include <limits>
 
 namespace node
 {
@@ -83,7 +84,7 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
                     ->NewInstance(env->context())
                     .ToLocalChecked(),
                 AsyncWrap::PROVIDER_QTLSWRAP),
-      SSLWrap<QTLSWrap>(env, QTLSWrap::AddContextCallbacks(sc), kind),
+      SSLWrap<QTLSWrap>(env, QTLSWrap::AddContextCallbacks(sc, kind), kind),
       sc_(sc),
       started_(false),
       local_transport_parameters(nullptr),
@@ -100,7 +101,7 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
   InitSSL();
 }
 
-SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
+SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc, Kind kind)
 {
 
   SSL_CTX_add_custom_ext(sc->ctx_, 26,
@@ -108,15 +109,21 @@ SecureContext* QTLSWrap::AddContextCallbacks(SecureContext *sc)
                          QTLSWrap::AddTransportParamsCallback, QTLSWrap::FreeTransportParamsCallback, nullptr,
                          QTLSWrap::ParseTransportParamsCallback, nullptr);
 
-  /**
-   * set to ffffffff according to QUIC to enable 0-RTT
-   */
-  SSL_CTX_set_max_early_data(sc->ctx_, std::numeric_limits<uint32_t>::max());
+  if (kind == kServer) {
+    /**
+     * set to ffffffff according to QUIC to enable 0-RTT
+     */
+    SSL_CTX_set_max_early_data(sc->ctx_, std::numeric_limits<uint32_t>::max());
+  }
 
   // min version of QUIC (v1) is TLS 1.3
   SSL_CTX_set_min_proto_version(sc->ctx_, TLS1_3_VERSION);
   SSL_CTX_set_max_proto_version(sc->ctx_, TLS1_3_VERSION);
   
+  // We've our own session callbacks
+  SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
+  SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
+
   // We've our own session callbacks
   SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
   SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
