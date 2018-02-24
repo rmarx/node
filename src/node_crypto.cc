@@ -727,7 +727,7 @@ void SecureContext::Init(const FunctionCallbackInfo<Value> &args)
 
   // SSL session cache configuration
   SSL_CTX_set_session_cache_mode(sc->ctx_,
-                                 SSL_SESS_CACHE_SERVER |
+                                 SSL_SESS_CACHE_BOTH |
                                      SSL_SESS_CACHE_NO_INTERNAL |
                                      SSL_SESS_CACHE_NO_AUTO_CLEAR);
   SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<Connection>::GetSessionCallback);
