@@ -65,6 +65,8 @@ void QTLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
   env->SetProtoMethod(t, "writeHandshakeData", WriteHandshakeData);
   env->SetProtoMethod(t, "readHandshakeData", ReadHandshakeData);
+  env->SetProtoMethod(t, "readSSL", ReadSSL);
+  env->SetProtoMethod(t, "enableSessionCallbacks", EnableSessionCallbacks);
   env->SetProtoMethod(t, "exportKeyingMaterial", ExportKeyingMaterial);
   env->SetProtoMethod(t, "getNegotiatedCipher", GetNegotiatedCipher);
 
@@ -211,6 +213,18 @@ void QTLSWrap::InitSSL()
     ABORT();
   }
 }
+
+void QTLSWrap::EnableSessionCallbacks(
+    const FunctionCallbackInfo<Value>& args) {
+  QTLSWrap* wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  if (wrap->ssl_ == nullptr) {
+    return wrap->env()->ThrowTypeError(
+        "EnableSessionCallbacks after destroySSL");
+  }
+  wrap->enable_session_callbacks();
+}
+
 void QTLSWrap::NewSessionDoneCb()
 {
   // started cycle in tlswrap, but probably here nothing to do
@@ -401,6 +415,36 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   char *data = new char[pending];
   size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->Read(data, pending);
   args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
+}
+
+void QTLSWrap::ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  //SSL_do_handshake(wrap->ssl_);
+  size_t read;
+  int status;
+  int totalRead = 0;
+  int buffSize = 4096;
+  char* data = new char[buffSize];
+  std::vector<char*> dataVector;
+  for (;;) {
+    status = SSL_read_ex(wrap->ssl_, data, buffSize, &read);
+
+    if (status <= 0)
+      break;
+    dataVector.push_back(data);
+    totalRead += read;
+  }
+  char* allData = new char[totalRead];
+  for(int i = 0; i < totalRead; i++) {
+    char* dp = dataVector.at(i / buffSize);
+    allData[i] = dp[i % buffSize];
+  }
+  
+  args.GetReturnValue().Set(Buffer::Copy(env, allData, totalRead).ToLocalChecked());
 }
 
 void QTLSWrap::SetTransportParams(const v8::FunctionCallbackInfo<v8::Value> &args)

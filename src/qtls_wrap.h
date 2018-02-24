@@ -71,6 +71,8 @@ protected:
   static void GetClientInitial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args);
+  static void EnableSessionCallbacks(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
