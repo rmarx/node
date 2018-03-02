@@ -81,6 +81,7 @@ protected:
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ExportKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ExportEarlyKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsEarlyDataAllowed(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:

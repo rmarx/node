@@ -72,6 +72,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "enableSessionCallbacks", EnableSessionCallbacks);
   env->SetProtoMethod(t, "exportKeyingMaterial", ExportKeyingMaterial);
   env->SetProtoMethod(t, "exportEarlyKeyingMaterial", ExportEarlyKeyingMaterial);
+  env->SetProtoMethod(t, "isEarlyDataAllowed", IsEarlyDataAllowed);
   env->SetProtoMethod(t, "getNegotiatedCipher", GetNegotiatedCipher);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
@@ -582,6 +583,15 @@ void QTLSWrap::ExportEarlyKeyingMaterial(const v8::FunctionCallbackInfo<v8::Valu
   
   SSL_export_keying_material_early(wrap->ssl_, data, datasize, label, labelsize,reinterpret_cast<const uint8_t *>(""), 0, 1);
   args.GetReturnValue().Set(Buffer::Copy(env, (char*) data, datasize).ToLocalChecked());
+}
+void QTLSWrap::IsEarlyDataAllowed(const FunctionCallbackInfo<Value>& args) 
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  bool isEarlyDataAllowed = SSL_SESSION_get_max_early_data(SSL_get_session(wrap->ssl_));
+  args.GetReturnValue().Set(isEarlyDataAllowed);
 }
 
 void QTLSWrap::GetNegotiatedCipher(const FunctionCallbackInfo<Value> &args)
