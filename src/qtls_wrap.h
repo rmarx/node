@@ -70,7 +70,9 @@ protected:
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetClientInitial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args);
   static void EnableSessionCallbacks(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -78,6 +80,7 @@ protected:
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ExportKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ExportEarlyKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
