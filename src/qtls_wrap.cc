@@ -421,7 +421,7 @@ void QTLSWrap::WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value> &args)
 
   size_t written;
   int status = SSL_write_early_data(wrap->ssl_, data, length, &written);
-  args.GetReturnValue().Set(written);
+  args.GetReturnValue().Set(Integer::New(env->isolate(), written));
 }
 
 void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
