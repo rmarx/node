@@ -586,6 +586,10 @@ void QTLSWrap::IsEarlyDataAllowed(const FunctionCallbackInfo<Value>& args)
 
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  if (!SSL_get_session(wrap->ssl_)) {
+    args.GetReturnValue().Set(false);
+    return;
+  }
   bool isEarlyDataAllowed = SSL_SESSION_get_max_early_data(SSL_get_session(wrap->ssl_));
   args.GetReturnValue().Set(isEarlyDataAllowed);
 }
