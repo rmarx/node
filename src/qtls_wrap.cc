@@ -74,6 +74,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "exportEarlyKeyingMaterial", ExportEarlyKeyingMaterial);
   env->SetProtoMethod(t, "isEarlyDataAllowed", IsEarlyDataAllowed);
   env->SetProtoMethod(t, "getNegotiatedCipher", GetNegotiatedCipher);
+  env->SetProtoMethod(t, "setServername", SetServername);
 
   SSLWrap<QTLSWrap>::AddMethods(env, t);
 
@@ -648,6 +649,24 @@ void QTLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value> &args)
 
   // Always allow a connection. We'll reject in javascript.
   SSL_set_verify(wrap->ssl_, verify_mode, crypto::VerifyCallback);
+}
+
+void QTLSWrap::SetServername(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  QTLSWrap* wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  if (args.Length() < 1 || !args[0]->IsString())
+    return env->ThrowTypeError("First argument should be a string");
+
+  if (!wrap->is_client())
+    return;
+
+  CHECK_NE(wrap->ssl_, nullptr);
+
+  node::Utf8Value servername(env->isolate(), args[0].As<String>());
+  SSL_set_tlsext_host_name(wrap->ssl_, *servername);
 }
 
 } // namespace node

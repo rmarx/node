@@ -83,6 +83,7 @@ protected:
   static void ExportEarlyKeyingMaterial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void IsEarlyDataAllowed(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
   crypto::SecureContext *sc_;
