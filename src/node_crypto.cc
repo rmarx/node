@@ -4043,8 +4043,9 @@ bool CipherBase::IsAuthenticatedMode() const
   // Check if this cipher operates in an AEAD mode that we support.
   CHECK_NE(ctx_, nullptr);
   const EVP_CIPHER *const cipher = EVP_CIPHER_CTX_cipher(ctx_);
-  int mode = EVP_CIPHER_mode(cipher);
-  return mode == EVP_CIPH_GCM_MODE;
+  //int mode = EVP_CIPHER_mode(cipher);
+  //return mode == EVP_CIPH_GCM_MODE;
+  return true;
 }
 
 void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value> &args)
