@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -230,6 +230,9 @@ static const char *get_sigtype(int nid)
 
      case NID_ED25519:
         return "Ed25519";
+
+     case NID_ED448:
+        return "Ed448";
 
     default:
         return NULL;
@@ -533,9 +536,9 @@ static STRINT_PAIR handshakes[] = {
     {", CertificateVerify", SSL3_MT_CERTIFICATE_VERIFY},
     {", ClientKeyExchange", SSL3_MT_CLIENT_KEY_EXCHANGE},
     {", Finished", SSL3_MT_FINISHED},
-    {", CertificateUrl", 21},
+    {", CertificateUrl", SSL3_MT_CERTIFICATE_URL},
     {", CertificateStatus", SSL3_MT_CERTIFICATE_STATUS},
-    {", SupplementalData", 23},
+    {", SupplementalData", SSL3_MT_SUPPLEMENTAL_DATA},
     {", KeyUpdate", SSL3_MT_KEY_UPDATE},
 #ifndef OPENSSL_NO_NEXTPROTONEG
     {", NextProto", SSL3_MT_NEXT_PROTO},
@@ -752,6 +755,22 @@ int verify_cookie_callback(SSL *ssl, const unsigned char *cookie,
 
     return 0;
 }
+
+int generate_stateless_cookie_callback(SSL *ssl, unsigned char *cookie,
+                                       size_t *cookie_len)
+{
+    unsigned int temp;
+    int res = generate_cookie_callback(ssl, cookie, &temp);
+    *cookie_len = temp;
+    return res;
+}
+
+int verify_stateless_cookie_callback(SSL *ssl, const unsigned char *cookie,
+                                     size_t cookie_len)
+{
+    return verify_cookie_callback(ssl, cookie, cookie_len);
+}
+
 #endif
 
 /*

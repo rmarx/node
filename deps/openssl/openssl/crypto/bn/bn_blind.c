@@ -82,7 +82,6 @@ void BN_BLINDING_free(BN_BLINDING *r)
 {
     if (r == NULL)
         return;
-
     BN_free(r->A);
     BN_free(r->Ai);
     BN_free(r->e);

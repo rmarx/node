@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -182,7 +182,7 @@ void DSA_meth_free(DSA_METHOD *dsam);
 DSA_METHOD *DSA_meth_dup(const DSA_METHOD *dsam);
 const char *DSA_meth_get0_name(const DSA_METHOD *dsam);
 int DSA_meth_set1_name(DSA_METHOD *dsam, const char *name);
-int DSA_meth_get_flags(DSA_METHOD *dsam);
+int DSA_meth_get_flags(const DSA_METHOD *dsam);
 int DSA_meth_set_flags(DSA_METHOD *dsam, int flags);
 void *DSA_meth_get0_app_data(const DSA_METHOD *dsam);
 int DSA_meth_set0_app_data(DSA_METHOD *dsam, void *app_data);
@@ -224,7 +224,6 @@ int DSA_meth_set_paramgen(DSA_METHOD *dsam,
 int (*DSA_meth_get_keygen(const DSA_METHOD *dsam)) (DSA *);
 int DSA_meth_set_keygen(DSA_METHOD *dsam, int (*keygen) (DSA *));
 
-int ERR_load_DSA_strings(void);
 
 #  ifdef  __cplusplus
 }

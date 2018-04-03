@@ -14,10 +14,12 @@
 #include "rand_lcl.h"
 #include "internal/thread_once.h"
 #include "internal/rand_int.h"
+#include "internal/cryptlib_int.h"
 
 /*
- * Support framework for NIST SP 800-90A DRBG, AES-CTR mode.
- * The RAND_DRBG is OpenSSL's pointer to an instance of the DRBG.
+ * Support framework for NIST SP 800-90A DRBG
+ *
+ * See manual page RAND_DRBG(7) for a general overview.
  *
  * The OpenSSL model is to have new and free functions, and that new
  * does all initialization.  That is not the NIST model, which has
@@ -28,69 +30,40 @@
  */
 
 /*
- * THE THREE SHARED DRBGs
+ * The three shared DRBG instances
  *
- * There are three shared DRBGs (master, public and private), which are
- * accessed concurrently by all threads.
- *
- * THE MASTER DRBG
+ * There are three shared DRBG instances: <master>, <public>, and <private>.
+ */
+
+/*
+ * The <master> DRBG
  *
  * Not used directly by the application, only for reseeding the two other
  * DRBGs. It reseeds itself by pulling either randomness from os entropy
- * sources or by consuming randomnes which was added by RAND_add()
+ * sources or by consuming randomness which was added by RAND_add().
+ *
+ * The <master> DRBG is a global instance which is accessed concurrently by
+ * all threads. The necessary locking is managed automatically by its child
+ * DRBG instances during reseeding.
  */
-static RAND_DRBG *drbg_master;
+static RAND_DRBG *master_drbg;
 /*
- * THE PUBLIC DRBG
+ * The <public> DRBG
  *
  * Used by default for generating random bytes using RAND_bytes().
+ *
+ * The <public> DRBG is thread-local, i.e., there is one instance per thread.
  */
-static RAND_DRBG *drbg_public;
+static CRYPTO_THREAD_LOCAL public_drbg;
 /*
- * THE PRIVATE DRBG
+ * The <private> DRBG
  *
  * Used by default for generating private keys using RAND_priv_bytes()
+ *
+ * The <private> DRBG is thread-local, i.e., there is one instance per thread.
  */
-static RAND_DRBG *drbg_private;
-/*+
- * DRBG HIERARCHY
- *
- * In addition there are DRBGs, which are not shared, but used only by a
- * single thread at every time, for example the DRBGs which are owned by
- * an SSL context. All DRBGs are organized in a hierarchical fashion
- * with the <master> DRBG as root.
- *
- * This gives the following overall picture:
- *
- *                  <os entropy sources>
- *                         |
- *    RAND_add() ==>    <master>          \
- *                       /   \            | shared DRBGs (with locking)
- *                 <public>  <private>    /
- *                     |
- *                   <ssl>  owned by an SSL context
- *
- * AUTOMATIC RESEEDING
- *
- * Before satisfying a generate request, a DRBG reseeds itself automatically,
- * if one of the following two conditions holds:
- *
- * - the number of generate requests since the last reseeding exceeds a
- *   certain threshold, the so called |reseed_interval|. This behaviour
- *   can be disabled by setting the |reseed_interval| to 0.
- *
- * - the time elapsed since the last reseeding exceeds a certain time
- *   interval, the so called |reseed_time_interval|. This behaviour
- *   can be disabled by setting the |reseed_time_interval| to 0.
- *
- * MANUAL RESEEDING
- *
- * For the three shared DRBGs (and only for these) there is another way to
- * reseed them manually by calling RAND_seed() (or RAND_add() with a positive
- * |randomness| argument). This will immediately reseed the <master> DRBG.
- * The <public> and <private> DRBG will detect this on their next generate
- * call and reseed, pulling randomness from <master>.
- */
+static CRYPTO_THREAD_LOCAL private_drbg;
+
 
 
 /* NIST SP 800-90A DRBG recommends the use of a personalization string. */
@@ -98,23 +71,45 @@ static const char ossl_pers_string[] = "OpenSSL NIST SP 800-90A DRBG";
 
 static CRYPTO_ONCE rand_drbg_init = CRYPTO_ONCE_STATIC_INIT;
 
+
+
+static int rand_drbg_type = RAND_DRBG_TYPE;
+static unsigned int rand_drbg_flags = RAND_DRBG_FLAGS;
+
+static unsigned int master_reseed_interval = MASTER_RESEED_INTERVAL;
+static unsigned int slave_reseed_interval  = SLAVE_RESEED_INTERVAL;
+
+static time_t master_reseed_time_interval = MASTER_RESEED_TIME_INTERVAL;
+static time_t slave_reseed_time_interval  = SLAVE_RESEED_TIME_INTERVAL;
+
 static RAND_DRBG *drbg_setup(RAND_DRBG *parent);
-static void drbg_cleanup(RAND_DRBG *drbg);
+
+static RAND_DRBG *rand_drbg_new(int secure,
+                                int type,
+                                unsigned int flags,
+                                RAND_DRBG *parent);
 
 /*
- * Set/initialize |drbg| to be of type |nid|, with optional |flags|.
+ * Set/initialize |drbg| to be of type |type|, with optional |flags|.
+ *
+ * If |type| and |flags| are zero, use the defaults
  *
  * Returns 1 on success, 0 on failure.
  */
-int RAND_DRBG_set(RAND_DRBG *drbg, int nid, unsigned int flags)
+int RAND_DRBG_set(RAND_DRBG *drbg, int type, unsigned int flags)
 {
     int ret = 1;
 
+    if (type == 0 && flags == 0) {
+        type = rand_drbg_type;
+        flags = rand_drbg_flags;
+    }
+
     drbg->state = DRBG_UNINITIALISED;
     drbg->flags = flags;
-    drbg->nid = nid;
+    drbg->type = type;
 
-    switch (nid) {
+    switch (type) {
     default:
         RANDerr(RAND_F_RAND_DRBG_SET, RAND_R_UNSUPPORTED_DRBG_TYPE);
         return 0;
@@ -134,23 +129,84 @@ int RAND_DRBG_set(RAND_DRBG *drbg, int nid, unsigned int flags)
 }
 
 /*
- * Allocate memory and initialize a new DRBG.  The |parent|, if not
- * NULL, will be used to auto-seed this RAND_DRBG as needed.
+ * Set/initialize default |type| and |flag| for new drbg instances.
+ *
+ * Returns 1 on success, 0 on failure.
+ */
+int RAND_DRBG_set_defaults(int type, unsigned int flags)
+{
+    int ret = 1;
+
+    switch (type) {
+    default:
+        RANDerr(RAND_F_RAND_DRBG_SET_DEFAULTS, RAND_R_UNSUPPORTED_DRBG_TYPE);
+        return 0;
+    case NID_aes_128_ctr:
+    case NID_aes_192_ctr:
+    case NID_aes_256_ctr:
+        break;
+    }
+
+    if ((flags & ~RAND_DRBG_USED_FLAGS) != 0) {
+        RANDerr(RAND_F_RAND_DRBG_SET_DEFAULTS, RAND_R_UNSUPPORTED_DRBG_FLAGS);
+        return 0;
+    }
+
+    rand_drbg_type  = type;
+    rand_drbg_flags = flags;
+
+    return ret;
+}
+
+
+/*
+ * Allocate memory and initialize a new DRBG. The DRBG is allocated on
+ * the secure heap if |secure| is nonzero and the secure heap is enabled.
+ * The |parent|, if not NULL, will be used as random source for reseeding.
  *
  * Returns a pointer to the new DRBG instance on success, NULL on failure.
  */
-RAND_DRBG *RAND_DRBG_new(int type, unsigned int flags, RAND_DRBG *parent)
+static RAND_DRBG *rand_drbg_new(int secure,
+                                int type,
+                                unsigned int flags,
+                                RAND_DRBG *parent)
 {
-    RAND_DRBG *drbg = OPENSSL_zalloc(sizeof(*drbg));
+    RAND_DRBG *drbg = secure ?
+        OPENSSL_secure_zalloc(sizeof(*drbg)) : OPENSSL_zalloc(sizeof(*drbg));
 
     if (drbg == NULL) {
         RANDerr(RAND_F_RAND_DRBG_NEW, ERR_R_MALLOC_FAILURE);
-        goto err;
+        return NULL;
     }
+
+    drbg->secure = secure && CRYPTO_secure_allocated(drbg);
     drbg->fork_count = rand_fork_count;
     drbg->parent = parent;
+
+    if (parent == NULL) {
+        drbg->reseed_interval = master_reseed_interval;
+        drbg->reseed_time_interval = master_reseed_time_interval;
+    } else {
+        drbg->reseed_interval = slave_reseed_interval;
+        drbg->reseed_time_interval = slave_reseed_time_interval;
+    }
+
     if (RAND_DRBG_set(drbg, type, flags) == 0)
         goto err;
+
+    if (parent != NULL) {
+        rand_drbg_lock(parent);
+        if (drbg->strength > parent->strength) {
+            /*
+             * We currently don't support the algorithm from NIST SP 800-90C
+             * 10.1.2 to use a weaker DRBG as source
+             */
+            rand_drbg_unlock(parent);
+            RANDerr(RAND_F_RAND_DRBG_NEW, RAND_R_PARENT_STRENGTH_TOO_WEAK);
+            goto err;
+        }
+        rand_drbg_unlock(parent);
+    }
 
     if (!RAND_DRBG_set_callbacks(drbg, rand_drbg_get_entropy,
                                  rand_drbg_cleanup_entropy,
@@ -160,8 +216,22 @@ RAND_DRBG *RAND_DRBG_new(int type, unsigned int flags, RAND_DRBG *parent)
     return drbg;
 
 err:
-    OPENSSL_free(drbg);
+    if (drbg->secure)
+        OPENSSL_secure_free(drbg);
+    else
+        OPENSSL_free(drbg);
+
     return NULL;
+}
+
+RAND_DRBG *RAND_DRBG_new(int type, unsigned int flags, RAND_DRBG *parent)
+{
+    return rand_drbg_new(0, type, flags, parent);
+}
+
+RAND_DRBG *RAND_DRBG_secure_new(int type, unsigned int flags, RAND_DRBG *parent)
+{
+    return rand_drbg_new(1, type, flags, parent);
 }
 
 /*
@@ -174,8 +244,13 @@ void RAND_DRBG_free(RAND_DRBG *drbg)
 
     if (drbg->meth != NULL)
         drbg->meth->uninstantiate(drbg);
+    CRYPTO_THREAD_lock_free(drbg->lock);
     CRYPTO_free_ex_data(CRYPTO_EX_INDEX_DRBG, drbg, &drbg->ex_data);
-    OPENSSL_clear_free(drbg, sizeof(*drbg));
+
+    if (drbg->secure)
+        OPENSSL_secure_clear_free(drbg, sizeof(*drbg));
+    else
+        OPENSSL_clear_free(drbg, sizeof(*drbg));
 }
 
 /*
@@ -191,6 +266,9 @@ int RAND_DRBG_instantiate(RAND_DRBG *drbg,
 {
     unsigned char *nonce = NULL, *entropy = NULL;
     size_t noncelen = 0, entropylen = 0;
+    size_t min_entropy = drbg->strength;
+    size_t min_entropylen = drbg->min_entropylen;
+    size_t max_entropylen = drbg->max_entropylen;
 
     if (perslen > drbg->max_perslen) {
         RANDerr(RAND_F_RAND_DRBG_INSTANTIATE,
@@ -213,21 +291,33 @@ int RAND_DRBG_instantiate(RAND_DRBG *drbg,
     }
 
     drbg->state = DRBG_ERROR;
+
+    /*
+     * NIST SP800-90Ar1 section 9.1 says you can combine getting the entropy
+     * and nonce in 1 call by increasing the entropy with 50% and increasing
+     * the minimum length to accomadate the length of the nonce.
+     * We do this in case a nonce is require and get_nonce is NULL.
+     */
+    if (drbg->min_noncelen > 0 && drbg->get_nonce == NULL) {
+        min_entropy += drbg->strength / 2;
+        min_entropylen += drbg->min_noncelen;
+        max_entropylen += drbg->max_noncelen;
+    }
+
     if (drbg->get_entropy != NULL)
-        entropylen = drbg->get_entropy(drbg, &entropy, drbg->strength,
-                                   drbg->min_entropylen, drbg->max_entropylen);
-    if (entropylen < drbg->min_entropylen
-        || entropylen > drbg->max_entropylen) {
+        entropylen = drbg->get_entropy(drbg, &entropy, min_entropy,
+                                       min_entropylen, max_entropylen, 0);
+    if (entropylen < min_entropylen
+        || entropylen > max_entropylen) {
         RANDerr(RAND_F_RAND_DRBG_INSTANTIATE, RAND_R_ERROR_RETRIEVING_ENTROPY);
         goto end;
     }
 
-    if (drbg->max_noncelen > 0 && drbg->get_nonce != NULL) {
+    if (drbg->min_noncelen > 0 && drbg->get_nonce != NULL) {
         noncelen = drbg->get_nonce(drbg, &nonce, drbg->strength / 2,
                                    drbg->min_noncelen, drbg->max_noncelen);
         if (noncelen < drbg->min_noncelen || noncelen > drbg->max_noncelen) {
-            RANDerr(RAND_F_RAND_DRBG_INSTANTIATE,
-                    RAND_R_ERROR_RETRIEVING_NONCE);
+            RANDerr(RAND_F_RAND_DRBG_INSTANTIATE, RAND_R_ERROR_RETRIEVING_NONCE);
             goto end;
         }
     }
@@ -259,7 +349,7 @@ end:
                     RAND_R_ERROR_ENTROPY_POOL_WAS_IGNORED);
             drbg->state = DRBG_ERROR;
         }
-        RAND_POOL_free(drbg->pool);
+        rand_pool_free(drbg->pool);
         drbg->pool = NULL;
     }
     if (drbg->state == DRBG_READY)
@@ -288,7 +378,7 @@ int RAND_DRBG_uninstantiate(RAND_DRBG *drbg)
      * initial values.
      */
     drbg->meth->uninstantiate(drbg);
-    return RAND_DRBG_set(drbg, drbg->nid, drbg->flags);
+    return RAND_DRBG_set(drbg, drbg->type, drbg->flags);
 }
 
 /*
@@ -299,7 +389,8 @@ int RAND_DRBG_uninstantiate(RAND_DRBG *drbg)
  * Returns 1 on success, 0 on failure.
  */
 int RAND_DRBG_reseed(RAND_DRBG *drbg,
-                     const unsigned char *adin, size_t adinlen)
+                     const unsigned char *adin, size_t adinlen,
+                     int prediction_resistance)
 {
     unsigned char *entropy = NULL;
     size_t entropylen = 0;
@@ -323,7 +414,9 @@ int RAND_DRBG_reseed(RAND_DRBG *drbg,
     drbg->state = DRBG_ERROR;
     if (drbg->get_entropy != NULL)
         entropylen = drbg->get_entropy(drbg, &entropy, drbg->strength,
-                                   drbg->min_entropylen, drbg->max_entropylen);
+                                       drbg->min_entropylen,
+                                       drbg->max_entropylen,
+                                       prediction_resistance);
     if (entropylen < drbg->min_entropylen
         || entropylen > drbg->max_entropylen) {
         RANDerr(RAND_F_RAND_DRBG_RESEED, RAND_R_ERROR_RETRIEVING_ENTROPY);
@@ -377,7 +470,7 @@ int rand_drbg_restart(RAND_DRBG *drbg,
 
     if (drbg->pool != NULL) {
         RANDerr(RAND_F_RAND_DRBG_RESTART, ERR_R_INTERNAL_ERROR);
-        RAND_POOL_free(drbg->pool);
+        rand_pool_free(drbg->pool);
         drbg->pool = NULL;
     }
 
@@ -395,11 +488,11 @@ int rand_drbg_restart(RAND_DRBG *drbg,
             }
 
             /* will be picked up by the rand_drbg_get_entropy() callback */
-            drbg->pool = RAND_POOL_new(entropy, len, len);
+            drbg->pool = rand_pool_new(entropy, len, len);
             if (drbg->pool == NULL)
                 return 0;
 
-            RAND_POOL_add(drbg->pool, buffer, len, entropy);
+            rand_pool_add(drbg->pool, buffer, len, entropy);
         } else {
             if (drbg->max_adinlen < len) {
                 RANDerr(RAND_F_RAND_DRBG_RESTART,
@@ -439,7 +532,7 @@ int rand_drbg_restart(RAND_DRBG *drbg,
             drbg->meth->reseed(drbg, adin, adinlen, NULL, 0);
         } else if (reseeded == 0) {
             /* do a full reseeding if it has not been done yet above */
-            RAND_DRBG_reseed(drbg, NULL, 0);
+            RAND_DRBG_reseed(drbg, NULL, 0, 0);
         }
     }
 
@@ -447,7 +540,7 @@ int rand_drbg_restart(RAND_DRBG *drbg,
     if (drbg->pool != NULL) {
         drbg->state = DRBG_ERROR;
         RANDerr(RAND_F_RAND_DRBG_RESTART, ERR_R_INTERNAL_ERROR);
-        RAND_POOL_free(drbg->pool);
+        rand_pool_free(drbg->pool);
         drbg->pool = NULL;
         return 0;
     }
@@ -515,7 +608,7 @@ int RAND_DRBG_generate(RAND_DRBG *drbg, unsigned char *out, size_t outlen,
     }
 
     if (reseed_required || prediction_resistance) {
-        if (!RAND_DRBG_reseed(drbg, adin, adinlen)) {
+        if (!RAND_DRBG_reseed(drbg, adin, adinlen, prediction_resistance)) {
             RANDerr(RAND_F_RAND_DRBG_GENERATE, RAND_R_RESEED_ERROR);
             return 0;
         }
@@ -546,10 +639,22 @@ int RAND_DRBG_bytes(RAND_DRBG *drbg, unsigned char *out, size_t outlen)
 {
     unsigned char *additional = NULL;
     size_t additional_len;
+    size_t chunk;
     size_t ret;
 
     additional_len = rand_drbg_get_additional_data(&additional, drbg->max_adinlen);
-    ret = RAND_DRBG_generate(drbg, out, outlen, 0, additional, additional_len);
+
+    for ( ; outlen > 0; outlen -= chunk, out += chunk) {
+        chunk = outlen;
+        if (chunk > drbg->max_request)
+            chunk = drbg->max_request;
+        ret = RAND_DRBG_generate(drbg, out, chunk, 0, additional, additional_len);
+        if (!ret)
+            goto err;
+    }
+    ret = 1;
+
+err:
     if (additional_len != 0)
         OPENSSL_secure_clear_free(additional, additional_len);
 
@@ -559,40 +664,10 @@ int RAND_DRBG_bytes(RAND_DRBG *drbg, unsigned char *out, size_t outlen)
 /*
  * Set the RAND_DRBG callbacks for obtaining entropy and nonce.
  *
- * In the following, the signature and the semantics of the
- * get_entropy() and cleanup_entropy() callbacks are explained.
+ * Setting the callbacks is allowed only if the drbg has not been
+ * initialized yet. Otherwise, the operation will fail.
  *
- * GET_ENTROPY
- *
- *     size_t get_entropy(RAND_DRBG *ctx,
- *                        unsigned char **pout,
- *                        int entropy,
- *                        size_t min_len, size_t max_len);
- *
- * This is a request to allocate and fill a buffer of size
- * |min_len| <= size <= |max_len| (in bytes) which contains
- * at least |entropy| bits of randomness. The buffer's address is
- * to be returned in |*pout| and the number of collected
- * randomness bytes (which may be less than the allocated size
- * of the buffer) as return value.
- *
- * If the callback fails to acquire at least |entropy| bits of
- * randomness, it shall return a buffer length of 0.
- *
- * CLEANUP_ENTROPY
- *
- *     void cleanup_entropy(RAND_DRBG *ctx,
- *                          unsigned char *out, size_t outlen);
- *
- * A request to clear and free the buffer allocated by get_entropy().
- * The values |out| and |outlen| are expected to be the random buffer's
- * address and length, as returned by the get_entropy() callback.
- *
- * GET_NONCE, CLEANUP_NONCE
- *
- * Signature and semantics of the get_nonce() and cleanup_nonce()
- * callbacks are analogous to get_entropy() and cleanup_entropy().
- * Currently, the nonce is used only for the known answer tests.
+ * Returns 1 on success, 0 on failure.
  */
 int RAND_DRBG_set_callbacks(RAND_DRBG *drbg,
                             RAND_DRBG_get_entropy_fn get_entropy,
@@ -645,6 +720,101 @@ int RAND_DRBG_set_reseed_time_interval(RAND_DRBG *drbg, time_t interval)
 }
 
 /*
+ * Set the default values for reseed (time) intervals of new DRBG instances
+ *
+ * The default values can be set independently for master DRBG instances
+ * (without a parent) and slave DRBG instances (with parent).
+ *
+ * Returns 1 on success, 0 on failure.
+ */
+
+int RAND_DRBG_set_reseed_defaults(
+                                  unsigned int _master_reseed_interval,
+                                  unsigned int _slave_reseed_interval,
+                                  time_t _master_reseed_time_interval,
+                                  time_t _slave_reseed_time_interval
+                                  )
+{
+    if (_master_reseed_interval > MAX_RESEED_INTERVAL
+        || _slave_reseed_interval > MAX_RESEED_INTERVAL)
+        return 0;
+
+    if (_master_reseed_time_interval > MAX_RESEED_TIME_INTERVAL
+        || _slave_reseed_time_interval > MAX_RESEED_TIME_INTERVAL)
+        return 0;
+
+    master_reseed_interval = _master_reseed_interval;
+    slave_reseed_interval = _slave_reseed_interval;
+
+    master_reseed_time_interval = _master_reseed_time_interval;
+    slave_reseed_time_interval = _slave_reseed_time_interval;
+
+    return 1;
+}
+
+/*
+ * Locks the given drbg. Locking a drbg which does not have locking
+ * enabled is considered a successful no-op.
+ *
+ * Returns 1 on success, 0 on failure.
+ */
+int rand_drbg_lock(RAND_DRBG *drbg)
+{
+    if (drbg->lock != NULL)
+        return CRYPTO_THREAD_write_lock(drbg->lock);
+
+    return 1;
+}
+
+/*
+ * Unlocks the given drbg. Unlocking a drbg which does not have locking
+ * enabled is considered a successful no-op.
+ *
+ * Returns 1 on success, 0 on failure.
+ */
+int rand_drbg_unlock(RAND_DRBG *drbg)
+{
+    if (drbg->lock != NULL)
+        return CRYPTO_THREAD_unlock(drbg->lock);
+
+    return 1;
+}
+
+/*
+ * Enables locking for the given drbg
+ *
+ * Locking can only be enabled if the random generator
+ * is in the uninitialized state.
+ *
+ * Returns 1 on success, 0 on failure.
+ */
+int rand_drbg_enable_locking(RAND_DRBG *drbg)
+{
+    if (drbg->state != DRBG_UNINITIALISED) {
+        RANDerr(RAND_F_RAND_DRBG_ENABLE_LOCKING,
+                RAND_R_DRBG_ALREADY_INITIALIZED);
+        return 0;
+    }
+
+    if (drbg->lock == NULL) {
+        if (drbg->parent != NULL && drbg->parent->lock == NULL) {
+            RANDerr(RAND_F_RAND_DRBG_ENABLE_LOCKING,
+                    RAND_R_PARENT_LOCKING_NOT_ENABLED);
+            return 0;
+        }
+
+        drbg->lock = CRYPTO_THREAD_lock_new();
+        if (drbg->lock == NULL) {
+            RANDerr(RAND_F_RAND_DRBG_ENABLE_LOCKING,
+                    RAND_R_FAILED_TO_CREATE_LOCK);
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/*
  * Get and set the EXDATA
  */
 int RAND_DRBG_set_ex_data(RAND_DRBG *drbg, int idx, void *arg)
@@ -673,31 +843,13 @@ static RAND_DRBG *drbg_setup(RAND_DRBG *parent)
 {
     RAND_DRBG *drbg;
 
-    drbg = OPENSSL_secure_zalloc(sizeof(RAND_DRBG));
+    drbg = RAND_DRBG_secure_new(rand_drbg_type, rand_drbg_flags, parent);
     if (drbg == NULL)
         return NULL;
 
-    drbg->lock = CRYPTO_THREAD_lock_new();
-    if (drbg->lock == NULL) {
-        RANDerr(RAND_F_DRBG_SETUP, RAND_R_FAILED_TO_CREATE_LOCK);
+    /* Only the master DRBG needs to have a lock */
+    if (parent == NULL && rand_drbg_enable_locking(drbg) == 0)
         goto err;
-    }
-
-    if (RAND_DRBG_set(drbg,
-                      RAND_DRBG_NID, RAND_DRBG_FLAG_CTR_USE_DF) != 1)
-        goto err;
-    if (RAND_DRBG_set_callbacks(drbg, rand_drbg_get_entropy,
-                                rand_drbg_cleanup_entropy, NULL, NULL) != 1)
-        goto err;
-
-    if (parent == NULL) {
-        drbg->reseed_interval = MASTER_RESEED_INTERVAL;
-        drbg->reseed_time_interval = MASTER_RESEED_TIME_INTERVAL;
-    } else {
-        drbg->parent = parent;
-        drbg->reseed_interval = SLAVE_RESEED_INTERVAL;
-        drbg->reseed_time_interval = SLAVE_RESEED_TIME_INTERVAL;
-    }
 
     /* enable seed propagation */
     drbg->reseed_counter = 1;
@@ -714,7 +866,7 @@ static RAND_DRBG *drbg_setup(RAND_DRBG *parent)
     return drbg;
 
 err:
-    drbg_cleanup(drbg);
+    RAND_DRBG_free(drbg);
     return NULL;
 }
 
@@ -724,6 +876,8 @@ err:
  */
 DEFINE_RUN_ONCE_STATIC(do_rand_drbg_init)
 {
+    int ret = 1;
+
     /*
      * ensure that libcrypto is initialized, otherwise the
      * DRBG locks are not cleaned up properly
@@ -731,62 +885,51 @@ DEFINE_RUN_ONCE_STATIC(do_rand_drbg_init)
     if (!OPENSSL_init_crypto(0, NULL))
         return 0;
 
-    drbg_master = drbg_setup(NULL);
-    drbg_public = drbg_setup(drbg_master);
-    drbg_private = drbg_setup(drbg_master);
+    ossl_init_thread_start(OPENSSL_INIT_THREAD_RAND);
 
-    if (drbg_master == NULL || drbg_public == NULL || drbg_private == NULL)
+    master_drbg = drbg_setup(NULL);
+
+    ret &= CRYPTO_THREAD_init_local(&private_drbg, NULL);
+    ret &= CRYPTO_THREAD_init_local(&public_drbg, NULL);
+
+    if (master_drbg == NULL || ret == 0)
         return 0;
 
     return 1;
 }
 
-/* Cleans up the given global DRBG  */
-static void drbg_cleanup(RAND_DRBG *drbg)
-{
-    if (drbg != NULL) {
-        RAND_DRBG_uninstantiate(drbg);
-        CRYPTO_THREAD_lock_free(drbg->lock);
-        OPENSSL_secure_clear_free(drbg, sizeof(RAND_DRBG));
-    }
-}
-
 /* Clean up the global DRBGs before exit */
 void rand_drbg_cleanup_int(void)
 {
-    drbg_cleanup(drbg_private);
-    drbg_cleanup(drbg_public);
-    drbg_cleanup(drbg_master);
+    RAND_DRBG_free(master_drbg);
+    master_drbg = NULL;
 
-    drbg_private = drbg_public = drbg_master = NULL;
+    CRYPTO_THREAD_cleanup_local(&private_drbg);
+    CRYPTO_THREAD_cleanup_local(&public_drbg);
+}
+
+void drbg_delete_thread_state()
+{
+    RAND_DRBG *drbg;
+
+    drbg = CRYPTO_THREAD_get_local(&public_drbg);
+    RAND_DRBG_free(drbg);
+
+    drbg = CRYPTO_THREAD_get_local(&private_drbg);
+    RAND_DRBG_free(drbg);
 }
 
 /* Implements the default OpenSSL RAND_bytes() method */
 static int drbg_bytes(unsigned char *out, int count)
 {
-    int ret = 0;
-    size_t chunk;
+    int ret;
     RAND_DRBG *drbg = RAND_DRBG_get0_public();
 
     if (drbg == NULL)
         return 0;
 
-    CRYPTO_THREAD_write_lock(drbg->lock);
-    if (drbg->state == DRBG_UNINITIALISED)
-        goto err;
+    ret = RAND_DRBG_bytes(drbg, out, count);
 
-    for ( ; count > 0; count -= chunk, out += chunk) {
-        chunk = count;
-        if (chunk > drbg->max_request)
-            chunk = drbg->max_request;
-        ret = RAND_DRBG_generate(drbg, out, chunk, 0, NULL, 0);
-        if (!ret)
-            goto err;
-    }
-    ret = 1;
-
-err:
-    CRYPTO_THREAD_unlock(drbg->lock);
     return ret;
 }
 
@@ -812,11 +955,11 @@ static int drbg_add(const void *buf, int num, double randomness)
         return 0;
     }
 
-    CRYPTO_THREAD_write_lock(drbg->lock);
+    rand_drbg_lock(drbg);
     ret = rand_drbg_restart(drbg, buf,
                             (size_t)(unsigned int)num,
                             (size_t)(8*randomness));
-    CRYPTO_THREAD_unlock(drbg->lock);
+    rand_drbg_unlock(drbg);
 
     return ret;
 }
@@ -836,9 +979,9 @@ static int drbg_status(void)
     if (drbg == NULL)
         return 0;
 
-    CRYPTO_THREAD_write_lock(drbg->lock);
+    rand_drbg_lock(drbg);
     ret = drbg->state == DRBG_READY ? 1 : 0;
-    CRYPTO_THREAD_unlock(drbg->lock);
+    rand_drbg_unlock(drbg);
     return ret;
 }
 
@@ -852,7 +995,7 @@ RAND_DRBG *RAND_DRBG_get0_master(void)
     if (!RUN_ONCE(&rand_drbg_init, do_rand_drbg_init))
         return NULL;
 
-    return drbg_master;
+    return master_drbg;
 }
 
 /*
@@ -861,10 +1004,18 @@ RAND_DRBG *RAND_DRBG_get0_master(void)
  */
 RAND_DRBG *RAND_DRBG_get0_public(void)
 {
+    RAND_DRBG *drbg;
+
     if (!RUN_ONCE(&rand_drbg_init, do_rand_drbg_init))
         return NULL;
 
-    return drbg_public;
+    drbg = CRYPTO_THREAD_get_local(&public_drbg);
+    if (drbg == NULL) {
+        ossl_init_thread_start(OPENSSL_INIT_THREAD_RAND);
+        drbg = drbg_setup(master_drbg);
+        CRYPTO_THREAD_set_local(&public_drbg, drbg);
+    }
+    return drbg;
 }
 
 /*
@@ -873,10 +1024,18 @@ RAND_DRBG *RAND_DRBG_get0_public(void)
  */
 RAND_DRBG *RAND_DRBG_get0_private(void)
 {
+    RAND_DRBG *drbg;
+
     if (!RUN_ONCE(&rand_drbg_init, do_rand_drbg_init))
         return NULL;
 
-    return drbg_private;
+    drbg = CRYPTO_THREAD_get_local(&private_drbg);
+    if (drbg == NULL) {
+        ossl_init_thread_start(OPENSSL_INIT_THREAD_RAND);
+        drbg = drbg_setup(master_drbg);
+        CRYPTO_THREAD_set_local(&private_drbg, drbg);
+    }
+    return drbg;
 }
 
 RAND_METHOD rand_meth = {

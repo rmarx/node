@@ -12,6 +12,12 @@
 #if !defined(OPENSSL_NO_STDIO)
 
 # include <stdio.h>
+# ifdef _WIN32
+#  include <windows.h>
+# endif
+# ifdef __DJGPP__
+#  include <unistd.h>
+# endif
 
 FILE *openssl_fopen(const char *filename, const char *mode)
 {
@@ -61,7 +67,7 @@ FILE *openssl_fopen(const char *filename, const char *mode)
     {
         char *newname = NULL;
 
-        if (!HAS_LFN_SUPPORT(filename)) {
+        if (pathconf(filename, _PC_NAME_MAX) <= 12) {  /* 8.3 file system? */
             char *iterator;
             char lastchar;
 

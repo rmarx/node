@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_darwin64-x86_64-cc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_darwin64-x86_64-cc': [
-      '-O3 -arch x86_64 -Wall',
+      '-arch x86_64',
     ],
     'openssl_ex_libs_darwin64-x86_64-cc': [
       '',

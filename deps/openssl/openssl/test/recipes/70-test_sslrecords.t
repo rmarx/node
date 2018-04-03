@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -149,11 +149,11 @@ ok(TLSProxy::Message->fail(), "Changed record version in TLS1.2");
 SKIP: {
     skip "TLSv1.3 disabled", 6 if disabled("tls1_3");
 
-    #Test 13: Sending a different record version in TLS1.3 should succeed
+    #Test 13: Sending a different record version in TLS1.3 should fail
     $proxy->clear();
     $proxy->filter(\&change_version);
     $proxy->start();
-    ok(TLSProxy::Message->success(), "Changed record version in TLS1.3");
+    ok(TLSProxy::Message->fail(), "Changed record version in TLS1.3");
 
     #Test 14: Sending an unrecognised record type in TLS1.3 should fail
     $proxy->clear();
@@ -464,7 +464,7 @@ sub change_version
     my $proxy = shift;
 
     # We'll change a version after the initial version neg has taken place
-    if ($proxy->flight != 2) {
+    if ($proxy->flight != 1) {
         return;
     }
 

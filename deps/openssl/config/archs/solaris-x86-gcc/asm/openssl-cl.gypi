@@ -1,31 +1,10 @@
 {
   'variables': {
     'openssl_defines_solaris-x86-gcc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_BN_ASM_PART_WORDS',
-      'OPENSSL_IA32_SSE2',
-      'OPENSSL_BN_ASM_MONT',
-      'OPENSSL_BN_ASM_GF2m',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'RC4_ASM',
-      'MD5_ASM',
-      'RMD160_ASM',
-      'AES_ASM',
-      'VPAES_ASM',
-      'WHIRLPOOL_ASM',
-      'GHASH_ASM',
-      'ECP_NISTZ256_ASM',
-      'PADLOCK_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_solaris-x86-gcc': [
-      '-Wall -O3 -fomit-frame-pointer -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_solaris-x86-gcc': [
       '-lsocket -lnsl -ldl -pthread',

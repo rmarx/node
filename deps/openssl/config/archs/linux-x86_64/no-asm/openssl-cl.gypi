@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux-x86_64': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_linux-x86_64': [
-      '-Wall -O3 -pthread -m64',
+      '-pthread -m64',
     ],
     'openssl_ex_libs_linux-x86_64': [
       '-ldl -pthread',

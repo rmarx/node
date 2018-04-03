@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -116,7 +116,7 @@ SKIP: {
     #        should succeed
     $proxy->clear();
     $proxy->serverflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->filter(undef);
     $proxy->start();
     ok(TLSProxy::Message->success, "TLSv1.3 client TLSv1.2 server");
@@ -131,7 +131,7 @@ SKIP: {
     $proxy->clear();
     $testtype = NO_SIG_ALGS_EXT;
     $proxy->clientflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->success, "No TLSv1.2 sigalgs");
 
@@ -139,7 +139,7 @@ SKIP: {
     $proxy->clear();
     $testtype = EMPTY_SIG_ALGS_EXT;
     $proxy->clientflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->fail, "Empty TLSv1.2 sigalgs");
 
@@ -147,7 +147,7 @@ SKIP: {
     $proxy->clear();
     $testtype = NO_KNOWN_SIG_ALGS;
     $proxy->clientflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->fail, "No known TLSv1.3 sigalgs");
 
@@ -156,7 +156,7 @@ SKIP: {
     $proxy->clear();
     $testtype = NO_PSS_SIG_ALGS;
     $proxy->clientflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->success, "No PSS TLSv1.2 sigalgs");
 
@@ -164,7 +164,7 @@ SKIP: {
     $proxy->clear();
     $testtype = PSS_ONLY_SIG_ALGS;
     $proxy->serverflags("-no_tls1_3");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->success, "PSS only sigalgs in TLSv1.2");
 
@@ -175,7 +175,7 @@ SKIP: {
     $proxy->clear();
     $testtype = PSS_ONLY_SIG_ALGS;
     $proxy->clientflags("-no_tls1_3 -sigalgs RSA+SHA256");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->fail, "Sigalg we did not send in TLSv1.2");
 
@@ -183,7 +183,7 @@ SKIP: {
     #         matches the certificate should fail in TLSv1.2
     $proxy->clear();
     $proxy->clientflags("-no_tls1_3 -sigalgs ECDSA+SHA256");
-    $proxy->ciphers("ECDHE-RSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-RSA-AES128-SHA");
     $proxy->filter(undef);
     $proxy->start();
     ok(TLSProxy::Message->fail, "No matching TLSv1.2 sigalgs");
@@ -197,7 +197,7 @@ SKIP: {
                                                "server-ecdsa-cert.pem") .
                         " -key " . srctop_file("test", "certs",
                                                "server-ecdsa-key.pem")),
-    $proxy->ciphers("ECDHE-ECDSA-AES128-SHA:TLS13-AES-128-GCM-SHA256");
+    $proxy->ciphers("ECDHE-ECDSA-AES128-SHA");
     $proxy->start();
     ok(TLSProxy::Message->success, "No TLSv1.2 sigalgs, ECDSA");
 }
@@ -216,13 +216,16 @@ SKIP: {
        "DSA/SHA2 sigalg sent for 1.3-only ClientHello");
 
     #Test 18: signature_algorithms with backwards compatible ClientHello
-    $testtype = COMPAT_SIGALGS;
-    $dsa_status = $sha1_status = $sha224_status = 0;
-    $proxy->clear();
-    $proxy->filter(\&modify_sigalgs_filter);
-    $proxy->start();
-    ok($dsa_status && $sha1_status && $sha224_status,
-       "DSA sigalg not sent for compat ClientHello");
+    SKIP: {
+        skip "TLSv1.2 disabled", 1 if disabled("tls1_2");
+        $testtype = COMPAT_SIGALGS;
+        $dsa_status = $sha1_status = $sha224_status = 0;
+        $proxy->clear();
+        $proxy->filter(\&modify_sigalgs_filter);
+        $proxy->start();
+        ok($dsa_status && $sha1_status && $sha224_status,
+           "DSA sigalg not sent for compat ClientHello");
+   }
 }
 
 SKIP: {

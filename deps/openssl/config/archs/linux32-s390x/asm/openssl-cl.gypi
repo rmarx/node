@@ -1,25 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux32-s390x': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_BN_ASM_MONT',
-      'OPENSSL_BN_ASM_GF2m',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'RC4_ASM',
-      'AES_ASM',
-      'AES_CTR_ASM',
-      'AES_XTS_ASM',
-      'GHASH_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_linux32-s390x': [
-      '-Wall -O3 -pthread -m31 -Wa,-mzarch',
+      '-pthread -m31 -Wa,-mzarch',
     ],
     'openssl_ex_libs_linux32-s390x': [
       '-ldl -pthread',

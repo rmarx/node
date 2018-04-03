@@ -99,7 +99,10 @@ be at infinity by calling EC_POINT_set_to_infinity().
 The affine co-ordinates for a point describe a point in terms of its x and y
 position. The functions EC_POINT_set_affine_coordinates_GFp() and
 EC_POINT_set_affine_coordinates_GF2m() set the B<x> and B<y> co-ordinates for
-the point B<p> defined over the curve given in B<group>.
+the point B<p> defined over the curve given in B<group>. The functions
+EC_POINT_get_affine_coordinates_GFp() and
+EC_POINT_get_affine_coordinates_GF2m() set B<x> and B<y>, either of which may
+be NULL, to the corresponding coordinates of B<p>.
 
 As well as the affine co-ordinates, a point can alternatively be described in
 terms of its Jacobian projective co-ordinates (for Fp curves only). Jacobian
@@ -164,7 +167,7 @@ EC_POINT_set_compressed_coordinates_GF2m() and EC_POINT_oct2point().
 
 EC_POINT_method_of returns the EC_METHOD associated with the supplied EC_POINT.
 
-EC_POINT_point2oct() and EC_point2buf() return the length of the required
+EC_POINT_point2oct() and EC_POINT_point2buf() return the length of the required
 buffer or 0 on error.
 
 EC_POINT_point2bn() returns the pointer to the BIGNUM supplied, or NULL on
@@ -186,7 +189,7 @@ L<EC_GFp_simple_method(3)>, L<d2i_ECPKParameters(3)>
 
 =head1 COPYRIGHT
 
-Copyright 2013-2017 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2013-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

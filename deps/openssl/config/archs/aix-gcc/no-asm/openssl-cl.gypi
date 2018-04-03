@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_aix-gcc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_aix-gcc': [
-      '-O -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_aix-gcc': [
       '-pthread',

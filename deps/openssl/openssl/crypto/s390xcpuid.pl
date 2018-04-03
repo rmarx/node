@@ -129,6 +129,14 @@ OPENSSL_s390x_facilities:
 .type	OPENSSL_rdtsc,\@function
 .align	16
 OPENSSL_rdtsc:
+	larl	%r4,OPENSSL_s390xcap_P
+	tm	S390X_STFLE+3(%r4),0x40	# check for store-clock-fast facility
+	jz	.Lstck
+
+	.long	0xb27cf010	# stckf 16($sp)
+	lg	%r2,16($sp)
+	br	$ra
+.Lstck:
 	stck	16($sp)
 	lg	%r2,16($sp)
 	br	$ra
@@ -272,6 +280,69 @@ s390x_km:
 
 	br	$ra
 .size	s390x_km,.-s390x_km
+___
+}
+
+################
+# void s390x_kmac(const unsigned char *in, size_t len, unsigned int fc,
+#                 void *param)
+{
+my ($in,$len,$fc,$param) = map("%r$_",(2..5));
+$code.=<<___;
+.globl	s390x_kmac
+.type	s390x_kmac,\@function
+.align	16
+s390x_kmac:
+	lr	%r0,$fc
+	l${g}r	%r1,$param
+
+	.long	0xb91e0002	# kmac %r0,$in
+	brc	1,.-4		# pay attention to "partial completion"
+
+	br	$ra
+.size	s390x_kmac,.-s390x_kmac
+___
+}
+
+################
+# void s390x_kmo(const unsigned char *in, size_t len, unsigned char *out,
+#                unsigned int fc, void *param)
+{
+my ($in,$len,$out,$fc,$param) = map("%r$_",(2..6));
+$code.=<<___;
+.globl	s390x_kmo
+.type	s390x_kmo,\@function
+.align	16
+s390x_kmo:
+	lr	%r0,$fc
+	l${g}r	%r1,$param
+
+	.long	0xb92b0042	# kmo $out,$in
+	brc	1,.-4		# pay attention to "partial completion"
+
+	br	$ra
+.size	s390x_kmo,.-s390x_kmo
+___
+}
+
+################
+# void s390x_kmf(const unsigned char *in, size_t len, unsigned char *out,
+#                unsigned int fc, void *param)
+{
+my ($in,$len,$out,$fc,$param) = map("%r$_",(2..6));
+$code.=<<___;
+.globl	s390x_kmf
+.type	s390x_kmf,\@function
+.align	16
+s390x_kmf:
+	lr	%r0,$fc
+	l${g}r	%r1,$param
+
+	.long	0xb92a0042	# kmf $out,$in
+	brc	1,.-4		# pay attention to "partial completion"
+
+	br	$ra
+.size	s390x_kmf,.-s390x_kmf
 ___
 }
 

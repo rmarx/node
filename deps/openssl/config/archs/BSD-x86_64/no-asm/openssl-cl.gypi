@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_BSD-x86_64': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_BSD-x86_64': [
-      '-Wall -O3 -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_BSD-x86_64': [
       '-pthread',

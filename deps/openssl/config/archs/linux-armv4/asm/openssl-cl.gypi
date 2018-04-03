@@ -1,24 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux-armv4': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_BN_ASM_MONT',
-      'OPENSSL_BN_ASM_GF2m',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'AES_ASM',
-      'BSAES_ASM',
-      'GHASH_ASM',
-      'ECP_NISTZ256_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_linux-armv4': [
-      '-Wall -O3 -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_linux-armv4': [
       '-ldl -pthread',

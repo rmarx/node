@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -30,9 +30,9 @@ extern "C" {
 # define TLS1_3_VERSION                  0x0304
 # define TLS_MAX_VERSION                 TLS1_3_VERSION
 
-/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -23 */
-# define TLS1_3_VERSION_DRAFT            0x7f17
-# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 23)"
+/* TODO(TLS1.3) REMOVE ME: Version indicator for draft -26 */
+# define TLS1_3_VERSION_DRAFT            0x7f1a
+# define TLS1_3_VERSION_DRAFT_TXT        "TLS 1.3 (draft 26)"
 
 /* Special value for method supporting multiple versions */
 # define TLS_ANY_VERSION                 0x10000
@@ -236,16 +236,14 @@ __owur int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
  * SSL_export_keying_material_early exports a value derived from the
  * early exporter master secret, as specified in
  * https://tools.ietf.org/html/draft-ietf-tls-tls13-23. It writes
- * |olen| bytes to |out| given a label and optional context. (Since a
- * zero length context is allowed, the |use_context| flag controls
- * whether a context is included.) It returns 1 on success and 0
- * otherwise.
+ * |olen| bytes to |out| given a label and optional context. It
+ * returns 1 on success and 0 otherwise.
  */
 __owur int SSL_export_keying_material_early(SSL *s, unsigned char *out,
                                             size_t olen, const char *label,
                                             size_t llen,
                                             const unsigned char *context,
-                                            size_t contextlen, int use_context);
+                                            size_t contextlen);
 
 int SSL_get_peer_signature_type_nid(const SSL *s, int *pnid);
 
@@ -1132,18 +1130,6 @@ __owur int SSL_check_chain(SSL *s, X509 *x, EVP_PKEY *pk, STACK_OF(X509) *chain)
 # define TLS1_TXT_DHE_PSK_WITH_ARIA_256_GCM_SHA384         "DHE-PSK-ARIA256-GCM-SHA384"
 # define TLS1_TXT_RSA_PSK_WITH_ARIA_128_GCM_SHA256         "RSA-PSK-ARIA128-GCM-SHA256"
 # define TLS1_TXT_RSA_PSK_WITH_ARIA_256_GCM_SHA384         "RSA-PSK-ARIA256-GCM-SHA384"
-
-
-/* TLSv1.3 ciphersuites */
-/*
- * TODO(TLS1.3): Review the naming scheme for TLSv1.3 ciphers and also the
- * cipherstring selection process for these ciphers
- */
-# define TLS1_3_TXT_AES_128_GCM_SHA256                     "TLS13-AES-128-GCM-SHA256"
-# define TLS1_3_TXT_AES_256_GCM_SHA384                     "TLS13-AES-256-GCM-SHA384"
-# define TLS1_3_TXT_CHACHA20_POLY1305_SHA256               "TLS13-CHACHA20-POLY1305-SHA256"
-# define TLS1_3_TXT_AES_128_CCM_SHA256                     "TLS13-AES-128-CCM-SHA256"
-# define TLS1_3_TXT_AES_128_CCM_8_SHA256                   "TLS13-AES-128-CCM-8-SHA256"
 
 # define TLS_CT_RSA_SIGN                 1
 # define TLS_CT_DSS_SIGN                 2

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -208,14 +208,10 @@ static int psk_find_session_cb(SSL *ssl, const unsigned char *identity,
         return 0;
     }
 
-    if (key_len == EVP_MD_size(EVP_sha256()))
-        cipher = SSL_CIPHER_find(ssl, tls13_aes128gcmsha256_id);
-    else if (key_len == EVP_MD_size(EVP_sha384()))
-        cipher = SSL_CIPHER_find(ssl, tls13_aes256gcmsha384_id);
-
+    /* We default to SHA256 */
+    cipher = SSL_CIPHER_find(ssl, tls13_aes128gcmsha256_id);
     if (cipher == NULL) {
-        /* Doesn't look like a suitable TLSv1.3 key. Ignore it */
-        OPENSSL_free(key);
+        BIO_printf(bio_err, "Error finding suitable ciphersuite\n");
         return 0;
     }
 
@@ -240,6 +236,7 @@ typedef struct srpsrvparm_st {
     SRP_VBASE *vb;
     SRP_user_pwd *user;
 } srpsrvparm;
+static srpsrvparm srp_callback_parm;
 
 /*
  * This callback pretends to require some asynchronous logic in order to
@@ -726,13 +723,6 @@ static int not_resumable_sess_cb(SSL *s, int is_forward_secure)
     return is_forward_secure;
 }
 
-#ifndef OPENSSL_NO_SRP
-static srpsrvparm srp_callback_parm;
-#endif
-#ifndef OPENSSL_NO_SRTP
-static char *srtp_profiles = NULL;
-#endif
-
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP, OPT_ENGINE,
     OPT_4, OPT_6, OPT_ACCEPT, OPT_PORT, OPT_UNIX, OPT_UNLINK, OPT_NACCEPT,
@@ -1028,6 +1018,7 @@ int s_server_main(int argc, char *argv[])
     char *srpuserseed = NULL;
     char *srp_verifier_file = NULL;
 #endif
+    char *srtp_profiles = NULL;
     int min_version = 0, max_version = 0, prot_opt = 0, no_prot_opt = 0;
     int s_server_verify = SSL_VERIFY_NONE;
     int s_server_session_id_context = 1; /* anything will do */
@@ -1533,9 +1524,7 @@ int s_server_main(int argc, char *argv[])
             alpn_in = opt_arg();
             break;
         case OPT_SRTP_PROFILES:
-#ifndef OPENSSL_NO_SRTP
             srtp_profiles = opt_arg();
-#endif
             break;
         case OPT_KEYMATEXPORT:
             keymatexportlabel = opt_arg();
@@ -1570,6 +1559,8 @@ int s_server_main(int argc, char *argv[])
             break;
         case OPT_EARLY_DATA:
             early_data = 1;
+            if (max_early_data == -1)
+                max_early_data = SSL3_RT_MAX_PLAIN_LENGTH;
             break;
         }
     }
@@ -1757,6 +1748,10 @@ int s_server_main(int argc, char *argv[])
     }
     if (sdebug)
         ssl_ctx_security_debug(ctx, sdebug);
+
+    if (!config_ctx(cctx, ssl_args, ctx))
+        goto end;
+
     if (ssl_config) {
         if (SSL_CTX_config(ctx, ssl_config) == 0) {
             BIO_printf(bio_err, "Error using configuration \"%s\"\n",
@@ -1765,9 +1760,11 @@ int s_server_main(int argc, char *argv[])
             goto end;
         }
     }
-    if (SSL_CTX_set_min_proto_version(ctx, min_version) == 0)
+    if (min_version != 0
+        && SSL_CTX_set_min_proto_version(ctx, min_version) == 0)
         goto end;
-    if (SSL_CTX_set_max_proto_version(ctx, max_version) == 0)
+    if (max_version != 0
+        && SSL_CTX_set_max_proto_version(ctx, max_version) == 0)
         goto end;
 
     if (session_id_prefix) {
@@ -1843,8 +1840,6 @@ int s_server_main(int argc, char *argv[])
     }
 
     ssl_ctx_add_crls(ctx, crls, 0);
-    if (!config_ctx(cctx, ssl_args, ctx))
-        goto end;
 
     if (!ssl_load_stores(ctx, vfyCApath, vfyCAfile, chCApath, chCAfile,
                          crls, crl_download)) {
@@ -2039,6 +2034,10 @@ int s_server_main(int argc, char *argv[])
     /* Set DTLS cookie generation and verification callbacks */
     SSL_CTX_set_cookie_generate_cb(ctx, generate_cookie_callback);
     SSL_CTX_set_cookie_verify_cb(ctx, verify_cookie_callback);
+
+    /* Set TLS1.3 cookie generation and verification callbacks */
+    SSL_CTX_set_stateless_cookie_generate_cb(ctx, generate_stateless_cookie_callback);
+    SSL_CTX_set_stateless_cookie_verify_cb(ctx, verify_stateless_cookie_callback);
 
     if (ctx2 != NULL) {
         SSL_CTX_set_verify(ctx2, s_server_verify, verify_callback);

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -30,7 +30,7 @@ const OPTIONS sess_id_options[] = {
     {"outform", OPT_OUTFORM, 'f',
      "Output format - default PEM (PEM, DER or NSS)"},
     {"in", OPT_IN, 's', "Input file - default stdin"},
-    {"out", OPT_OUT, 's', "Output file - default stdout"},
+    {"out", OPT_OUT, '>', "Output file - default stdout"},
     {"text", OPT_TEXT, '-', "Print ssl session id details"},
     {"cert", OPT_CERT, '-', "Output certificate "},
     {"noout", OPT_NOOUT, '-', "Don't output the encoded session info"},

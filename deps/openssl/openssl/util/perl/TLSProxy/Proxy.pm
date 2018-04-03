@@ -58,8 +58,12 @@ sub new
         cert => $cert,
         debug => $debug,
         cipherc => "",
-        ciphers => "AES128-SHA:TLS13-AES-128-GCM-SHA256",
-        flight => 0,
+        ciphersuitesc => "",
+        ciphers => "AES128-SHA",
+        ciphersuitess => "TLS_AES_128_GCM_SHA256",
+        flight => -1,
+        direction => -1,
+        partial => ["", ""],
         record_list => [],
         message_list => [],
     };
@@ -135,7 +139,10 @@ sub clearClient
     my $self = shift;
 
     $self->{cipherc} = "";
-    $self->{flight} = 0;
+    $self->{ciphersuitec} = "";
+    $self->{flight} = -1;
+    $self->{direction} = -1;
+    $self->{partial} = ["", ""];
     $self->{record_list} = [];
     $self->{message_list} = [];
     $self->{clientflags} = "";
@@ -153,7 +160,8 @@ sub clear
     my $self = shift;
 
     $self->clearClient;
-    $self->{ciphers} = "AES128-SHA:TLS13-AES-128-GCM-SHA256";
+    $self->{ciphers} = "AES128-SHA";
+    $self->{ciphersuitess} = "TLS_AES_128_GCM_SHA256";
     $self->{serverflags} = "";
     $self->{serverconnects} = 1;
     $self->{serverpid} = 0;
@@ -188,7 +196,7 @@ sub start
     $pid = fork();
     if ($pid == 0) {
         my $execcmd = $self->execute
-            ." s_server -no_comp -rev -engine ossltest -accept "
+            ." s_server -max_protocol TLSv1.3 -no_comp -rev -engine ossltest -accept "
             .($self->server_port)
             ." -cert ".$self->cert." -cert2 ".$self->cert
             ." -naccept ".$self->serverconnects;
@@ -197,6 +205,9 @@ sub start
         }
         if ($self->ciphers ne "") {
             $execcmd .= " -cipher ".$self->ciphers;
+        }
+        if ($self->ciphersuitess ne "") {
+            $execcmd .= " -ciphersuites ".$self->ciphersuitess;
         }
         if ($self->serverflags ne "") {
             $execcmd .= " ".$self->serverflags;
@@ -226,13 +237,16 @@ sub clientstart
                 $echostr = "test";
             }
             my $execcmd = "echo ".$echostr." | ".$self->execute
-                 ." s_client -engine ossltest -connect "
+                 ." s_client -max_protocol TLSv1.3 -engine ossltest -connect "
                  .($self->proxy_addr).":".($self->proxy_port);
             unless ($self->supports_IPv6) {
                 $execcmd .= " -4";
             }
             if ($self->cipherc ne "") {
                 $execcmd .= " -cipher ".$self->cipherc;
+            }
+            if ($self->ciphersuitesc ne "") {
+                $execcmd .= " -ciphersuites ".$self->ciphersuitesc;
             }
             if ($self->clientflags ne "") {
                 $execcmd .= " ".$self->clientflags;
@@ -369,33 +383,37 @@ sub process_packet
         print "Received client packet\n";
     }
 
+    if ($self->{direction} != $server) {
+        $self->{flight} = $self->{flight} + 1;
+        $self->{direction} = $server;
+    }
+
     print "Packet length = ".length($packet)."\n";
     print "Processing flight ".$self->flight."\n";
 
     #Return contains the list of record found in the packet followed by the
-    #list of messages in those records
-    my @ret = TLSProxy::Record->get_records($server, $self->flight, $packet);
+    #list of messages in those records and any partial message
+    my @ret = TLSProxy::Record->get_records($server, $self->flight, $self->{partial}[$server].$packet);
+    $self->{partial}[$server] = $ret[2];
     push @{$self->record_list}, @{$ret[0]};
     push @{$self->{message_list}}, @{$ret[1]};
 
     print "\n";
 
+    if (scalar(@{$ret[0]}) == 0 or length($ret[2]) != 0) {
+        return "";
+    }
+
     #Finished parsing. Call user provided filter here
-    if(defined $self->filter) {
+    if (defined $self->filter) {
         $self->filter->($self);
     }
 
     #Reconstruct the packet
     $packet = "";
     foreach my $record (@{$self->record_list}) {
-        #We only replay the records for the current flight
-        if ($record->flight != $self->flight) {
-            next;
-        }
         $packet .= $record->reconstruct_record($server);
     }
-
-    $self->{flight} = $self->{flight} + 1;
 
     print "Forwarded packet length = ".length($packet)."\n\n";
 
@@ -487,6 +505,14 @@ sub cipherc
     }
     return $self->{cipherc};
 }
+sub ciphersuitesc
+{
+    my $self = shift;
+    if (@_) {
+        $self->{ciphersuitesc} = shift;
+    }
+    return $self->{ciphersuitesc};
+}
 sub ciphers
 {
     my $self = shift;
@@ -494,6 +520,14 @@ sub ciphers
         $self->{ciphers} = shift;
     }
     return $self->{ciphers};
+}
+sub ciphersuitess
+{
+    my $self = shift;
+    if (@_) {
+        $self->{ciphersuitess} = shift;
+    }
+    return $self->{ciphersuitess};
 }
 sub serverflags
 {

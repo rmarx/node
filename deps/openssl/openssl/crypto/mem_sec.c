@@ -22,7 +22,9 @@
 
 /* e_os.h includes unistd.h, which defines _POSIX_VERSION */
 #if !defined(OPENSSL_NO_SECURE_MEMORY) && defined(OPENSSL_SYS_UNIX) \
-    && defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L
+    && ( (defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L) \
+         || defined(__sun) || defined(__hpux) || defined(__sgi) \
+         || defined(__osf__) )
 # define IMPLEMENTED
 # include <stdlib.h>
 # include <assert.h>
@@ -31,8 +33,10 @@
 # include <sys/mman.h>
 # if defined(OPENSSL_SYS_LINUX)
 #  include <sys/syscall.h>
-#  include <linux/mman.h>
-#  include <errno.h>
+#  if defined(SYS_mlock2)
+#   include <linux/mman.h>
+#   include <errno.h>
+#  endif
 # endif
 # include <sys/param.h>
 # include <sys/stat.h>
@@ -42,6 +46,9 @@
 #define CLEAR(p, s) OPENSSL_cleanse(p, s)
 #ifndef PAGE_SIZE
 # define PAGE_SIZE    4096
+#endif
+#if !defined(MAP_ANON) && defined(MAP_ANONYMOUS)
+# define MAP_ANON MAP_ANONYMOUS
 #endif
 
 #ifdef IMPLEMENTED

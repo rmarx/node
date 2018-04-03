@@ -1,30 +1,10 @@
 {
   'variables': {
     'openssl_defines_solaris64-x86_64-gcc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_IA32_SSE2',
-      'OPENSSL_BN_ASM_MONT',
-      'OPENSSL_BN_ASM_MONT5',
-      'OPENSSL_BN_ASM_GF2m',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'RC4_ASM',
-      'MD5_ASM',
-      'AES_ASM',
-      'VPAES_ASM',
-      'BSAES_ASM',
-      'GHASH_ASM',
-      'ECP_NISTZ256_ASM',
-      'PADLOCK_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_solaris64-x86_64-gcc': [
-      '-m64 -Wall -O3 -pthread',
+      '-m64 -pthread',
     ],
     'openssl_ex_libs_solaris64-x86_64-gcc': [
       '-lsocket -lnsl -ldl -pthread',

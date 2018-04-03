@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -299,7 +299,9 @@ extern "C" {
 # define SSL3_MT_CERTIFICATE_VERIFY              15
 # define SSL3_MT_CLIENT_KEY_EXCHANGE             16
 # define SSL3_MT_FINISHED                        20
+# define SSL3_MT_CERTIFICATE_URL                 21
 # define SSL3_MT_CERTIFICATE_STATUS              22
+# define SSL3_MT_SUPPLEMENTAL_DATA               23
 # define SSL3_MT_KEY_UPDATE                      24
 # ifndef OPENSSL_NO_NEXTPROTONEG
 #  define SSL3_MT_NEXT_PROTO                     67

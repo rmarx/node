@@ -1,22 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux-ppc64': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_BN_ASM_MONT',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'AES_ASM',
-      'VPAES_ASM',
-      'ECP_NISTZ256_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_linux-ppc64': [
-      '-Wall -O3 -pthread -m64',
+      '-pthread -m64',
     ],
     'openssl_ex_libs_linux-ppc64': [
       '-ldl -pthread',

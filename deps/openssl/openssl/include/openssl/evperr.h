@@ -12,12 +12,9 @@
 # define HEADER_EVPERR_H
 
 # ifdef  __cplusplus
-extern "C" {
+extern "C"
 # endif
 int ERR_load_EVP_strings(void);
-# ifdef  __cplusplus
-}
-# endif
 
 /*
  * EVP function codes.
@@ -80,7 +77,12 @@ int ERR_load_EVP_strings(void);
 # define EVP_F_EVP_PKEY_GET0_SIPHASH                      172
 # define EVP_F_EVP_PKEY_KEYGEN                            146
 # define EVP_F_EVP_PKEY_KEYGEN_INIT                       147
+# define EVP_F_EVP_PKEY_METH_ADD0                         194
+# define EVP_F_EVP_PKEY_METH_NEW                          195
 # define EVP_F_EVP_PKEY_NEW                               106
+# define EVP_F_EVP_PKEY_NEW_CMAC_KEY                      193
+# define EVP_F_EVP_PKEY_NEW_RAW_PRIVATE_KEY               191
+# define EVP_F_EVP_PKEY_NEW_RAW_PUBLIC_KEY                192
 # define EVP_F_EVP_PKEY_PARAMGEN                          148
 # define EVP_F_EVP_PKEY_PARAMGEN_INIT                     149
 # define EVP_F_EVP_PKEY_PARAM_CHECK                       189
@@ -140,6 +142,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_R_INVALID_KEY_LENGTH                         130
 # define EVP_R_INVALID_OPERATION                          148
 # define EVP_R_KEYGEN_FAILURE                             120
+# define EVP_R_KEY_SETUP_FAILED                           180
 # define EVP_R_MEMORY_LIMIT_EXCEEDED                      172
 # define EVP_R_MESSAGE_DIGEST_IS_NULL                     159
 # define EVP_R_METHOD_NOT_SUPPORTED                       144
@@ -154,6 +157,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE   150
 # define EVP_R_OPERATON_NOT_INITIALIZED                   151
 # define EVP_R_PARTIALLY_OVERLAPPING                      162
+# define EVP_R_PBKDF2_ERROR                               181
 # define EVP_R_PKEY_APPLICATION_ASN1_METHOD_ALREADY_REGISTERED 179
 # define EVP_R_PRIVATE_KEY_DECODE_ERROR                   145
 # define EVP_R_PRIVATE_KEY_ENCODE_ERROR                   146

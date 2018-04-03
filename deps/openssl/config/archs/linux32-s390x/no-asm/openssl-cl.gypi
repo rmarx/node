@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux32-s390x': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_linux32-s390x': [
-      '-Wall -O3 -pthread -m31 -Wa,-mzarch',
+      '-pthread -m31 -Wa,-mzarch',
     ],
     'openssl_ex_libs_linux32-s390x': [
       '-ldl -pthread',

@@ -1,30 +1,10 @@
 {
   'variables': {
     'openssl_defines_BSD-x86_64': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
-      'OPENSSL_IA32_SSE2',
-      'OPENSSL_BN_ASM_MONT',
-      'OPENSSL_BN_ASM_MONT5',
-      'OPENSSL_BN_ASM_GF2m',
-      'SHA1_ASM',
-      'SHA256_ASM',
-      'SHA512_ASM',
-      'RC4_ASM',
-      'MD5_ASM',
-      'AES_ASM',
-      'VPAES_ASM',
-      'BSAES_ASM',
-      'GHASH_ASM',
-      'ECP_NISTZ256_ASM',
-      'PADLOCK_ASM',
-      'POLY1305_ASM',
     ],
     'openssl_cflags_BSD-x86_64': [
-      '-Wall -O3 -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_BSD-x86_64': [
       '-pthread',

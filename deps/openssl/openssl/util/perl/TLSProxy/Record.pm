@@ -1,4 +1,4 @@
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -36,7 +36,7 @@ my %record_type = (
 
 use constant {
     VERS_TLS_1_4 => 0x0305,
-    VERS_TLS_1_3_DRAFT => 0x7f17,
+    VERS_TLS_1_3_DRAFT => 0x7f1a,
     VERS_TLS_1_3 => 0x0304,
     VERS_TLS_1_2 => 0x0303,
     VERS_TLS_1_1 => 0x0302,
@@ -61,6 +61,7 @@ sub get_records
     my $server = shift;
     my $flight = shift;
     my $packet = shift;
+    my $partial = "";
     my @record_list = ();
     my @message_list = ();
     my $data;
@@ -79,8 +80,10 @@ sub get_records
             print " (client -> server)\n";
         }
         #Get the record header
-        if (length($packet) < TLS_RECORD_HEADER_LENGTH) {
+        if (length($packet) < TLS_RECORD_HEADER_LENGTH
+                || length($packet) < 5 + unpack("n", substr($packet, 3, 2))) {
             print "Partial data : ".length($packet)." bytes\n";
+            $partial = $packet;
             $packet = "";
         } else {
             ($content_type, $version, $len) = unpack('CnnC*', $packet);
@@ -137,7 +140,7 @@ sub get_records
         }
     }
 
-    return (\@record_list, \@message_list);
+    return (\@record_list, \@message_list, $partial);
 }
 
 sub clear
@@ -197,6 +200,7 @@ sub new
         data => $data,
         decrypt_data => $decrypt_data,
         orig_decrypt_data => $decrypt_data,
+        sent => 0,
         encrypted => 0,
         outer_content_type => RT_APPLICATION_DATA
     };
@@ -286,15 +290,18 @@ sub reconstruct_record
     my $self = shift;
     my $server = shift;
     my $data;
-    my $tls13_enc = 0;
+
+    if ($self->{sent}) {
+        return "";
+    }
+    $self->{sent} = 1;
 
     if ($self->sslv2) {
         $data = pack('n', $self->len | 0x8000);
     } else {
         if (TLSProxy::Proxy->is_tls13() && $self->encrypted) {
             $data = pack('Cnn', $self->outer_content_type, $self->version,
-                         $self->len + 1);
-            $tls13_enc = 1;
+                         $self->len);
         } else {
             $data = pack('Cnn', $self->content_type, $self->version,
                          $self->len);
@@ -302,10 +309,6 @@ sub reconstruct_record
 
     }
     $data .= $self->data;
-
-    if ($tls13_enc) {
-        $data .= pack('C', $self->content_type);
-    }
 
     return $data;
 }

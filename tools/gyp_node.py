@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
+import pprint
 
 script_dir = os.path.dirname(__file__)
 node_root  = os.path.normpath(os.path.join(script_dir, os.pardir))
@@ -51,6 +52,7 @@ def run_gyp(args):
   args.append('-Dlinux_use_gold_flags=0')
 
   rc = gyp.main(args)
+  pprint.pprint(args)
   if rc != 0:
     print 'Error running GYP'
     sys.exit(rc)

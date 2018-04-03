@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -709,6 +709,7 @@ int BIO_sock_info(int sock,
 
 int BIO_socket(int domain, int socktype, int protocol, int options);
 int BIO_connect(int sock, const BIO_ADDR *addr, int options);
+int BIO_bind(int sock, const BIO_ADDR *addr, int options);
 int BIO_listen(int sock, const BIO_ADDR *addr, int options);
 int BIO_accept_ex(int accept_sock, BIO_ADDR *addr, int options);
 int BIO_closesocket(int sock);
@@ -735,7 +736,8 @@ void BIO_copy_next_retry(BIO *b);
  */
 
 # define __bio_h__attr__(x)
-# if defined(__GNUC__) && defined(__STDC_VERSION__)
+# if defined(__GNUC__) && defined(__STDC_VERSION__) \
+    && !defined(__APPLE__)
     /*
      * Because we support the 'z' modifier, which made its appearance in C99,
      * we can't use __attribute__ with pre C99 dialects.
@@ -758,38 +760,37 @@ __bio_h__attr__((__format__(__printf__, 3, 0)));
 
 BIO_METHOD *BIO_meth_new(int type, const char *name);
 void BIO_meth_free(BIO_METHOD *biom);
-int (*BIO_meth_get_write(BIO_METHOD *biom)) (BIO *, const char *, int);
-int (*BIO_meth_get_write_ex(BIO_METHOD *biom)) (BIO *, const char *, size_t,
+int (*BIO_meth_get_write(const BIO_METHOD *biom)) (BIO *, const char *, int);
+int (*BIO_meth_get_write_ex(const BIO_METHOD *biom)) (BIO *, const char *, size_t,
                                                 size_t *);
 int BIO_meth_set_write(BIO_METHOD *biom,
                        int (*write) (BIO *, const char *, int));
 int BIO_meth_set_write_ex(BIO_METHOD *biom,
                        int (*bwrite) (BIO *, const char *, size_t, size_t *));
-int (*BIO_meth_get_read(BIO_METHOD *biom)) (BIO *, char *, int);
-int (*BIO_meth_get_read_ex(BIO_METHOD *biom)) (BIO *, char *, size_t, size_t *);
+int (*BIO_meth_get_read(const BIO_METHOD *biom)) (BIO *, char *, int);
+int (*BIO_meth_get_read_ex(const BIO_METHOD *biom)) (BIO *, char *, size_t, size_t *);
 int BIO_meth_set_read(BIO_METHOD *biom,
                       int (*read) (BIO *, char *, int));
 int BIO_meth_set_read_ex(BIO_METHOD *biom,
                          int (*bread) (BIO *, char *, size_t, size_t *));
-int (*BIO_meth_get_puts(BIO_METHOD *biom)) (BIO *, const char *);
+int (*BIO_meth_get_puts(const BIO_METHOD *biom)) (BIO *, const char *);
 int BIO_meth_set_puts(BIO_METHOD *biom,
                       int (*puts) (BIO *, const char *));
-int (*BIO_meth_get_gets(BIO_METHOD *biom)) (BIO *, char *, int);
+int (*BIO_meth_get_gets(const BIO_METHOD *biom)) (BIO *, char *, int);
 int BIO_meth_set_gets(BIO_METHOD *biom,
                       int (*gets) (BIO *, char *, int));
-long (*BIO_meth_get_ctrl(BIO_METHOD *biom)) (BIO *, int, long, void *);
+long (*BIO_meth_get_ctrl(const BIO_METHOD *biom)) (BIO *, int, long, void *);
 int BIO_meth_set_ctrl(BIO_METHOD *biom,
                       long (*ctrl) (BIO *, int, long, void *));
-int (*BIO_meth_get_create(BIO_METHOD *bion)) (BIO *);
+int (*BIO_meth_get_create(const BIO_METHOD *bion)) (BIO *);
 int BIO_meth_set_create(BIO_METHOD *biom, int (*create) (BIO *));
-int (*BIO_meth_get_destroy(BIO_METHOD *biom)) (BIO *);
+int (*BIO_meth_get_destroy(const BIO_METHOD *biom)) (BIO *);
 int BIO_meth_set_destroy(BIO_METHOD *biom, int (*destroy) (BIO *));
-long (*BIO_meth_get_callback_ctrl(BIO_METHOD *biom))
+long (*BIO_meth_get_callback_ctrl(const BIO_METHOD *biom))
                                  (BIO *, int, BIO_info_cb *);
 int BIO_meth_set_callback_ctrl(BIO_METHOD *biom,
                                long (*callback_ctrl) (BIO *, int,
                                                       BIO_info_cb *));
-int ERR_load_BIO_strings(void);
 
 # ifdef  __cplusplus
 }

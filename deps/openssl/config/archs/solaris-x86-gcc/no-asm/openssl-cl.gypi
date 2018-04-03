@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_solaris-x86-gcc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_solaris-x86-gcc': [
-      '-Wall -O3 -fomit-frame-pointer -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_solaris-x86-gcc': [
       '-lsocket -lnsl -ldl -pthread',

@@ -286,7 +286,6 @@ void TXT_DB_free(TXT_DB *db)
 
     if (db == NULL)
         return;
-
     if (db->index != NULL) {
         for (i = db->num_fields - 1; i >= 0; i--)
             lh_OPENSSL_STRING_free(db->index[i]);

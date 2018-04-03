@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_aix64-gcc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_aix64-gcc': [
-      '-maix64 -O -pthread',
+      '-maix64 -pthread',
     ],
     'openssl_ex_libs_aix64-gcc': [
       '-pthread',

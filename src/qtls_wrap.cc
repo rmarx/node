@@ -578,7 +578,7 @@ void QTLSWrap::ExportEarlyKeyingMaterial(const v8::FunctionCallbackInfo<v8::Valu
   size_t datasize = args[1]->NumberValue();
   unsigned char *data = new unsigned char[datasize];
   
-  SSL_export_keying_material_early(wrap->ssl_, data, datasize, label, labelsize,reinterpret_cast<const uint8_t *>(""), 0, 1);
+  SSL_export_keying_material_early(wrap->ssl_, data, datasize, label, labelsize,reinterpret_cast<const uint8_t *>(""), 0);
   args.GetReturnValue().Set(Buffer::Copy(env, (char*) data, datasize).ToLocalChecked());
 }
 void QTLSWrap::IsEarlyDataAllowed(const FunctionCallbackInfo<Value>& args) 

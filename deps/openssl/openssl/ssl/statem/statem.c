@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -123,7 +123,7 @@ void ossl_statem_fatal(SSL *s, int al, int func, int reason, const char *file,
     s->statem.in_init = 1;
     s->statem.state = MSG_FLOW_ERROR;
     ERR_put_error(ERR_LIB_SSL, func, reason, file, line);
-    if (al != SSL_AD_NO_ALERT)
+    if (al != SSL_AD_NO_ALERT && !s->statem.invalid_enc_write_ctx)
         ssl3_send_alert(s, SSL3_AL_FATAL, al);
 }
 
@@ -953,8 +953,8 @@ int ossl_statem_export_allowed(SSL *s)
 }
 
 /*
- * This function returns 1 if early TLS exporter is ready to export
- * keying material, or 0 if otherwise.
+ * Return 1 if early TLS exporter is ready to export keying material,
+ * or 0 if otherwise.
  */
 int ossl_statem_export_early_allowed(SSL *s)
 {

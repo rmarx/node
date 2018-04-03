@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -21,6 +21,42 @@
 # include <sys/time.h>
 #endif
 #include "e_os.h"
+
+/* Macro to convert two thirty two bit values into a sixty four bit one */
+#define TWO32TO64(a, b) ((((uint64_t)(a)) << 32) + (b))
+
+/*
+ * Check for the existence and support of POSIX timers.  The standard
+ * says that the _POSIX_TIMERS macro will have a positive value if they
+ * are available.
+ *
+ * However, we want an additional constraint: that the timer support does
+ * not require an extra library dependency.  Early versions of glibc
+ * require -lrt to be specified on the link line to access the timers,
+ * so this needs to be checked for.
+ *
+ * It is worse because some libraries define __GLIBC__ but don't
+ * support the version testing macro (e.g. uClibc).  This means
+ * an extra check is needed.
+ *
+ * The final condition is:
+ *      "have posix timers and either not glibc or glibc without -lrt"
+ *
+ * The nested #if sequences are required to avoid using a parameterised
+ * macro that might be undefined.
+ */
+#undef OSSL_POSIX_TIMER_OKAY
+#if defined(_POSIX_TIMERS) && _POSIX_TIMERS > 0
+# if defined(__GLIBC__)
+#  if defined(__GLIBC_PREREQ)
+#   if __GLIBC_PREREQ(2, 17)
+#    define OSSL_POSIX_TIMER_OKAY
+#   endif
+#  endif
+# else
+#  define OSSL_POSIX_TIMER_OKAY
+# endif
+#endif
 
 #ifndef OPENSSL_NO_ENGINE
 /* non-NULL if default_RAND_meth is ENGINE-provided */
@@ -59,10 +95,10 @@ size_t rand_acquire_entropy_from_tsc(RAND_POOL *pool)
     if ((OPENSSL_ia32cap_P[0] & (1 << 4)) != 0) {
         for (i = 0; i < TSC_READ_COUNT; i++) {
             c = (unsigned char)(OPENSSL_rdtsc() & 0xFF);
-            RAND_POOL_add(pool, &c, 1, 4);
+            rand_pool_add(pool, &c, 1, 4);
         }
     }
-    return RAND_POOL_entropy_available(pool);
+    return rand_pool_entropy_available(pool);
 }
 #endif
 
@@ -89,9 +125,9 @@ size_t rand_acquire_entropy_from_cpu(RAND_POOL *pool)
     size_t bytes_needed;
     unsigned char *buffer;
 
-    bytes_needed = RAND_POOL_bytes_needed(pool, 8 /*entropy_per_byte*/);
+    bytes_needed = rand_pool_bytes_needed(pool, 8 /*entropy_per_byte*/);
     if (bytes_needed > 0) {
-        buffer = RAND_POOL_add_begin(pool, bytes_needed);
+        buffer = rand_pool_add_begin(pool, bytes_needed);
 
         if (buffer != NULL) {
 
@@ -99,7 +135,7 @@ size_t rand_acquire_entropy_from_cpu(RAND_POOL *pool)
             if ((OPENSSL_ia32cap_P[2] & (1 << 18)) != 0) {
                 if (OPENSSL_ia32_rdseed_bytes(buffer, bytes_needed)
                     == bytes_needed)
-                    return RAND_POOL_add_end(pool,
+                    return rand_pool_add_end(pool,
                                              bytes_needed,
                                              8 * bytes_needed);
             }
@@ -108,16 +144,16 @@ size_t rand_acquire_entropy_from_cpu(RAND_POOL *pool)
             if ((OPENSSL_ia32cap_P[1] & (1 << (62 - 32))) != 0) {
                 if (OPENSSL_ia32_rdrand_bytes(buffer, bytes_needed)
                     == bytes_needed)
-                    return RAND_POOL_add_end(pool,
+                    return rand_pool_add_end(pool,
                                              bytes_needed,
                                              8 * bytes_needed);
             }
 
-            return RAND_POOL_add_end(pool, 0, 0);
+            return rand_pool_add_end(pool, 0, 0);
         }
     }
 
-    return RAND_POOL_entropy_available(pool);
+    return rand_pool_entropy_available(pool);
 }
 #endif
 
@@ -129,34 +165,45 @@ size_t rand_acquire_entropy_from_cpu(RAND_POOL *pool)
  * is fetched using the parent's RAND_DRBG_generate().
  *
  * Otherwise, the entropy is polled from the system entropy sources
- * using RAND_POOL_acquire_entropy().
+ * using rand_pool_acquire_entropy().
  *
  * If a random pool has been added to the DRBG using RAND_add(), then
  * its entropy will be used up first.
  */
 size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
-                        unsigned char **pout,
-                        int entropy, size_t min_len, size_t max_len)
+                             unsigned char **pout,
+                             int entropy, size_t min_len, size_t max_len,
+                             int prediction_resistance)
 {
     size_t ret = 0;
     size_t entropy_available = 0;
-    RAND_POOL *pool = RAND_POOL_new(entropy, min_len, max_len);
+    RAND_POOL *pool;
 
+    if (drbg->parent && drbg->strength > drbg->parent->strength) {
+        /*
+         * We currently don't support the algorithm from NIST SP 800-90C
+         * 10.1.2 to use a weaker DRBG as source
+         */
+        RANDerr(RAND_F_RAND_DRBG_GET_ENTROPY, RAND_R_PARENT_STRENGTH_TOO_WEAK);
+        return 0;
+    }
+
+    pool = rand_pool_new(entropy, min_len, max_len);
     if (pool == NULL)
         return 0;
 
     if (drbg->pool) {
-        RAND_POOL_add(pool,
-                      RAND_POOL_buffer(drbg->pool),
-                      RAND_POOL_length(drbg->pool),
-                      RAND_POOL_entropy(drbg->pool));
-        RAND_POOL_free(drbg->pool);
+        rand_pool_add(pool,
+                      rand_pool_buffer(drbg->pool),
+                      rand_pool_length(drbg->pool),
+                      rand_pool_entropy(drbg->pool));
+        rand_pool_free(drbg->pool);
         drbg->pool = NULL;
     }
 
     if (drbg->parent) {
-        size_t bytes_needed = RAND_POOL_bytes_needed(pool, 8);
-        unsigned char *buffer = RAND_POOL_add_begin(pool, bytes_needed);
+        size_t bytes_needed = rand_pool_bytes_needed(pool, 8);
+        unsigned char *buffer = rand_pool_add_begin(pool, bytes_needed);
 
         if (buffer != NULL) {
             size_t bytes = 0;
@@ -164,33 +211,112 @@ size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
             /*
              * Get random from parent, include our state as additional input.
              * Our lock is already held, but we need to lock our parent before
-             * generating bits from it.
+             * generating bits from it. (Note: taking the lock will be a no-op
+             * if locking if drbg->parent->lock == NULL.)
              */
-            if (drbg->parent->lock)
-                CRYPTO_THREAD_write_lock(drbg->parent->lock);
+            rand_drbg_lock(drbg->parent);
             if (RAND_DRBG_generate(drbg->parent,
                                    buffer, bytes_needed,
-                                   0,
+                                   prediction_resistance,
                                    (unsigned char *)drbg, sizeof(*drbg)) != 0)
                 bytes = bytes_needed;
-            if (drbg->parent->lock)
-                CRYPTO_THREAD_unlock(drbg->parent->lock);
+            rand_drbg_unlock(drbg->parent);
 
-            entropy_available = RAND_POOL_add_end(pool, bytes, 8 * bytes);
+            entropy_available = rand_pool_add_end(pool, bytes, 8 * bytes);
         }
 
     } else {
+        if (prediction_resistance) {
+            /*
+             * We don't have any entropy sources that comply with the NIST
+             * standard to provide prediction resistance (see NIST SP 800-90C,
+             * Section 5.4).
+             */
+            RANDerr(RAND_F_RAND_DRBG_GET_ENTROPY,
+                    RAND_R_PREDICTION_RESISTANCE_NOT_SUPPORTED);
+            return 0;
+        }
+
         /* Get entropy by polling system entropy sources. */
-        entropy_available = RAND_POOL_acquire_entropy(pool);
+        entropy_available = rand_pool_acquire_entropy(pool);
     }
 
     if (entropy_available > 0) {
-        ret   = RAND_POOL_length(pool);
-        *pout = RAND_POOL_detach(pool);
+        ret   = rand_pool_length(pool);
+        *pout = rand_pool_detach(pool);
     }
 
-    RAND_POOL_free(pool);
+    rand_pool_free(pool);
     return ret;
+}
+
+/*
+ * Find a suitable source of time.  Start with the highest resolution source
+ * and work down to the slower ones.  This is added as additional data and
+ * isn't counted as randomness, so any result is acceptable.
+ *
+ * Returns 0 when we weren't able to find any time source
+ */
+static uint64_t get_timer_bits(void)
+{
+    uint64_t res = OPENSSL_rdtsc();
+
+    if (res != 0)
+        return res;
+#if defined(_WIN32)
+    {
+        LARGE_INTEGER t;
+        FILETIME ft;
+
+        if (QueryPerformanceCounter(&t) != 0)
+            return t.QuadPart;
+        GetSystemTimeAsFileTime(&ft);
+        return TWO32TO64(ft.dwHighDateTime, ft.dwLowDateTime);
+    }
+#elif defined(__sun) || defined(__hpux)
+    return gethrtime();
+#elif defined(_AIX)
+    {
+        timebasestruct_t t;
+
+        read_wall_time(&t, TIMEBASE_SZ);
+        return TWO32TO64(t.tb_high, t.tb_low);
+    }
+#else
+
+# if defined(OSSL_POSIX_TIMER_OKAY)
+    {
+        struct timespec ts;
+        clockid_t cid;
+
+#  ifdef CLOCK_BOOTTIME
+        cid = CLOCK_BOOTTIME;
+#  elif defined(_POSIX_MONOTONIC_CLOCK)
+        cid = CLOCK_MONOTONIC;
+#  else
+        cid = CLOCK_REALTIME;
+#  endif
+
+        if (clock_gettime(cid, &ts) == 0)
+            return TWO32TO64(ts.tv_sec, ts.tv_nsec);
+    }
+# endif
+# if defined(__unix__) \
+     || (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L)
+    {
+        struct timeval tv;
+
+        if (gettimeofday(&tv, NULL) == 0)
+            return TWO32TO64(tv.tv_sec, tv.tv_usec);
+    }
+# endif
+    {
+        time_t t = time(NULL);
+        if (t == (time_t)-1)
+            return 0;
+        return t;
+    }
+#endif
 }
 
 /*
@@ -210,54 +336,37 @@ size_t rand_drbg_get_additional_data(unsigned char **pout, size_t max_len)
     size_t len;
 #ifdef OPENSSL_SYS_UNIX
     pid_t pid;
-    struct timeval tv;
 #elif defined(OPENSSL_SYS_WIN32)
     DWORD pid;
-    FILETIME ft;
-    LARGE_INTEGER pc;
 #endif
-#ifdef OPENSSL_CPUID_OBJ
-    uint32_t tsc = 0;
-#endif
+    uint64_t tbits;
 
-    pool = RAND_POOL_new(0, 0, max_len);
+    pool = rand_pool_new(0, 0, max_len);
     if (pool == NULL)
         return 0;
 
 #ifdef OPENSSL_SYS_UNIX
     pid = getpid();
-    RAND_POOL_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
+    rand_pool_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
 #elif defined(OPENSSL_SYS_WIN32)
     pid = GetCurrentProcessId();
-    RAND_POOL_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
+    rand_pool_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
 #endif
 
     thread_id = CRYPTO_THREAD_get_current_id();
     if (thread_id != 0)
-        RAND_POOL_add(pool, (unsigned char *)&thread_id, sizeof(thread_id), 0);
+        rand_pool_add(pool, (unsigned char *)&thread_id, sizeof(thread_id), 0);
 
-#ifdef OPENSSL_CPUID_OBJ
-    tsc = OPENSSL_rdtsc();
-    if (tsc != 0)
-        RAND_POOL_add(pool, (unsigned char *)&tsc, sizeof(tsc), 0);
-#endif
-
-#ifdef OPENSSL_SYS_UNIX
-    if (gettimeofday(&tv, NULL) == 0)
-        RAND_POOL_add(pool, (unsigned char *)&tv, sizeof(tv), 0);
-#elif defined(OPENSSL_SYS_WIN32)
-    if (QueryPerformanceCounter(&pc) != 0)
-        RAND_POOL_add(pool, (unsigned char *)&pc, sizeof(pc), 0);
-    GetSystemTimeAsFileTime(&ft);
-    RAND_POOL_add(pool, (unsigned char *)&ft, sizeof(ft), 0);
-#endif
+    tbits = get_timer_bits();
+    if (tbits != 0)
+        rand_pool_add(pool, (unsigned char *)&tbits, sizeof(tbits), 0);
 
     /* TODO: Use RDSEED? */
 
-    len = RAND_POOL_length(pool);
+    len = rand_pool_length(pool);
     if (len != 0)
-        *pout = RAND_POOL_detach(pool);
-    RAND_POOL_free(pool);
+        *pout = rand_pool_detach(pool);
+    rand_pool_free(pool);
 
     return len;
 }
@@ -326,63 +435,42 @@ int RAND_poll(void)
         if (drbg == NULL)
             return 0;
 
-        CRYPTO_THREAD_write_lock(drbg->lock);
+        rand_drbg_lock(drbg);
         ret = rand_drbg_restart(drbg, NULL, 0, 0);
-        CRYPTO_THREAD_unlock(drbg->lock);
+        rand_drbg_unlock(drbg);
 
         return ret;
 
     } else {
         /* fill random pool and seed the current legacy RNG */
-        pool = RAND_POOL_new(RAND_DRBG_STRENGTH,
+        pool = rand_pool_new(RAND_DRBG_STRENGTH,
                              RAND_DRBG_STRENGTH / 8,
                              DRBG_MINMAX_FACTOR * (RAND_DRBG_STRENGTH / 8));
         if (pool == NULL)
             return 0;
 
-        if (RAND_POOL_acquire_entropy(pool) == 0)
+        if (rand_pool_acquire_entropy(pool) == 0)
             goto err;
 
         if (meth->add == NULL
-            || meth->add(RAND_POOL_buffer(pool),
-                         RAND_POOL_length(pool),
-                         (RAND_POOL_entropy(pool) / 8.0)) == 0)
+            || meth->add(rand_pool_buffer(pool),
+                         rand_pool_length(pool),
+                         (rand_pool_entropy(pool) / 8.0)) == 0)
             goto err;
 
         ret = 1;
     }
 
 err:
-    RAND_POOL_free(pool);
+    rand_pool_free(pool);
     return ret;
 }
-
-/*
- * The 'random pool' acts as a dumb container for collecting random
- * input from various entropy sources. The pool has no knowledge about
- * whether its randomness is fed into a legacy RAND_METHOD via RAND_add()
- * or into a new style RAND_DRBG. It is the callers duty to 1) initialize the
- * random pool, 2) pass it to the polling callbacks, 3) seed the RNG, and
- * 4) cleanup the random pool again.
- *
- * The random pool contains no locking mechanism because its scope and
- * lifetime is intended to be restricted to a single stack frame.
- */
-struct rand_pool_st {
-    unsigned char *buffer;  /* points to the beginning of the random pool */
-    size_t len; /* current number of random bytes contained in the pool */
-
-    size_t min_len; /* minimum number of random bytes requested */
-    size_t max_len; /* maximum number of random bytes (allocated buffer size) */
-    size_t entropy; /* current entropy count in bits */
-    size_t requested_entropy; /* requested entropy count in bits */
-};
 
 /*
  * Allocate memory and initialize a new random pool
  */
 
-RAND_POOL *RAND_POOL_new(int entropy, size_t min_len, size_t max_len)
+RAND_POOL *rand_pool_new(int entropy, size_t min_len, size_t max_len)
 {
     RAND_POOL *pool = OPENSSL_zalloc(sizeof(*pool));
 
@@ -412,7 +500,7 @@ err:
 /*
  * Free |pool|, securely erasing its buffer.
  */
-void RAND_POOL_free(RAND_POOL *pool)
+void rand_pool_free(RAND_POOL *pool)
 {
     if (pool == NULL)
         return;
@@ -424,7 +512,7 @@ void RAND_POOL_free(RAND_POOL *pool)
 /*
  * Return the |pool|'s buffer to the caller (readonly).
  */
-const unsigned char *RAND_POOL_buffer(RAND_POOL *pool)
+const unsigned char *rand_pool_buffer(RAND_POOL *pool)
 {
     return pool->buffer;
 }
@@ -432,7 +520,7 @@ const unsigned char *RAND_POOL_buffer(RAND_POOL *pool)
 /*
  * Return the |pool|'s entropy to the caller.
  */
-size_t RAND_POOL_entropy(RAND_POOL *pool)
+size_t rand_pool_entropy(RAND_POOL *pool)
 {
     return pool->entropy;
 }
@@ -440,7 +528,7 @@ size_t RAND_POOL_entropy(RAND_POOL *pool)
 /*
  * Return the |pool|'s buffer length to the caller.
  */
-size_t RAND_POOL_length(RAND_POOL *pool)
+size_t rand_pool_length(RAND_POOL *pool)
 {
     return pool->len;
 }
@@ -450,7 +538,7 @@ size_t RAND_POOL_length(RAND_POOL *pool)
  * It's the responsibility of the caller to free the buffer
  * using OPENSSL_secure_clear_free().
  */
-unsigned char *RAND_POOL_detach(RAND_POOL *pool)
+unsigned char *rand_pool_detach(RAND_POOL *pool)
 {
     unsigned char *ret = pool->buffer;
     pool->buffer = NULL;
@@ -474,7 +562,7 @@ unsigned char *RAND_POOL_detach(RAND_POOL *pool)
  *  |entropy|  if the entropy count and buffer size is large enough
  *      0      otherwise
  */
-size_t RAND_POOL_entropy_available(RAND_POOL *pool)
+size_t rand_pool_entropy_available(RAND_POOL *pool)
 {
     if (pool->entropy < pool->requested_entropy)
         return 0;
@@ -490,7 +578,7 @@ size_t RAND_POOL_entropy_available(RAND_POOL *pool)
  * the random pool.
  */
 
-size_t RAND_POOL_entropy_needed(RAND_POOL *pool)
+size_t rand_pool_entropy_needed(RAND_POOL *pool)
 {
     if (pool->entropy < pool->requested_entropy)
         return pool->requested_entropy - pool->entropy;
@@ -504,10 +592,10 @@ size_t RAND_POOL_entropy_needed(RAND_POOL *pool)
  * In case of an error, 0 is returned.
  */
 
-size_t RAND_POOL_bytes_needed(RAND_POOL *pool, unsigned int entropy_per_byte)
+size_t rand_pool_bytes_needed(RAND_POOL *pool, unsigned int entropy_per_byte)
 {
     size_t bytes_needed;
-    size_t entropy_needed = RAND_POOL_entropy_needed(pool);
+    size_t entropy_needed = rand_pool_entropy_needed(pool);
 
     if (entropy_per_byte < 1 || entropy_per_byte > 8) {
         RANDerr(RAND_F_RAND_POOL_BYTES_NEEDED, RAND_R_ARGUMENT_OUT_OF_RANGE);
@@ -531,7 +619,7 @@ size_t RAND_POOL_bytes_needed(RAND_POOL *pool, unsigned int entropy_per_byte)
 }
 
 /* Returns the remaining number of bytes available */
-size_t RAND_POOL_bytes_remaining(RAND_POOL *pool)
+size_t rand_pool_bytes_remaining(RAND_POOL *pool)
 {
     return pool->max_len - pool->len;
 }
@@ -544,9 +632,9 @@ size_t RAND_POOL_bytes_remaining(RAND_POOL *pool)
  * randomness.
  *
  * Return available amount of entropy after this operation.
- * (see RAND_POOL_entropy_available(pool))
+ * (see rand_pool_entropy_available(pool))
  */
-size_t RAND_POOL_add(RAND_POOL *pool,
+size_t rand_pool_add(RAND_POOL *pool,
                      const unsigned char *buffer, size_t len, size_t entropy)
 {
     if (len > pool->max_len - pool->len) {
@@ -560,7 +648,7 @@ size_t RAND_POOL_add(RAND_POOL *pool,
         pool->entropy += entropy;
     }
 
-    return RAND_POOL_entropy_available(pool);
+    return rand_pool_entropy_available(pool);
 }
 
 /*
@@ -572,10 +660,10 @@ size_t RAND_POOL_add(RAND_POOL *pool,
  * If |len| == 0 this is considered a no-op and a NULL pointer
  * is returned without producing an error message.
  *
- * After updating the buffer, RAND_POOL_add_end() needs to be called
+ * After updating the buffer, rand_pool_add_end() needs to be called
  * to finish the udpate operation (see next comment).
  */
-unsigned char *RAND_POOL_add_begin(RAND_POOL *pool, size_t len)
+unsigned char *rand_pool_add_begin(RAND_POOL *pool, size_t len)
 {
     if (len == 0)
         return NULL;
@@ -592,12 +680,12 @@ unsigned char *RAND_POOL_add_begin(RAND_POOL *pool, size_t len)
  * Finish to add random bytes to the random pool in-place.
  *
  * Finishes an in-place update of the random pool started by
- * RAND_POOL_add_begin() (see previous comment).
+ * rand_pool_add_begin() (see previous comment).
  * It is expected that |len| bytes of random input have been added
  * to the buffer which contain at least |entropy| bits of randomness.
  * It is allowed to add less bytes than originally reserved.
  */
-size_t RAND_POOL_add_end(RAND_POOL *pool, size_t len, size_t entropy)
+size_t rand_pool_add_end(RAND_POOL *pool, size_t len, size_t entropy)
 {
     if (len > pool->max_len - pool->len) {
         RANDerr(RAND_F_RAND_POOL_ADD_END, RAND_R_RANDOM_POOL_OVERFLOW);
@@ -609,7 +697,7 @@ size_t RAND_POOL_add_end(RAND_POOL *pool, size_t len, size_t entropy)
         pool->entropy += entropy;
     }
 
-    return RAND_POOL_entropy_available(pool);
+    return rand_pool_entropy_available(pool);
 }
 
 int RAND_set_rand_method(const RAND_METHOD *meth)
@@ -717,10 +805,7 @@ int RAND_priv_bytes(unsigned char *buf, int num)
     if (drbg == NULL)
         return 0;
 
-    /* We have to lock the DRBG before generating bits from it. */
-    CRYPTO_THREAD_write_lock(drbg->lock);
-    ret = RAND_DRBG_generate(drbg, buf, num, 0, NULL, 0);
-    CRYPTO_THREAD_unlock(drbg->lock);
+    ret = RAND_DRBG_bytes(drbg, buf, num);
     return ret;
 }
 

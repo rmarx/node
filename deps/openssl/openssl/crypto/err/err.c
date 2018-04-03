@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -60,6 +60,7 @@ static ERR_STRING_DATA ERR_str_libraries[] = {
     {ERR_PACK(ERR_LIB_ASYNC, 0, 0), "ASYNC routines"},
     {ERR_PACK(ERR_LIB_KDF, 0, 0), "KDF routines"},
     {ERR_PACK(ERR_LIB_OSSL_STORE, 0, 0), "STORE routines"},
+    {ERR_PACK(ERR_LIB_SM2, 0, 0), "SM2 routines"},
     {0, NULL},
 };
 
@@ -89,6 +90,7 @@ static ERR_STRING_DATA ERR_str_functs[] = {
     {ERR_PACK(0, SYS_F_IOCTL, 0), "ioctl"},
     {ERR_PACK(0, SYS_F_STAT, 0), "stat"},
     {ERR_PACK(0, SYS_F_FCNTL, 0), "fcntl"},
+    {ERR_PACK(0, SYS_F_FSTAT, 0), "fstat"},
     {0, NULL},
 };
 
@@ -231,24 +233,23 @@ static void build_SYS_str_reasons(void)
 }
 #endif
 
-#define err_clear_data(p,i) \
+#define err_clear_data(p, i) \
         do { \
-        if ((p)->err_data_flags[i] & ERR_TXT_MALLOCED) \
-                {  \
+            if ((p)->err_data_flags[i] & ERR_TXT_MALLOCED) {\
                 OPENSSL_free((p)->err_data[i]); \
-                (p)->err_data[i]=NULL; \
-                } \
-        (p)->err_data_flags[i]=0; \
-        } while(0)
+                (p)->err_data[i] = NULL; \
+            } \
+            (p)->err_data_flags[i] = 0; \
+        } while (0)
 
-#define err_clear(p,i) \
+#define err_clear(p, i) \
         do { \
-        (p)->err_flags[i]=0; \
-        (p)->err_buffer[i]=0; \
-        err_clear_data(p,i); \
-        (p)->err_file[i]=NULL; \
-        (p)->err_line[i]= -1; \
-        } while(0)
+            err_clear_data(p, i); \
+            (p)->err_flags[i] = 0; \
+            (p)->err_buffer[i] = 0; \
+            (p)->err_file[i] = NULL; \
+            (p)->err_line[i] = -1; \
+        } while (0)
 
 static void ERR_STATE_free(ERR_STATE *s)
 {
@@ -256,7 +257,6 @@ static void ERR_STATE_free(ERR_STATE *s)
 
     if (s == NULL)
         return;
-
     for (i = 0; i < ERR_NUM_ERRORS; i++) {
         err_clear_data(s, i);
     }

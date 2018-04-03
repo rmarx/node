@@ -11,7 +11,7 @@
  */
 
 #define PLATFORM "platform: aix-gcc"
-#define DATE "built on: Thu Mar  8 07:03:04 2018 UTC"
+#define DATE "built on: Mon Apr  2 19:15:29 2018 UTC"
 
 /*
  * Generate compiler_flags as an array of individual characters. This is a
@@ -19,12 +19,8 @@
  * literal
  */
 static const char compiler_flags[] = {
-    'c','o','m','p','i','l','e','r',':',' ','g','c','c',' ','-','O',
-    ' ','-','p','t','h','r','e','a','d',' ','-','D','D','S','O','_',
-    'D','L','F','C','N',' ','-','D','H','A','V','E','_','D','L','F',
-    'C','N','_','H',' ','-','D','N','D','E','B','U','G',' ','-','D',
-    'O','P','E','N','S','S','L','_','N','O','_','D','Y','N','A','M',
-    'I','C','_','E','N','G','I','N','E',' ','-','D','O','P','E','N',
-    'S','S','L','_','P','I','C',' ','-','D','B','_','E','N','D','I',
-    'A','N','\0'
+    'c','o','m','p','i','l','e','r',':',' ','g','c','c',' ','-','p',
+    't','h','r','e','a','d',' ','-','O',' ','-','D','B','_','E','N',
+    'D','I','A','N',' ','-','D','O','P','E','N','S','S','L','_','P',
+    'I','C',' ','-','D','N','D','E','B','U','G','\0'
 };

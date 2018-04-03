@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_linux-ppc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_linux-ppc': [
-      '-Wall -O3 -pthread',
+      '-pthread',
     ],
     'openssl_ex_libs_linux-ppc': [
       '-ldl -pthread',

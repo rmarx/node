@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -825,7 +825,6 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
         thispkt = &pkt[j];
         thiswr = &wr[j];
 
-        SSL3_RECORD_set_type(thiswr, type);
         /*
          * In TLSv1.3, once encrypting, we always use application data for the
          * record type
@@ -834,13 +833,18 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
             rectype = SSL3_RT_APPLICATION_DATA;
         else
             rectype = type;
+        SSL3_RECORD_set_type(thiswr, rectype);
+
         /*
          * Some servers hang if initial client hello is larger than 256 bytes
          * and record version number > TLS 1.0
          */
         if (SSL_get_state(s) == TLS_ST_CW_CLNT_HELLO
-            && !s->renegotiate && TLS1_get_version(s) > TLS1_VERSION)
+                && !s->renegotiate
+                && TLS1_get_version(s) > TLS1_VERSION
+                && s->hello_retry_request == SSL_HRR_NONE)
             version = TLS1_VERSION;
+        SSL3_RECORD_set_rec_version(thiswr, version);
 
         maxcomplen = pipelens[j];
         if (s->compress != NULL)
@@ -1115,8 +1119,8 @@ int ssl3_write_pending(SSL *s, int type, const unsigned char *buf, size_t len,
     size_t tmpwrit = 0;
 
     if ((s->rlayer.wpend_tot > len)
-        || ((s->rlayer.wpend_buf != buf) &&
-            !(s->mode & SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER))
+        || (!(s->mode & SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER)
+            && (s->rlayer.wpend_buf != buf))
         || (s->rlayer.wpend_type != type)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL3_WRITE_PENDING,
                  SSL_R_BAD_WRITE_RETRY);

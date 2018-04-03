@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,7 +11,7 @@
 
 struct bio_method_st {
     int type;
-    const char *name;
+    char *name;
     int (*bwrite) (BIO *, const char *, size_t, size_t *);
     int (*bwrite_old) (BIO *, const char *, int);
     int (*bread) (BIO *, char *, size_t, size_t *);

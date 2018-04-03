@@ -1,14 +1,10 @@
 {
   'variables': {
     'openssl_defines_darwin-i386-cc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_darwin-i386-cc': [
-      '-O3 -arch i386 -fomit-frame-pointer',
+      '-arch i386',
     ],
     'openssl_ex_libs_darwin-i386-cc': [
       '',

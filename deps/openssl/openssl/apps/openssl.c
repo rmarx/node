@@ -520,7 +520,7 @@ static void list_type(FUNC_TYPE ft, int one)
 {
     FUNCTION *fp;
     int i = 0;
-    DISPLAY_COLUMNS dc;
+    DISPLAY_COLUMNS dc = {0};
 
     if (!one)
         calculate_columns(&dc);
@@ -761,6 +761,9 @@ static void list_disabled(void)
 #endif
 #ifdef OPENSSL_NO_SEED
     BIO_puts(bio_out, "SEED\n");
+#endif
+#ifdef OPENSSL_NO_SM2
+    BIO_puts(bio_out, "SM2\n");
 #endif
 #ifdef OPENSSL_NO_SM3
     BIO_puts(bio_out, "SM3\n");
