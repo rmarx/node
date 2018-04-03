@@ -4045,7 +4045,8 @@ bool CipherBase::IsAuthenticatedMode() const
   const EVP_CIPHER *const cipher = EVP_CIPHER_CTX_cipher(ctx_);
   //int mode = EVP_CIPHER_mode(cipher);
   //return mode == EVP_CIPH_GCM_MODE;
-  return true;
+  int cipherFlags = EVP_CIPHER_flags(cipher);
+  return cipherFlags & EVP_CIPH_FLAG_AEAD_CIPHER;
 }
 
 void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value> &args)
