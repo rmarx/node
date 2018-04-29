@@ -35,6 +35,14 @@ QTLSWrap::~QTLSWrap()
   this->sc_ = nullptr;
   this->enc_in_ = nullptr;
   this->enc_out_ = nullptr;
+  if (this->local_transport_parameters != nullptr) {
+    delete this->local_transport_parameters;
+    this->local_transport_parameters = nullptr;
+  }
+  if (this->remote_transport_parameters != nullptr) {
+    delete this->remote_transport_parameters;
+    this->remote_transport_parameters = nullptr;
+  }
 }
 
 void QTLSWrap::Initialize(Local<Object> target,
@@ -254,7 +262,9 @@ int QTLSWrap::AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
     return 1;
   }
 
-  *out = qtlsWrap->local_transport_parameters;
+  unsigned char* temp = new unsigned char[qtlsWrap->local_transport_parameters_length];
+  memcpy(temp, qtlsWrap->local_transport_parameters, qtlsWrap->local_transport_parameters_length);
+  *out = temp;
   *outlen = qtlsWrap->local_transport_parameters_length;
 
   return 1;
