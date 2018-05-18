@@ -265,11 +265,19 @@ static void ERR_STATE_free(ERR_STATE *s)
 
 DEFINE_RUN_ONCE_STATIC(do_err_strings_init)
 {
-    OPENSSL_init_crypto(0, NULL);
+    if (!OPENSSL_init_crypto(0, NULL))
+        return 0;
     err_string_lock = CRYPTO_THREAD_lock_new();
+    if (err_string_lock == NULL)
+        return 0;
     int_error_hash = lh_ERR_STRING_DATA_new(err_string_data_hash,
                                             err_string_data_cmp);
-    return err_string_lock != NULL && int_error_hash != NULL;
+    if (int_error_hash == NULL) {
+        CRYPTO_THREAD_lock_free(err_string_lock);
+        err_string_lock = NULL;
+        return 0;
+    }
+    return 1;
 }
 
 void err_cleanup(void)
@@ -662,29 +670,31 @@ DEFINE_RUN_ONCE_STATIC(err_do_init)
 
 ERR_STATE *ERR_get_state(void)
 {
-    ERR_STATE *state = NULL;
+    ERR_STATE *state;
+
+    if (!OPENSSL_init_crypto(OPENSSL_INIT_BASE_ONLY, NULL))
+        return NULL;
 
     if (!RUN_ONCE(&err_init, err_do_init))
         return NULL;
 
-    /*
-     * If base OPENSSL_init_crypto() hasn't been called yet, be sure to call
-     * it now to avoid state to be doubly allocated and thereby leak memory.
-     * Needed on any platform that doesn't define OPENSSL_USE_NODELETE.
-     */
-    if (!OPENSSL_init_crypto(0, NULL))
+    state = CRYPTO_THREAD_get_local(&err_thread_local);
+    if (state == (ERR_STATE*)-1)
         return NULL;
 
-    state = CRYPTO_THREAD_get_local(&err_thread_local);
-
     if (state == NULL) {
-        state = OPENSSL_zalloc(sizeof(*state));
-        if (state == NULL)
+        if (!CRYPTO_THREAD_set_local(&err_thread_local, (ERR_STATE*)-1))
             return NULL;
 
+        if ((state = OPENSSL_zalloc(sizeof(*state))) == NULL) {
+            CRYPTO_THREAD_set_local(&err_thread_local, NULL);
+            return NULL;
+        }
+
         if (!ossl_init_thread_start(OPENSSL_INIT_THREAD_ERR_STATE)
-            || !CRYPTO_THREAD_set_local(&err_thread_local, state)) {
+                || !CRYPTO_THREAD_set_local(&err_thread_local, state)) {
             ERR_STATE_free(state);
+            CRYPTO_THREAD_set_local(&err_thread_local, NULL);
             return NULL;
         }
 
@@ -695,13 +705,41 @@ ERR_STATE *ERR_get_state(void)
     return state;
 }
 
+/*
+ * err_shelve_state returns the current thread local error state
+ * and freezes the error module until err_unshelve_state is called.
+ */
+int err_shelve_state(void **state)
+{
+    if (!OPENSSL_init_crypto(OPENSSL_INIT_BASE_ONLY, NULL))
+        return 0;
+
+    if (!RUN_ONCE(&err_init, err_do_init))
+        return 0;
+
+    *state = CRYPTO_THREAD_get_local(&err_thread_local);
+    if (!CRYPTO_THREAD_set_local(&err_thread_local, (ERR_STATE*)-1))
+        return 0;
+
+    return 1;
+}
+
+/*
+ * err_unshelve_state restores the error state that was returned
+ * by err_shelve_state previously.
+ */
+void err_unshelve_state(void* state)
+{
+    if (state != (void*)-1)
+        CRYPTO_THREAD_set_local(&err_thread_local, (ERR_STATE*)state);
+}
+
 int ERR_get_next_error_library(void)
 {
     int ret;
 
-    if (!RUN_ONCE(&err_string_init, do_err_strings_init)) {
+    if (!RUN_ONCE(&err_string_init, do_err_strings_init))
         return 0;
-    }
 
     CRYPTO_THREAD_write_lock(err_string_lock);
     ret = int_err_library_number++;
@@ -739,9 +777,10 @@ void ERR_add_error_vdata(int num, va_list args)
     char *str, *p, *a;
 
     s = 80;
-    str = OPENSSL_malloc(s + 1);
-    if (str == NULL)
+    if ((str = OPENSSL_malloc(s + 1)) == NULL) {
+        /* ERRerr(ERR_F_ERR_ADD_ERROR_VDATA, ERR_R_MALLOC_FAILURE); */
         return;
+    }
     str[0] = '\0';
 
     n = 0;

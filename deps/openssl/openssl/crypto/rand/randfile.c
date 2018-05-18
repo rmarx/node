@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -94,6 +94,7 @@ int RAND_load_file(const char *file, long bytes)
     if (fstat(fileno(in), &sb) < 0) {
         RANDerr(RAND_F_RAND_LOAD_FILE, RAND_R_INTERNAL_ERROR);
         ERR_add_error_data(2, "Filename=", file);
+        fclose(in);
         return -1;
     }
 
@@ -166,7 +167,7 @@ int RAND_write_file(const char *file)
 #endif
 
     /* Collect enough random data. */
-    if (RAND_bytes(buf, (int)sizeof(buf)) != 1)
+    if (RAND_priv_bytes(buf, (int)sizeof(buf)) != 1)
         return  -1;
 
 #if defined(O_CREAT) && !defined(OPENSSL_NO_POSIX_IO) && \

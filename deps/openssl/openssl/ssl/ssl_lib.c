@@ -2023,6 +2023,9 @@ int SSL_write_early_data(SSL *s, const void *buf, size_t num, size_t *written)
         /* We are a server writing to an unauthenticated client */
         s->early_data_state = SSL_EARLY_DATA_UNAUTH_WRITING;
         ret = SSL_write_ex(s, buf, num, written);
+        /* The buffering BIO is still in place */
+        if (ret)
+            (void)BIO_flush(s->wbio);
         s->early_data_state = early_data_state;
         return ret;
 
@@ -2549,121 +2552,37 @@ int SSL_set_cipher_list(SSL *s, const char *str)
     return 1;
 }
 
-static int ciphersuite_cb(const char *elem, int len, void *arg)
-{
-    STACK_OF(SSL_CIPHER) *ciphersuites = (STACK_OF(SSL_CIPHER) *)arg;
-    const SSL_CIPHER *cipher;
-    /* Arbitrary sized temp buffer for the cipher name. Should be big enough */
-    char name[80];
-
-    if (len > (int)(sizeof(name) - 1)) {
-        SSLerr(SSL_F_CIPHERSUITE_CB, SSL_R_NO_CIPHER_MATCH);
-        return 0;
-    }
-
-    memcpy(name, elem, len);
-    name[len] = '\0';
-
-    cipher = ssl3_get_cipher_by_std_name(name);
-    if (cipher == NULL) {
-        SSLerr(SSL_F_CIPHERSUITE_CB, SSL_R_NO_CIPHER_MATCH);
-        return 0;
-    }
-
-    if (!sk_SSL_CIPHER_push(ciphersuites, cipher)) {
-        SSLerr(SSL_F_CIPHERSUITE_CB, ERR_R_INTERNAL_ERROR);
-        return 0;
-    }
-
-    return 1;
-}
-
-static int set_ciphersuites(STACK_OF(SSL_CIPHER) **currciphers, const char *str)
-{
-    STACK_OF(SSL_CIPHER) *newciphers = sk_SSL_CIPHER_new_null();
-
-    if (newciphers == NULL)
-        return 0;
-
-    /* Parse the list. We explicitly allow an empty list */
-    if (*str != '\0'
-            && !CONF_parse_list(str, ':', 1, ciphersuite_cb, newciphers)) {
-        sk_SSL_CIPHER_free(newciphers);
-        return 0;
-    }
-    sk_SSL_CIPHER_free(*currciphers);
-    *currciphers = newciphers;
-
-    return 1;
-}
-
-static int update_cipher_list(STACK_OF(SSL_CIPHER) *cipher_list,
-                              STACK_OF(SSL_CIPHER) *tls13_ciphersuites)
-{
-    int i;
-
-    /*
-     * Delete any existing TLSv1.3 ciphersuites. These are always first in the
-     * list.
-     */
-    while (sk_SSL_CIPHER_num(cipher_list) > 0
-           && sk_SSL_CIPHER_value(cipher_list, 0)->min_tls == TLS1_3_VERSION)
-        sk_SSL_CIPHER_delete(cipher_list, 0);
-
-    /* Insert the new TLSv1.3 ciphersuites */
-    for (i = 0; i < sk_SSL_CIPHER_num(tls13_ciphersuites); i++)
-        sk_SSL_CIPHER_insert(cipher_list,
-                             sk_SSL_CIPHER_value(tls13_ciphersuites, i), i);
-
-    return 1;
-}
-
-int SSL_CTX_set_ciphersuites(SSL_CTX *ctx, const char *str)
-{
-    int ret = set_ciphersuites(&(ctx->tls13_ciphersuites), str);
-
-    if (ret && ctx->cipher_list != NULL) {
-        /* We already have a cipher_list, so we need to update it */
-        return update_cipher_list(ctx->cipher_list, ctx->tls13_ciphersuites);
-    }
-
-    return ret;
-}
-
-int SSL_set_ciphersuites(SSL *s, const char *str)
-{
-    int ret = set_ciphersuites(&(s->tls13_ciphersuites), str);
-
-    if (ret && s->cipher_list != NULL) {
-        /* We already have a cipher_list, so we need to update it */
-        return update_cipher_list(s->cipher_list, s->tls13_ciphersuites);
-    }
-
-    return ret;
-}
-
-char *SSL_get_shared_ciphers(const SSL *s, char *buf, int len)
+char *SSL_get_shared_ciphers(const SSL *s, char *buf, int size)
 {
     char *p;
-    STACK_OF(SSL_CIPHER) *sk;
+    STACK_OF(SSL_CIPHER) *clntsk, *srvrsk;
     const SSL_CIPHER *c;
     int i;
 
-    if ((s->session == NULL) || (s->session->ciphers == NULL) || (len < 2))
+    if (!s->server
+            || s->session == NULL
+            || s->session->ciphers == NULL
+            || size < 2)
         return NULL;
 
     p = buf;
-    sk = s->session->ciphers;
-
-    if (sk_SSL_CIPHER_num(sk) == 0)
+    clntsk = s->session->ciphers;
+    srvrsk = SSL_get_ciphers(s);
+    if (clntsk == NULL || srvrsk == NULL)
         return NULL;
 
-    for (i = 0; i < sk_SSL_CIPHER_num(sk); i++) {
+    if (sk_SSL_CIPHER_num(clntsk) == 0 || sk_SSL_CIPHER_num(srvrsk) == 0)
+        return NULL;
+
+    for (i = 0; i < sk_SSL_CIPHER_num(clntsk); i++) {
         int n;
 
-        c = sk_SSL_CIPHER_value(sk, i);
+        c = sk_SSL_CIPHER_value(clntsk, i);
+        if (sk_SSL_CIPHER_find(srvrsk, c) < 0)
+            continue;
+
         n = strlen(c->name);
-        if (n + 1 > len) {
+        if (n + 1 > size) {
             if (p != buf)
                 --p;
             *p = '\0';
@@ -2672,7 +2591,7 @@ char *SSL_get_shared_ciphers(const SSL *s, char *buf, int len)
         strcpy(p, c->name);
         p += n;
         *(p++) = ':';
-        len -= n + 1;
+        size -= n + 1;
     }
     p[-1] = '\0';
     return buf;
@@ -3047,13 +2966,13 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
     /* Setup RFC5077 ticket keys */
     if ((RAND_bytes(ret->ext.tick_key_name,
                     sizeof(ret->ext.tick_key_name)) <= 0)
-        || (RAND_bytes(ret->ext.secure->tick_hmac_key,
+        || (RAND_priv_bytes(ret->ext.secure->tick_hmac_key,
                        sizeof(ret->ext.secure->tick_hmac_key)) <= 0)
-        || (RAND_bytes(ret->ext.secure->tick_aes_key,
+        || (RAND_priv_bytes(ret->ext.secure->tick_aes_key,
                        sizeof(ret->ext.secure->tick_aes_key)) <= 0))
         ret->options |= SSL_OP_NO_TICKET;
 
-    if (RAND_bytes(ret->ext.cookie_hmac_key,
+    if (RAND_priv_bytes(ret->ext.cookie_hmac_key,
                    sizeof(ret->ext.cookie_hmac_key)) <= 0)
         goto err;
 
@@ -3429,12 +3348,13 @@ void ssl_update_cache(SSL *s, int mode)
     /*
      * If sid_ctx_length is 0 there is no specific application context
      * associated with this session, so when we try to resume it and
-     * SSL_VERIFY_PEER is requested, we have no indication that this is
-     * actually a session for the proper application context, and the
-     * *handshake* will fail, not just the resumption attempt.
-     * Do not cache these sessions that are not resumable.
+     * SSL_VERIFY_PEER is requested to verify the client identity, we have no
+     * indication that this is actually a session for the proper application
+     * context, and the *handshake* will fail, not just the resumption attempt.
+     * Do not cache (on the server) these sessions that are not resumable
+     * (clients can set SSL_VERIFY_PEER without needing a sid_ctx set).
      */
-    if (s->session->sid_ctx_length == 0
+    if (s->server && s->session->sid_ctx_length == 0
             && (s->verify_mode & SSL_VERIFY_PEER) != 0)
         return;
 
@@ -3937,8 +3857,6 @@ int ssl_free_wbio_buffer(SSL *s)
         return 1;
 
     s->wbio = BIO_pop(s->wbio);
-    if (!ossl_assert(s->wbio != NULL))
-        return 0;
     BIO_free(s->bbio);
     s->bbio = NULL;
 
@@ -5048,9 +4966,11 @@ int SSL_client_hello_get1_extensions_present(SSL *s, int **out, size_t *outlen)
         if (ext->present)
             num++;
     }
-    present = OPENSSL_malloc(sizeof(*present) * num);
-    if (present == NULL)
+    if ((present = OPENSSL_malloc(sizeof(*present) * num)) == NULL) {
+        SSLerr(SSL_F_SSL_CLIENT_HELLO_GET1_EXTENSIONS_PRESENT,
+               ERR_R_MALLOC_FAILURE);
         return 0;
+    }
     for (i = 0; i < s->clienthello->pre_proc_exts_len; i++) {
         ext = s->clienthello->pre_proc_exts + i;
         if (ext->present) {

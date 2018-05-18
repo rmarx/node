@@ -137,7 +137,7 @@ static void bio_f_tls_corrupt_filter_free(void)
  */
 static const char **cipher_list = NULL;
 
-static int setup_cipher_list()
+static int setup_cipher_list(void)
 {
     SSL_CTX *ctx = NULL;
     SSL *ssl = NULL;
@@ -198,11 +198,9 @@ static int test_ssl_corrupt(int testidx)
                                        &sctx, &cctx, cert, privkey)))
         return 0;
 
-    if (!TEST_true(SSL_CTX_set_cipher_list(cctx, cipher_list[testidx])))
-        goto end;
-
-    if (!TEST_ptr(ciphers = SSL_CTX_get_ciphers(cctx))
+    if (!TEST_true(SSL_CTX_set_cipher_list(cctx, cipher_list[testidx]))
             || !TEST_true(SSL_CTX_set_ciphersuites(cctx, ""))
+            || !TEST_ptr(ciphers = SSL_CTX_get_ciphers(cctx))
             || !TEST_int_eq(sk_SSL_CIPHER_num(ciphers), 1)
             || !TEST_ptr(currcipher = sk_SSL_CIPHER_value(ciphers, 0)))
         goto end;

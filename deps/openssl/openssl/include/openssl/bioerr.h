@@ -20,13 +20,16 @@ int ERR_load_BIO_strings(void);
  * BIO function codes.
  */
 # define BIO_F_ACPT_STATE                                 100
+# define BIO_F_ADDRINFO_WRAP                              148
 # define BIO_F_ADDR_STRINGS                               134
 # define BIO_F_BIO_ACCEPT                                 101
 # define BIO_F_BIO_ACCEPT_EX                              137
+# define BIO_F_BIO_ACCEPT_NEW                             152
 # define BIO_F_BIO_ADDR_NEW                               144
 # define BIO_F_BIO_BIND                                   147
 # define BIO_F_BIO_CALLBACK_CTRL                          131
 # define BIO_F_BIO_CONNECT                                138
+# define BIO_F_BIO_CONNECT_NEW                            153
 # define BIO_F_BIO_CTRL                                   103
 # define BIO_F_BIO_GETS                                   104
 # define BIO_F_BIO_GET_HOST_IP                            106
@@ -60,12 +63,17 @@ int ERR_load_BIO_strings(void);
 # define BIO_F_BUFFER_CTRL                                114
 # define BIO_F_CONN_CTRL                                  127
 # define BIO_F_CONN_STATE                                 115
+# define BIO_F_DGRAM_SCTP_NEW                             149
 # define BIO_F_DGRAM_SCTP_READ                            132
 # define BIO_F_DGRAM_SCTP_WRITE                           133
+# define BIO_F_DOAPR_OUTCH                                150
 # define BIO_F_FILE_CTRL                                  116
 # define BIO_F_FILE_READ                                  130
 # define BIO_F_LINEBUFFER_CTRL                            129
+# define BIO_F_LINEBUFFER_NEW                             151
 # define BIO_F_MEM_WRITE                                  117
+# define BIO_F_NBIOF_NEW                                  154
+# define BIO_F_SLG_WRITE                                  155
 # define BIO_F_SSL_NEW                                    118
 
 /*

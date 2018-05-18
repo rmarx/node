@@ -277,6 +277,20 @@ int ossl_statem_server_read_transition(SSL *s, int mt)
 
  err:
     /* No valid transition found */
+    if (SSL_IS_DTLS(s) && mt == SSL3_MT_CHANGE_CIPHER_SPEC) {
+        BIO *rbio;
+
+        /*
+         * CCS messages don't have a message sequence number so this is probably
+         * because of an out-of-order CCS. We'll just drop it.
+         */
+        s->init_num = 0;
+        s->rwstate = SSL_READING;
+        rbio = SSL_get_rbio(s);
+        BIO_clear_retry_flags(rbio);
+        BIO_set_retry_read(rbio);
+        return 0;
+    }
     SSLfatal(s, SSL3_AD_UNEXPECTED_MESSAGE,
              SSL_F_OSSL_STATEM_SERVER_READ_TRANSITION,
              SSL_R_UNEXPECTED_MESSAGE);
@@ -472,9 +486,16 @@ static WRITE_TRAN ossl_statem_server13_write_transition(SSL *s)
          * and give the application the opportunity to delay sending the
          * session ticket?
          */
-        if (s->post_handshake_auth == SSL_PHA_REQUESTED)
-            s->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
         st->hand_state = TLS_ST_SW_SESSION_TICKET;
+        if (s->post_handshake_auth == SSL_PHA_REQUESTED) {
+            s->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
+        } else if (!s->ext.ticket_expected) {
+            /*
+             * If we're not going to renew the ticket then we just finish the
+             * handshake at this point.
+             */
+            st->hand_state = TLS_ST_OK;
+        }
         return WRITE_TRAN_CONTINUE;
 
     case TLS_ST_SR_KEY_UPDATE:
@@ -2481,6 +2502,12 @@ int tls_construct_server_key_exchange(SSL *s, WPACKET *pkt)
         }
 
         dh = EVP_PKEY_get0_DH(s->s3->tmp.pkey);
+        if (dh == NULL) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_TLS_CONSTRUCT_SERVER_KEY_EXCHANGE,
+                     ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
 
         EVP_PKEY_free(pkdh);
         pkdh = NULL;
@@ -2936,7 +2963,7 @@ static int tls_process_cke_rsa(SSL *s, PACKET *pkt)
      * fails. See https://tools.ietf.org/html/rfc5246#section-7.4.7.1
      */
 
-    if (RAND_bytes(rand_premaster_secret,
+    if (RAND_priv_bytes(rand_premaster_secret,
                       sizeof(rand_premaster_secret)) <= 0) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CKE_RSA,
                  ERR_R_INTERNAL_ERROR);
@@ -3716,6 +3743,23 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
     } age_add_u;
 
     if (SSL_IS_TLS13(s)) {
+        if (s->post_handshake_auth != SSL_PHA_EXT_RECEIVED) {
+            void (*cb) (const SSL *ssl, int type, int val) = NULL;
+
+            /*
+             * This is the first session ticket we've sent. In the state
+             * machine we "cheated" and tacked this onto the end of the first
+             * handshake. From an info callback perspective this should appear
+             * like the start of a new handshake.
+             */
+            if (s->info_callback != NULL)
+                cb = s->info_callback;
+            else if (s->ctx->info_callback != NULL)
+                cb = s->ctx->info_callback;
+            if (cb != NULL)
+                cb(s, SSL_CB_HANDSHAKE_START, 1);
+        }
+
         if (!ssl_generate_session_id(s, s->session)) {
             /* SSLfatal() already called */
             goto err;

@@ -59,13 +59,14 @@ static hm_fragment *dtls1_hm_fragment_new(size_t frag_len, int reassembly)
     unsigned char *buf = NULL;
     unsigned char *bitmask = NULL;
 
-    frag = OPENSSL_malloc(sizeof(*frag));
-    if (frag == NULL)
+    if ((frag = OPENSSL_malloc(sizeof(*frag))) == NULL) {
+        SSLerr(SSL_F_DTLS1_HM_FRAGMENT_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
+    }
 
     if (frag_len) {
-        buf = OPENSSL_malloc(frag_len);
-        if (buf == NULL) {
+        if ((buf = OPENSSL_malloc(frag_len)) == NULL) {
+            SSLerr(SSL_F_DTLS1_HM_FRAGMENT_NEW, ERR_R_MALLOC_FAILURE);
             OPENSSL_free(frag);
             return NULL;
         }
@@ -78,6 +79,7 @@ static hm_fragment *dtls1_hm_fragment_new(size_t frag_len, int reassembly)
     if (reassembly) {
         bitmask = OPENSSL_zalloc(RSMBLY_BITMASK_SIZE(frag_len));
         if (bitmask == NULL) {
+            SSLerr(SSL_F_DTLS1_HM_FRAGMENT_NEW, ERR_R_MALLOC_FAILURE);
             OPENSSL_free(buf);
             OPENSSL_free(frag);
             return NULL;
@@ -502,7 +504,7 @@ static int dtls1_retrieve_buffered_fragment(SSL *s, size_t *len)
         /* Calls SSLfatal() as required */
         ret = dtls1_preprocess_fragment(s, &frag->msg_header);
 
-        if (ret) {
+        if (ret && frag->msg_header.frag_len > 0) {
             unsigned char *p =
                 (unsigned char *)s->init_buf->data + DTLS1_HM_HEADER_LENGTH;
             memcpy(&p[frag->msg_header.frag_off], frag->fragment,

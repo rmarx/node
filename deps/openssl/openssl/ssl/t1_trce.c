@@ -19,11 +19,11 @@ typedef struct {
 } ssl_trace_tbl;
 
 # define ssl_trace_str(val, tbl) \
-        do_ssl_trace_str(val, tbl, OSSL_NELEM(tbl))
+    do_ssl_trace_str(val, tbl, OSSL_NELEM(tbl))
 
 # define ssl_trace_list(bio, indent, msg, msglen, value, table) \
-        do_ssl_trace_list(bio, indent, msg, msglen, value, \
-         table, OSSL_NELEM(table))
+    do_ssl_trace_list(bio, indent, msg, msglen, value, \
+                      table, OSSL_NELEM(table))
 
 static const char *do_ssl_trace_str(int val, const ssl_trace_tbl *tbl,
                                     size_t ntbl)
@@ -65,7 +65,9 @@ static const ssl_trace_tbl ssl_version_tbl[] = {
     {TLS1_1_VERSION, "TLS 1.1"},
     {TLS1_2_VERSION, "TLS 1.2"},
     {TLS1_3_VERSION, "TLS 1.3"},
-    /* TODO(TLS1.3): Remove this line before release */
+    /* TODO(TLS1.3): Remove these lines before release */
+    {TLS1_3_VERSION_DRAFT_26, TLS1_3_VERSION_DRAFT_TXT_26},
+    {TLS1_3_VERSION_DRAFT_27, TLS1_3_VERSION_DRAFT_TXT_27},
     {TLS1_3_VERSION_DRAFT, TLS1_3_VERSION_DRAFT_TXT},
     {DTLS1_VERSION, "DTLS 1.0"},
     {DTLS1_2_VERSION, "DTLS 1.2"},
@@ -642,7 +644,15 @@ static int ssl_print_version(BIO *bio, int indent, const char *name,
     vers = ((*pmsg)[0] << 8) | (*pmsg)[1];
     if (version != NULL) {
         /* TODO(TLS1.3): Remove the draft conditional here before release */
-        *version = (vers == TLS1_3_VERSION_DRAFT) ? TLS1_3_VERSION : vers;
+        switch(vers) {
+        case TLS1_3_VERSION_DRAFT_26:
+        case TLS1_3_VERSION_DRAFT_27:
+        case TLS1_3_VERSION_DRAFT:
+            *version = TLS1_3_VERSION;
+            break;
+        default:
+            *version = vers;
+        }
     }
     BIO_indent(bio, indent, 80);
     BIO_printf(bio, "%s=0x%x (%s)\n",
@@ -1362,8 +1372,8 @@ static int ssl_print_ticket(BIO *bio, int indent, const SSL *ssl,
 
         if (msglen < 4)
             return 0;
-        ticket_age_add = (msg[0] << 24) | (msg[1] << 16) | (msg[2] << 8)
-                          | msg[3];
+        ticket_age_add =
+            (msg[0] << 24) | (msg[1] << 16) | (msg[2] << 8) | msg[3];
         msglen -= 4;
         msg += 4;
         BIO_indent(bio, indent + 2, 80);
@@ -1504,7 +1514,8 @@ void SSL_trace(int write_p, int version, int content_type,
             int hvers;
 
             /* avoid overlapping with length at the end of buffer */
-            if (msglen < (SSL_IS_DTLS(ssl) ? 13 : 5)) {
+            if (msglen < (size_t)(SSL_IS_DTLS(ssl) ?
+                     DTLS1_RT_HEADER_LENGTH : SSL3_RT_HEADER_LENGTH)) {
                 BIO_puts(bio, write_p ? "Sent" : "Received");
                 ssl_print_hex(bio, 0, " too short message", msg, msglen);
                 break;

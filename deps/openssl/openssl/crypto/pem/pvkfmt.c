@@ -444,9 +444,10 @@ static int do_i2b(unsigned char **out, EVP_PKEY *pk, int ispub)
     if (*out)
         p = *out;
     else {
-        p = OPENSSL_malloc(outlen);
-        if (p == NULL)
+        if ((p = OPENSSL_malloc(outlen)) == NULL) {
+            PEMerr(PEM_F_DO_I2B, ERR_R_MALLOC_FAILURE);
             return -1;
+        }
         *out = p;
         noinc = 1;
     }
@@ -685,7 +686,7 @@ static EVP_PKEY *do_PVK_body(const unsigned char **in,
             inlen = cb(psbuf, PEM_BUFSIZE, 0, u);
         else
             inlen = PEM_def_callback(psbuf, PEM_BUFSIZE, 0, u);
-        if (inlen <= 0) {
+        if (inlen < 0) {
             PEMerr(PEM_F_DO_PVK_BODY, PEM_R_BAD_PASSWORD_READ);
             goto err;
         }

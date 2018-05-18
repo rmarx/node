@@ -43,7 +43,8 @@ build_script:
     - cd _build
     - ps: >-
         If ($env:Configuration -Match "shared" -or $env:EXTENDED_TESTS) {
-            cmd /c "nmake 2>&1"
+            cmd /c "nmake build_all_generated 2>&1"
+            cmd /c "nmake PERL=no-perl 2>&1"
         }
     - cd ..
 
@@ -60,6 +61,6 @@ test_script:
     - ps: >-
         if ($env:EXTENDED_TESTS) {
             mkdir ..\_install
-            cmd /c "nmake install install_docs DESTDIR=..\_install 2>&1"
+            cmd /c "nmake install DESTDIR=..\_install 2>&1"
         }
     - cd ..

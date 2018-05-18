@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -57,8 +57,10 @@ static int nbiof_new(BIO *bi)
 {
     NBIO_TEST *nt;
 
-    if ((nt = OPENSSL_zalloc(sizeof(*nt))) == NULL)
+    if ((nt = OPENSSL_zalloc(sizeof(*nt))) == NULL) {
+        BIOerr(BIO_F_NBIOF_NEW, ERR_R_MALLOC_FAILURE);
         return 0;
+    }
     nt->lrn = -1;
     nt->lwn = -1;
     bi->ptr = (char *)nt;
@@ -89,7 +91,7 @@ static int nbiof_read(BIO *b, char *out, int outl)
         return 0;
 
     BIO_clear_retry_flags(b);
-    if (RAND_bytes(&n, 1) <= 0)
+    if (RAND_priv_bytes(&n, 1) <= 0)
         return -1;
     num = (n & 0x07);
 
@@ -126,7 +128,7 @@ static int nbiof_write(BIO *b, const char *in, int inl)
         num = nt->lwn;
         nt->lwn = 0;
     } else {
-        if (RAND_bytes(&n, 1) <= 0)
+        if (RAND_priv_bytes(&n, 1) <= 0)
             return -1;
         num = (n & 7);
     }

@@ -29,7 +29,7 @@ our %config = (
   b64l => "1",
   bn_ll => "0",
   build_file => "Makefile",
-  build_file_templates => [ "Configurations/unix-Makefile.tmpl", "Configurations/common.tmpl" ],
+  build_file_templates => [ "Configurations/common0.tmpl", "Configurations/unix-Makefile.tmpl", "Configurations/common.tmpl" ],
   build_infos => [ "./build.info", "crypto/build.info", "ssl/build.info", "engines/build.info", "apps/build.info", "test/build.info", "util/build.info", "tools/build.info", "fuzz/build.info", "crypto/objects/build.info", "crypto/md4/build.info", "crypto/md5/build.info", "crypto/sha/build.info", "crypto/mdc2/build.info", "crypto/hmac/build.info", "crypto/ripemd/build.info", "crypto/whrlpool/build.info", "crypto/poly1305/build.info", "crypto/blake2/build.info", "crypto/siphash/build.info", "crypto/sm3/build.info", "crypto/des/build.info", "crypto/aes/build.info", "crypto/rc2/build.info", "crypto/rc4/build.info", "crypto/idea/build.info", "crypto/aria/build.info", "crypto/bf/build.info", "crypto/cast/build.info", "crypto/camellia/build.info", "crypto/seed/build.info", "crypto/sm4/build.info", "crypto/chacha/build.info", "crypto/modes/build.info", "crypto/bn/build.info", "crypto/ec/build.info", "crypto/rsa/build.info", "crypto/dsa/build.info", "crypto/dh/build.info", "crypto/sm2/build.info", "crypto/dso/build.info", "crypto/engine/build.info", "crypto/buffer/build.info", "crypto/bio/build.info", "crypto/stack/build.info", "crypto/lhash/build.info", "crypto/rand/build.info", "crypto/err/build.info", "crypto/evp/build.info", "crypto/asn1/build.info", "crypto/pem/build.info", "crypto/x509/build.info", "crypto/x509v3/build.info", "crypto/conf/build.info", "crypto/txt_db/build.info", "crypto/pkcs7/build.info", "crypto/pkcs12/build.info", "crypto/ocsp/build.info", "crypto/ui/build.info", "crypto/cms/build.info", "crypto/ts/build.info", "crypto/srp/build.info", "crypto/cmac/build.info", "crypto/ct/build.info", "crypto/async/build.info", "crypto/kdf/build.info", "crypto/store/build.info", "test/ossl_shim/build.info" ],
   build_type => "release",
   builddir => ".",
@@ -109,8 +109,8 @@ our %config = (
   sourcedir => ".",
   target => "BSD-x86_64",
   tdirs => [ "ossl_shim" ],
-  version => "1.1.1-pre4-dev",
-  version_num => "0x10101004L",
+  version => "1.1.1-pre7-dev",
+  version_num => "0x10101007L",
 );
 
 our %target = (
@@ -156,6 +156,8 @@ our %target = (
   ex_libs => "-pthread",
   exe_extension => "",
   includes => [  ],
+  keccak1600_asm_src => "keccak1600.c",
+  keccak1600_obj => "keccak1600.o",
   lflags => "",
   lib_cflags => "",
   lib_cppflags => "-DL_ENDIAN",
@@ -210,6 +212,7 @@ our @disablables = (
   "async",
   "autoalginit",
   "autoerrinit",
+  "autoload-config",
   "bf",
   "blake2",
   "camellia",
@@ -1169,6 +1172,11 @@ our %unified_info = (
                 [
                     "libcrypto",
                     "libssl",
+                    "test/libtestutil.a",
+                ],
+            "test/cmsapitest" =>
+                [
+                    "libcrypto",
                     "test/libtestutil.a",
                 ],
             "test/conf_include_test" =>
@@ -2230,6 +2238,31 @@ our %unified_info = (
             "crypto/s390xcpuid.S" =>
                 [
                     "crypto/s390xcpuid.pl",
+                    "\$(PERLASM_SCHEME)",
+                ],
+            "crypto/sha/keccak1600-armv4.S" =>
+                [
+                    "crypto/sha/asm/keccak1600-armv4.pl",
+                    "\$(PERLASM_SCHEME)",
+                ],
+            "crypto/sha/keccak1600-armv8.S" =>
+                [
+                    "crypto/sha/asm/keccak1600-armv8.pl",
+                    "\$(PERLASM_SCHEME)",
+                ],
+            "crypto/sha/keccak1600-ppc64.s" =>
+                [
+                    "crypto/sha/asm/keccak1600-ppc64.pl",
+                    "\$(PERLASM_SCHEME)",
+                ],
+            "crypto/sha/keccak1600-s390x.S" =>
+                [
+                    "crypto/sha/asm/keccak1600-s390x.pl",
+                    "\$(PERLASM_SCHEME)",
+                ],
+            "crypto/sha/keccak1600-x86_64.s" =>
+                [
+                    "crypto/sha/asm/keccak1600-x86_64.pl",
                     "\$(PERLASM_SCHEME)",
                 ],
             "crypto/sha/sha1-586.s" =>
@@ -4332,6 +4365,12 @@ our %unified_info = (
                     "crypto/include",
                     "include",
                 ],
+            "crypto/conf/conf_ssl.o" =>
+                [
+                    ".",
+                    "crypto/include",
+                    "include",
+                ],
             "crypto/cpt_err.o" =>
                 [
                     ".",
@@ -4798,12 +4837,6 @@ our %unified_info = (
                     "include",
                     "crypto/ec/curve448/arch_32",
                     "crypto/ec/curve448",
-                ],
-            "crypto/ec/ec2_mult.o" =>
-                [
-                    ".",
-                    "crypto/include",
-                    "include",
                 ],
             "crypto/ec/ec2_oct.o" =>
                 [
@@ -6414,6 +6447,10 @@ our %unified_info = (
                     "crypto/include",
                     "include",
                 ],
+            "crypto/sha/keccak1600-armv4.o" =>
+                [
+                    "crypto",
+                ],
             "crypto/sha/keccak1600.o" =>
                 [
                     ".",
@@ -7837,6 +7874,10 @@ our %unified_info = (
                 [
                     "include",
                 ],
+            "test/cmsapitest.o" =>
+                [
+                    "include",
+                ],
             "test/conf_include_test.o" =>
                 [
                     "include",
@@ -8388,6 +8429,7 @@ our %unified_info = (
             "test/cipherlist_test",
             "test/ciphername_test",
             "test/clienthellotest",
+            "test/cmsapitest",
             "test/conf_include_test",
             "test/constant_time_test",
             "test/crltest",
@@ -8832,6 +8874,9 @@ our %unified_info = (
                 [
                 ],
             "test/clienthellotest" =>
+                [
+                ],
+            "test/cmsapitest" =>
                 [
                 ],
             "test/conf_include_test" =>
@@ -10089,6 +10134,10 @@ our %unified_info = (
                 [
                     "crypto/conf/conf_sap.c",
                 ],
+            "crypto/conf/conf_ssl.o" =>
+                [
+                    "crypto/conf/conf_ssl.c",
+                ],
             "crypto/cpt_err.o" =>
                 [
                     "crypto/cpt_err.c",
@@ -10388,10 +10437,6 @@ our %unified_info = (
             "crypto/ec/curve448/scalar.o" =>
                 [
                     "crypto/ec/curve448/scalar.c",
-                ],
-            "crypto/ec/ec2_mult.o" =>
-                [
-                    "crypto/ec/ec2_mult.c",
                 ],
             "crypto/ec/ec2_oct.o" =>
                 [
@@ -12187,6 +12232,7 @@ our %unified_info = (
                     "crypto/conf/conf_mall.o",
                     "crypto/conf/conf_mod.o",
                     "crypto/conf/conf_sap.o",
+                    "crypto/conf/conf_ssl.o",
                     "crypto/cpt_err.o",
                     "crypto/cryptlib.o",
                     "crypto/ct/ct_b64.o",
@@ -12262,7 +12308,6 @@ our %unified_info = (
                     "crypto/ec/curve448/eddsa.o",
                     "crypto/ec/curve448/f_generic.o",
                     "crypto/ec/curve448/scalar.o",
-                    "crypto/ec/ec2_mult.o",
                     "crypto/ec/ec2_oct.o",
                     "crypto/ec/ec2_smpl.o",
                     "crypto/ec/ec_ameth.o",
@@ -13584,6 +13629,14 @@ our %unified_info = (
             "test/clienthellotest.o" =>
                 [
                     "test/clienthellotest.c",
+                ],
+            "test/cmsapitest" =>
+                [
+                    "test/cmsapitest.o",
+                ],
+            "test/cmsapitest.o" =>
+                [
+                    "test/cmsapitest.c",
                 ],
             "test/conf_include_test" =>
                 [

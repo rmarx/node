@@ -37,7 +37,7 @@ static int watchccs_puts(BIO *bp, const char *str);
 
 static BIO_METHOD *method_watchccs = NULL;
 
-static const BIO_METHOD *bio_f_watchccs_filter()
+static const BIO_METHOD *bio_f_watchccs_filter(void)
 {
     if (method_watchccs == NULL) {
         method_watchccs = BIO_meth_new(BIO_TYPE_WATCHCCS_FILTER,
@@ -258,8 +258,6 @@ static int test_tls13ccs(int tst)
                                        TLS1_VERSION, TLS_MAX_VERSION,
                                        &sctx, &cctx, cert, privkey))
         || !TEST_true(SSL_CTX_set_max_early_data(sctx,
-                                                 SSL3_RT_MAX_PLAIN_LENGTH))
-        || !TEST_true(SSL_CTX_set_max_early_data(cctx,
                                                  SSL3_RT_MAX_PLAIN_LENGTH)))
         goto err;
 

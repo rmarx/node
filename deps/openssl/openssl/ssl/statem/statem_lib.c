@@ -1033,11 +1033,16 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs, int stop)
             && s->post_handshake_auth == SSL_PHA_REQUESTED)
         s->post_handshake_auth = SSL_PHA_EXT_SENT;
 
+    /*
+     * Only set if there was a Finished message and this isn't after a TLSv1.3
+     * post handshake exchange
+     */
     if (s->statem.cleanuphand) {
         /* skipped if we just sent a HelloRequest */
         s->renegotiate = 0;
         s->new_session = 0;
         s->statem.cleanuphand = 0;
+        s->ext.ticket_expected = 0;
 
         ssl3_cleanup_key_block(s);
 
@@ -1053,6 +1058,15 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs, int stop)
             CRYPTO_atomic_add(&s->ctx->stats.sess_accept_good, 1, &discard,
                               s->ctx->lock);
             s->handshake_func = ossl_statem_accept;
+
+            if (SSL_IS_DTLS(s) && !s->hit) {
+                /*
+                 * We are finishing after the client. We start the timer going
+                 * in case there are any retransmits of our final flight
+                 * required.
+                 */
+                dtls1_start_timer(s);
+            }
         } else {
             /*
              * In TLSv1.3 we update the cache as part of processing the
@@ -1067,15 +1081,16 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs, int stop)
             s->handshake_func = ossl_statem_connect;
             CRYPTO_atomic_add(&s->session_ctx->stats.sess_connect_good, 1,
                               &discard, s->session_ctx->lock);
+
+            if (SSL_IS_DTLS(s) && s->hit) {
+                /*
+                 * We are finishing after the server. We start the timer going
+                 * in case there are any retransmits of our final flight
+                 * required.
+                 */
+                dtls1_start_timer(s);
+            }
         }
-
-        if (s->info_callback != NULL)
-            cb = s->info_callback;
-        else if (s->ctx->info_callback != NULL)
-            cb = s->ctx->info_callback;
-
-        if (cb != NULL)
-            cb(s, SSL_CB_HANDSHAKE_DONE, 1);
 
         if (SSL_IS_DTLS(s)) {
             /* done with handshaking */
@@ -1086,10 +1101,23 @@ WORK_STATE tls_finish_handshake(SSL *s, WORK_STATE wst, int clearbufs, int stop)
         }
     }
 
-    if (!stop)
-        return WORK_FINISHED_CONTINUE;
+    if (s->info_callback != NULL)
+        cb = s->info_callback;
+    else if (s->ctx->info_callback != NULL)
+        cb = s->ctx->info_callback;
 
+    /* The callback may expect us to not be in init at handshake done */
     ossl_statem_set_in_init(s, 0);
+
+    if (cb != NULL)
+        cb(s, SSL_CB_HANDSHAKE_DONE, 1);
+
+    if (!stop) {
+        /* If we've got more work to do we go back into init */
+        ossl_statem_set_in_init(s, 1);
+        return WORK_FINISHED_CONTINUE;
+    }
+
     return WORK_FINISHED_STOP;
 }
 
@@ -1667,6 +1695,8 @@ int ssl_choose_server_version(SSL *s, CLIENTHELLO_MSG *hello, DOWNGRADE *dgrd)
         unsigned int best_vers = 0;
         const SSL_METHOD *best_method = NULL;
         PACKET versionslist;
+        /* TODO(TLS1.3): Remove this before release */
+        unsigned int orig_candidate = 0;
 
         suppversions->parsed = 1;
 
@@ -1677,8 +1707,18 @@ int ssl_choose_server_version(SSL *s, CLIENTHELLO_MSG *hello, DOWNGRADE *dgrd)
 
         while (PACKET_get_net_2(&versionslist, &candidate_vers)) {
             /* TODO(TLS1.3): Remove this before release */
-            if (candidate_vers == TLS1_3_VERSION_DRAFT)
+            if (candidate_vers == TLS1_3_VERSION_DRAFT
+                    || candidate_vers == TLS1_3_VERSION_DRAFT_27
+                    || candidate_vers == TLS1_3_VERSION_DRAFT_26) {
+                if (best_vers == TLS1_3_VERSION
+                        && orig_candidate > candidate_vers)
+                    continue;
+                orig_candidate = candidate_vers;
                 candidate_vers = TLS1_3_VERSION;
+            } else if (candidate_vers == TLS1_3_VERSION) {
+                /* Don't actually accept real TLSv1.3 */
+                continue;
+            }
             /*
              * TODO(TLS1.3): There is some discussion on the TLS list about
              * whether to ignore versions <TLS1.2 in supported_versions. At the
@@ -1717,6 +1757,9 @@ int ssl_choose_server_version(SSL *s, CLIENTHELLO_MSG *hello, DOWNGRADE *dgrd)
             }
             check_for_downgrade(s, best_vers, dgrd);
             s->version = best_vers;
+            /* TODO(TLS1.3): Remove this before release */
+            if (best_vers == TLS1_3_VERSION)
+                s->version_draft = orig_candidate;
             s->method = best_method;
             return 0;
         }
@@ -1994,6 +2037,13 @@ int ssl_get_min_max_version(const SSL *s, int *min_version, int *max_version)
 int ssl_set_client_hello_version(SSL *s)
 {
     int ver_min, ver_max, ret;
+
+    /*
+     * In a renegotiation we always send the same client_version that we sent
+     * last time, regardless of which version we eventually negotiated.
+     */
+    if (!SSL_IS_FIRST_HANDSHAKE(s))
+        return 0;
 
     ret = ssl_get_min_max_version(s, &ver_min, &ver_max);
 

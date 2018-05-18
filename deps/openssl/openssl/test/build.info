@@ -373,6 +373,13 @@ INCLUDE_MAIN___test_libtestutil_OLB = /INCLUDE=MAIN
   INCLUDE[servername_test]=../include
   DEPEND[servername_test]=../libcrypto ../libssl libtestutil.a
 
+  IF[{- !$disabled{cms} -}]
+    PROGRAMS_NO_INST=cmsapitest
+    SOURCE[cmsapitest]=cmsapitest.c
+    INCLUDE[cmsapitest]=../include
+    DEPEND[cmsapitest]=../libcrypto libtestutil.a
+  ENDIF
+
   IF[{- !$disabled{psk} -}]
     PROGRAMS_NO_INST=dtls_mtu_test
     SOURCE[dtls_mtu_test]=dtls_mtu_test.c ssltestlib.c
@@ -536,6 +543,7 @@ ENDIF
    use OpenSSL::Glob;
 
    my @nogo_headers = ( "asn1_mac.h",
+                        "opensslconf.h",
                         "__decc_include_prologue.h",
                         "__decc_include_epilogue.h" );
    my @nogo_headers_re = ( qr/.*err\.h/ );
