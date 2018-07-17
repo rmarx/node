@@ -4114,7 +4114,7 @@ ecp_nistz256_point_add:
 	stmia	r0!,{r4,r5}
 .Ladd_done:
 	add	sp,sp,#32*18+16+16	@ +16 means "skip even over saved r0-r3"
-#if __ARM_ARCH__>=5 || defined(__thumb__)
+#if __ARM_ARCH__>=5 || !defined(__thumb__)
 	ldmia	sp!,{r4,r5,r6,r7,r8,r9,r10,r11,r12,pc}
 #else
 	ldmia	sp!,{r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}

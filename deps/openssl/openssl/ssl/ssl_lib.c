@@ -591,6 +591,7 @@ int SSL_clear(SSL *s)
     s->psksession_id = NULL;
     s->psksession_id_len = 0;
     s->hello_retry_request = 0;
+    s->sent_tickets = 0;
 
     s->error = 0;
     s->hit = 0;
@@ -699,6 +700,8 @@ SSL *SSL_new(SSL_CTX *ctx)
     s->mode = ctx->mode;
     s->max_cert_list = ctx->max_cert_list;
     s->max_early_data = ctx->max_early_data;
+    s->recv_max_early_data = ctx->recv_max_early_data;
+    s->num_tickets = ctx->num_tickets;
 
     /* Shallow copy of the ciphersuites stack */
     s->tls13_ciphersuites = sk_SSL_CIPHER_dup(ctx->tls13_ciphersuites);
@@ -802,6 +805,9 @@ SSL *SSL_new(SSL_CTX *ctx)
     s->method = ctx->method;
 
     s->key_update = SSL_KEY_UPDATE_NONE;
+
+    s->allow_early_data_cb = ctx->allow_early_data_cb;
+    s->allow_early_data_cb_data = ctx->allow_early_data_cb_data;
 
     if (!s->method->ssl_new(s))
         goto err;
@@ -2894,6 +2900,7 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
     ret->method = meth;
     ret->min_proto_version = 0;
     ret->max_proto_version = 0;
+    ret->mode = SSL_MODE_AUTO_RETRY;
     ret->session_cache_mode = SSL_SESS_CACHE_SERVER;
     ret->session_cache_size = SSL_SESSION_CACHE_MAX_SIZE_DEFAULT;
     /* We take the system default. */
@@ -3032,6 +3039,19 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
      * above.
      */
     ret->max_early_data = 0;
+
+    /*
+     * Default recv_max_early_data is a fully loaded single record. Could be
+     * split across multiple records in practice. We set this differently to
+     * max_early_data so that, in the default case, we do not advertise any
+     * support for early_data, but if a client were to send us some (e.g.
+     * because of an old, stale ticket) then we will tolerate it and skip over
+     * it.
+     */
+    ret->recv_max_early_data = SSL3_RT_MAX_PLAIN_LENGTH;
+
+    /* By default we send two session tickets automatically in TLSv1.3 */
+    ret->num_tickets = 2;
 
     ssl_ctx_system_config(ret);
 
@@ -3360,13 +3380,37 @@ void ssl_update_cache(SSL *s, int mode)
 
     i = s->session_ctx->session_cache_mode;
     if ((i & mode) != 0
-        && (!s->hit || SSL_IS_TLS13(s))
-        && ((i & SSL_SESS_CACHE_NO_INTERNAL_STORE) != 0
-            || SSL_CTX_add_session(s->session_ctx, s->session))
-        && s->session_ctx->new_session_cb != NULL) {
-        SSL_SESSION_up_ref(s->session);
-        if (!s->session_ctx->new_session_cb(s, s->session))
-            SSL_SESSION_free(s->session);
+        && (!s->hit || SSL_IS_TLS13(s))) {
+        /*
+         * Add the session to the internal cache. In server side TLSv1.3 we
+         * normally don't do this because by default it's a full stateless ticket
+         * with only a dummy session id so there is no reason to cache it,
+         * unless:
+         * - we are doing early_data, in which case we cache so that we can
+         *   detect replays
+         * - the application has set a remove_session_cb so needs to know about
+         *   session timeout events
+         * - SSL_OP_NO_TICKET is set in which case it is a stateful ticket
+         */
+        if ((i & SSL_SESS_CACHE_NO_INTERNAL_STORE) == 0
+                && (!SSL_IS_TLS13(s)
+                    || !s->server
+                    || (s->max_early_data > 0
+                        && (s->options & SSL_OP_NO_ANTI_REPLAY) == 0)
+                    || s->session_ctx->remove_session_cb != NULL
+                    || (s->options & SSL_OP_NO_TICKET) != 0))
+            SSL_CTX_add_session(s->session_ctx, s->session);
+
+        /*
+         * Add the session to the external cache. We do this even in server side
+         * TLSv1.3 without early data because some applications just want to
+         * know about the creation of a session and aren't doing a full cache.
+         */
+        if (s->session_ctx->new_session_cb != NULL) {
+            SSL_SESSION_up_ref(s->session);
+            if (!s->session_ctx->new_session_cb(s, s->session))
+                SSL_SESSION_free(s->session);
+        }
     }
 
     /* auto flush every 255 connections */
@@ -4239,6 +4283,18 @@ void SSL_set_msg_callback(SSL *ssl,
     SSL_callback_ctrl(ssl, SSL_CTRL_SET_MSG_CALLBACK, (void (*)(void))cb);
 }
 
+void SSL_set_key_callback(SSL *ssl,
+                          int (*cb)(SSL *ssl, int name,
+                                    const unsigned char *secret,
+                                    size_t secretlen, const unsigned char *key,
+                                    size_t keylen, const unsigned char *iv,
+                                    size_t ivlen, void *arg),
+                          void *arg)
+{
+    ssl->key_callback = cb;
+    ssl->key_callback_arg = arg;
+}
+
 void SSL_CTX_set_not_resumable_session_callback(SSL_CTX *ctx,
                                                 int (*cb) (SSL *ssl,
                                                            int
@@ -4312,6 +4368,30 @@ int SSL_set_block_padding(SSL *ssl, size_t block_size)
     else
         return 0;
     return 1;
+}
+
+int SSL_set_num_tickets(SSL *s, size_t num_tickets)
+{
+    s->num_tickets = num_tickets;
+
+    return 1;
+}
+
+size_t SSL_get_num_tickets(SSL *s)
+{
+    return s->num_tickets;
+}
+
+int SSL_CTX_set_num_tickets(SSL_CTX *ctx, size_t num_tickets)
+{
+    ctx->num_tickets = num_tickets;
+
+    return 1;
+}
+
+size_t SSL_CTX_get_num_tickets(SSL_CTX *ctx)
+{
+    return ctx->num_tickets;
 }
 
 /*
@@ -5319,6 +5399,30 @@ uint32_t SSL_get_max_early_data(const SSL *s)
     return s->max_early_data;
 }
 
+int SSL_CTX_set_recv_max_early_data(SSL_CTX *ctx, uint32_t recv_max_early_data)
+{
+    ctx->recv_max_early_data = recv_max_early_data;
+
+    return 1;
+}
+
+uint32_t SSL_CTX_get_recv_max_early_data(const SSL_CTX *ctx)
+{
+    return ctx->recv_max_early_data;
+}
+
+int SSL_set_recv_max_early_data(SSL *s, uint32_t recv_max_early_data)
+{
+    s->recv_max_early_data = recv_max_early_data;
+
+    return 1;
+}
+
+uint32_t SSL_get_recv_max_early_data(const SSL *s)
+{
+    return s->recv_max_early_data;
+}
+
 __owur unsigned int ssl_get_max_send_fragment(const SSL *ssl)
 {
     /* Return any active Max Fragment Len extension */
@@ -5428,4 +5532,20 @@ int SSL_CTX_set_session_ticket_cb(SSL_CTX *ctx,
     ctx->decrypt_ticket_cb = dec_cb;
     ctx->ticket_cb_data = arg;
     return 1;
+}
+
+void SSL_CTX_set_allow_early_data_cb(SSL_CTX *ctx,
+                                     SSL_allow_early_data_cb_fn cb,
+                                     void *arg)
+{
+    ctx->allow_early_data_cb = cb;
+    ctx->allow_early_data_cb_data = arg;
+}
+
+void SSL_set_allow_early_data_cb(SSL *s,
+                                 SSL_allow_early_data_cb_fn cb,
+                                 void *arg)
+{
+    s->allow_early_data_cb = cb;
+    s->allow_early_data_cb_data = arg;
 }

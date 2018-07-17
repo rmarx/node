@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2002-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -64,7 +64,9 @@ const EC_METHOD *EC_GF2m_simple_method(void)
         ec_key_simple_generate_public_key,
         0, /* keycopy */
         0, /* keyfinish */
-        ecdh_simple_compute_key
+        ecdh_simple_compute_key,
+        0, /* field_inverse_mod_ord */
+        0  /* blind_coordinates */
     };
 
     return &ret;
@@ -311,6 +313,7 @@ int ec_GF2m_simple_point_copy(EC_POINT *dest, const EC_POINT *src)
     if (!BN_copy(dest->Z, src->Z))
         return 0;
     dest->Z_is_one = src->Z_is_one;
+    dest->curve_name = src->curve_name;
 
     return 1;
 }

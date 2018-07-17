@@ -115,3 +115,7 @@ icu_config.gypi
 deps/uv/.github/
 deps/uv/docs/code/
 deps/uv/docs/src/guide/
+
+# robin local dev machine
+deps/openssl/openssl_old
+deps/openssl/openssl_old2_draft28

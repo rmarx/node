@@ -24,8 +24,14 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CONSTRUCT_CA_NAMES, 0), "construct_ca_names"},
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CONSTRUCT_KEY_EXCHANGE_TBS, 0),
      "construct_key_exchange_tbs"},
+    {ERR_PACK(ERR_LIB_SSL, SSL_F_CONSTRUCT_STATEFUL_TICKET, 0),
+     "construct_stateful_ticket"},
+    {ERR_PACK(ERR_LIB_SSL, SSL_F_CONSTRUCT_STATELESS_TICKET, 0),
+     "construct_stateless_ticket"},
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CREATE_SYNTHETIC_MESSAGE_HASH, 0),
      "create_synthetic_message_hash"},
+    {ERR_PACK(ERR_LIB_SSL, SSL_F_CREATE_TICKET_PREQUEL, 0),
+     "create_ticket_prequel"},
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CT_MOVE_SCTS, 0), "ct_move_scts"},
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CT_STRICT, 0), "ct_strict"},
     {ERR_PACK(ERR_LIB_SSL, SSL_F_CUSTOM_EXT_ADD, 0), "custom_ext_add"},
@@ -720,6 +726,8 @@ static const ERR_STRING_DATA SSL_str_functs[] = {
 };
 
 static const ERR_STRING_DATA SSL_str_reasons[] = {
+    {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_APPLICATION_DATA_AFTER_CLOSE_NOTIFY),
+    "application data after close notify"},
     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_APP_DATA_IN_HANDSHAKE),
     "app data in handshake"},
     {ERR_PACK(ERR_LIB_SSL, 0, SSL_R_ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT),

@@ -1162,7 +1162,7 @@ __owur static int ecp_nistz256_points_mul(const EC_GROUP *group,
         return 0;
     }
 
-    if (group->meth != r->meth) {
+    if (!ec_point_is_compat(r, group)) {
         ECerr(EC_F_ECP_NISTZ256_POINTS_MUL, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -1171,7 +1171,7 @@ __owur static int ecp_nistz256_points_mul(const EC_GROUP *group,
         return EC_POINT_set_to_infinity(group, r);
 
     for (j = 0; j < num; j++) {
-        if (group->meth != points[j]->meth) {
+        if (!ec_point_is_compat(points[j], group)) {
             ECerr(EC_F_ECP_NISTZ256_POINTS_MUL, EC_R_INCOMPATIBLE_OBJECTS);
             return 0;
         }
@@ -1512,7 +1512,7 @@ void ecp_nistz256_ord_sqr_mont(BN_ULONG res[P256_LIMBS],
                                int rep);
 
 static int ecp_nistz256_inv_mod_ord(const EC_GROUP *group, BIGNUM *r,
-                                    BIGNUM *x, BN_CTX *ctx)
+                                    const BIGNUM *x, BN_CTX *ctx)
 {
     /* RR = 2^512 mod ord(p256) */
     static const BN_ULONG RR[P256_LIMBS]  = {
@@ -1730,7 +1730,8 @@ const EC_METHOD *EC_GFp_nistz256_method(void)
         0, /* keycopy */
         0, /* keyfinish */
         ecdh_simple_compute_key,
-        ecp_nistz256_inv_mod_ord                    /* can be #define-d NULL */
+        ecp_nistz256_inv_mod_ord,                   /* can be #define-d NULL */
+        0                                           /* blind_coordinates */
     };
 
     return &ret;

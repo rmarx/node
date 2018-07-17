@@ -26,7 +26,10 @@ int ERR_load_SSL_strings(void);
 # define SSL_F_CIPHERSUITE_CB                             622
 # define SSL_F_CONSTRUCT_CA_NAMES                         552
 # define SSL_F_CONSTRUCT_KEY_EXCHANGE_TBS                 553
+# define SSL_F_CONSTRUCT_STATEFUL_TICKET                  636
+# define SSL_F_CONSTRUCT_STATELESS_TICKET                 637
 # define SSL_F_CREATE_SYNTHETIC_MESSAGE_HASH              539
+# define SSL_F_CREATE_TICKET_PREQUEL                      638
 # define SSL_F_CT_MOVE_SCTS                               345
 # define SSL_F_CT_STRICT                                  349
 # define SSL_F_CUSTOM_EXT_ADD                             554
@@ -446,6 +449,7 @@ int ERR_load_SSL_strings(void);
 /*
  * SSL reason codes.
  */
+# define SSL_R_APPLICATION_DATA_AFTER_CLOSE_NOTIFY        291
 # define SSL_R_APP_DATA_IN_HANDSHAKE                      100
 # define SSL_R_ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT 272
 # define SSL_R_AT_LEAST_TLS_1_0_NEEDED_IN_FIPS_MODE       143

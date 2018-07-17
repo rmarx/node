@@ -22,6 +22,7 @@ our %config = (
   HASHBANGPERL => "/usr/bin/env perl",
   LDFLAGS => [  ],
   LDLIBS => [  ],
+  PERL => "/usr/bin/perl",
   RANLIB => "ranlib -X32",
   RC => "windres",
   b32 => "1",
@@ -33,7 +34,7 @@ our %config = (
   build_infos => [ "./build.info", "crypto/build.info", "ssl/build.info", "engines/build.info", "apps/build.info", "test/build.info", "util/build.info", "tools/build.info", "fuzz/build.info", "crypto/objects/build.info", "crypto/md4/build.info", "crypto/md5/build.info", "crypto/sha/build.info", "crypto/mdc2/build.info", "crypto/hmac/build.info", "crypto/ripemd/build.info", "crypto/whrlpool/build.info", "crypto/poly1305/build.info", "crypto/blake2/build.info", "crypto/siphash/build.info", "crypto/sm3/build.info", "crypto/des/build.info", "crypto/aes/build.info", "crypto/rc2/build.info", "crypto/rc4/build.info", "crypto/idea/build.info", "crypto/aria/build.info", "crypto/bf/build.info", "crypto/cast/build.info", "crypto/camellia/build.info", "crypto/seed/build.info", "crypto/sm4/build.info", "crypto/chacha/build.info", "crypto/modes/build.info", "crypto/bn/build.info", "crypto/ec/build.info", "crypto/rsa/build.info", "crypto/dsa/build.info", "crypto/dh/build.info", "crypto/sm2/build.info", "crypto/dso/build.info", "crypto/engine/build.info", "crypto/buffer/build.info", "crypto/bio/build.info", "crypto/stack/build.info", "crypto/lhash/build.info", "crypto/rand/build.info", "crypto/err/build.info", "crypto/evp/build.info", "crypto/asn1/build.info", "crypto/pem/build.info", "crypto/x509/build.info", "crypto/x509v3/build.info", "crypto/conf/build.info", "crypto/txt_db/build.info", "crypto/pkcs7/build.info", "crypto/pkcs12/build.info", "crypto/ocsp/build.info", "crypto/ui/build.info", "crypto/cms/build.info", "crypto/ts/build.info", "crypto/srp/build.info", "crypto/cmac/build.info", "crypto/ct/build.info", "crypto/async/build.info", "crypto/kdf/build.info", "crypto/store/build.info", "test/ossl_shim/build.info" ],
   build_type => "release",
   builddir => ".",
-  cflags => [ "-Wa,--noexecstack", "-Qunused-arguments" ],
+  cflags => [ "-Wa,--noexecstack" ],
   conf_files => [ "Configurations/00-base-templates.conf", "Configurations/10-main.conf", "Configurations/shared-info.pl" ],
   cppflags => [  ],
   cxxflags => [  ],
@@ -57,10 +58,9 @@ our %config = (
   openssl_thread_defines => [ "OPENSSL_THREADS" ],
   openssldir => "",
   options => "enable-tls1_3 no-afalgeng no-asan no-comp no-crypto-mdebug no-crypto-mdebug-backtrace no-devcryptoeng no-dynamic-engine no-ec_nistp_64_gcc_128 no-egd no-external-tests no-fuzz-afl no-fuzz-libfuzzer no-heartbeats no-md2 no-msan no-rc5 no-sctp no-shared no-ssl-trace no-ssl3 no-ssl3-method no-tls13downgrade no-ubsan no-unit-test no-weak-ssl-ciphers no-zlib no-zlib-dynamic",
-  perl => "/usr/local/Cellar/perl/5.24.0_1/bin/perl",
-  perl_archname => "darwin-thread-multi-2level",
-  perl_cmd => "/usr/local/Cellar/perl/5.24.0_1/bin/perl",
-  perl_version => "5.24.0",
+  perl_archname => "x86_64-linux-gnu-thread-multi",
+  perl_cmd => "/usr/bin/perl",
+  perl_version => "5.22.1",
   perlargv => [ "no-shared", "no-comp", "no-ssl3", "no-afalgeng", "enable-tls1_3", "aix-gcc" ],
   perlenv => {
       "AR" => undef,
@@ -109,8 +109,8 @@ our %config = (
   sourcedir => ".",
   target => "aix-gcc",
   tdirs => [ "ossl_shim" ],
-  version => "1.1.1-pre7-dev",
-  version_num => "0x10101007L",
+  version => "1.1.1-pre9-dev",
+  version_num => "0x10101009L",
 );
 
 our %target = (
@@ -121,7 +121,7 @@ our %target = (
   HASHBANGPERL => "/usr/bin/env perl",
   RANLIB => "ranlib -X32",
   RC => "windres",
-  _conf_fname_int => [ "Configurations/00-base-templates.conf", "Configurations/00-base-templates.conf", "Configurations/00-base-templates.conf", "Configurations/10-main.conf", "Configurations/shared-info.pl" ],
+  _conf_fname_int => [ "Configurations/00-base-templates.conf", "Configurations/00-base-templates.conf", "Configurations/10-main.conf", "Configurations/00-base-templates.conf", "Configurations/10-main.conf", "Configurations/shared-info.pl" ],
   aes_asm_src => "aes_core.c aes_cbc.c aes-ppc.s vpaes-ppc.s aesp8-ppc.s",
   aes_obj => "aes_core.o aes_cbc.o aes-ppc.o vpaes-ppc.o aesp8-ppc.o",
   apps_aux_src => "",
@@ -129,7 +129,6 @@ our %target = (
   apps_obj => "",
   bf_asm_src => "bf_enc.c",
   bf_obj => "bf_enc.o",
-  bin_lflags => "-Wl,-bsvr4",
   bn_asm_src => "bn-ppc.s ppc-mont.s",
   bn_obj => "bn-ppc.o ppc-mont.o",
   bn_ops => "BN_LLONG RC4_CHAR",
@@ -159,17 +158,18 @@ our %target = (
   includes => [  ],
   keccak1600_asm_src => "keccak1600.c",
   keccak1600_obj => "keccak1600.o",
-  lflags => "",
+  lflags => "-Wl,-bsvr4",
   lib_cflags => "",
   lib_cppflags => "-DB_ENDIAN",
   lib_defines => [  ],
+  lib_extension => "",
   md5_asm_src => "",
   md5_obj => "",
   modes_asm_src => "ghashp8-ppc.s",
   modes_obj => "ghashp8-ppc.o",
   module_cflags => "",
   module_cxxflags => "",
-  module_ldflags => "-shared -static-libgcc -Wl,-G -Wl,-bexpall,-bnolibpath,-bM:SRE",
+  module_ldflags => "-Wl,-G,-bsymbolic,-bexpall",
   padlock_asm_src => "",
   padlock_obj => "",
   perlasm_scheme => "aix32",
@@ -184,12 +184,13 @@ our %target = (
   sha1_asm_src => "sha1-ppc.s sha256-ppc.s sha512-ppc.s sha256p8-ppc.s sha512p8-ppc.s",
   sha1_obj => "sha1-ppc.o sha256-ppc.o sha512-ppc.o sha256p8-ppc.o sha512p8-ppc.o",
   shared_cflag => "",
+  shared_defflag => "-Wl,-bE:",
   shared_defines => [  ],
   shared_extension => ".so.\$(SHLIB_VERSION_NUMBER)",
-  shared_extension_simple => ".so",
-  shared_ldflag => "-shared -static-libgcc -Wl,-G -Wl,-bexpall,-bnolibpath,-bM:SRE",
+  shared_extension_simple => "",
+  shared_ldflag => "-shared -static-libgcc -Wl,-G,-bsymbolic",
   shared_rcflag => "",
-  shared_target => "aix-shared",
+  shared_target => "self",
   sys_id => "AIX",
   template => "1",
   thread_defines => [  ],
@@ -708,9 +709,17 @@ our %unified_info = (
                 [
                     "configdata.pm",
                 ],
+            "libcrypto.map" =>
+                [
+                    "util/libcrypto.num",
+                ],
             "libssl" =>
                 [
                     "libcrypto",
+                ],
+            "libssl.map" =>
+                [
+                    "util/libssl.num",
                 ],
             "test/aborttest" =>
                 [
@@ -1047,11 +1056,6 @@ our %unified_info = (
                     "libcrypto",
                     "libssl",
                 ],
-            "test/buildtest_sm2" =>
-                [
-                    "libcrypto",
-                    "libssl",
-                ],
             "test/buildtest_srp" =>
                 [
                     "libcrypto",
@@ -1275,6 +1279,11 @@ our %unified_info = (
                     "libcrypto",
                     "test/libtestutil.a",
                 ],
+            "test/errtest" =>
+                [
+                    "libcrypto",
+                    "test/libtestutil.a",
+                ],
             "test/evp_extra_test" =>
                 [
                     "libcrypto",
@@ -1447,14 +1456,9 @@ our %unified_info = (
                     "libcrypto.a",
                     "test/libtestutil.a",
                 ],
-            "test/sm2crypttest" =>
+            "test/sm2_internal_test" =>
                 [
-                    "libcrypto",
-                    "test/libtestutil.a",
-                ],
-            "test/sm2sigtest" =>
-                [
-                    "libcrypto",
+                    "libcrypto.a",
                     "test/libtestutil.a",
                 ],
             "test/sm4_internal_test" =>
@@ -2503,6 +2507,18 @@ our %unified_info = (
                 [
                     "include/openssl/opensslconf.h.in",
                 ],
+            "libcrypto.map" =>
+                [
+                    "util/mkdef.pl",
+                    "crypto",
+                    "aix",
+                ],
+            "libssl.map" =>
+                [
+                    "util/mkdef.pl",
+                    "ssl",
+                    "aix",
+                ],
             "test/buildtest_aes.c" =>
                 [
                     "test/generate_buildtest.pl",
@@ -2767,11 +2783,6 @@ our %unified_info = (
                 [
                     "test/generate_buildtest.pl",
                     "sha",
-                ],
-            "test/buildtest_sm2.c" =>
-                [
-                    "test/generate_buildtest.pl",
-                    "sm2",
                 ],
             "test/buildtest_srp.c" =>
                 [
@@ -6630,6 +6641,12 @@ our %unified_info = (
                     "crypto/include",
                     "include",
                 ],
+            "crypto/sm2/sm2_pmeth.o" =>
+                [
+                    ".",
+                    "crypto/include",
+                    "include",
+                ],
             "crypto/sm2/sm2_sign.o" =>
                 [
                     ".",
@@ -6919,6 +6936,12 @@ our %unified_info = (
                     "include",
                 ],
             "crypto/x509/x509_lu.o" =>
+                [
+                    ".",
+                    "crypto/include",
+                    "include",
+                ],
+            "crypto/x509/x509_meth.o" =>
                 [
                     ".",
                     "crypto/include",
@@ -7838,10 +7861,6 @@ our %unified_info = (
                 [
                     "include",
                 ],
-            "test/buildtest_sm2.o" =>
-                [
-                    "include",
-                ],
             "test/buildtest_srp.o" =>
                 [
                     "include",
@@ -8030,6 +8049,10 @@ our %unified_info = (
                 [
                     "include",
                 ],
+            "test/errtest.o" =>
+                [
+                    "include",
+                ],
             "test/evp_extra_test.o" =>
                 [
                     "include",
@@ -8174,13 +8197,10 @@ our %unified_info = (
                     "include",
                     "crypto/include",
                 ],
-            "test/sm2crypttest.o" =>
+            "test/sm2_internal_test.o" =>
                 [
                     "include",
-                ],
-            "test/sm2sigtest.o" =>
-                [
-                    "include",
+                    "crypto/include",
                 ],
             "test/sm4_internal_test.o" =>
                 [
@@ -8465,7 +8485,6 @@ our %unified_info = (
             "test/buildtest_safestack",
             "test/buildtest_seed",
             "test/buildtest_sha",
-            "test/buildtest_sm2",
             "test/buildtest_srp",
             "test/buildtest_srtp",
             "test/buildtest_ssl",
@@ -8509,6 +8528,7 @@ our %unified_info = (
             "test/ecstresstest",
             "test/ectest",
             "test/enginetest",
+            "test/errtest",
             "test/evp_extra_test",
             "test/evp_test",
             "test/exdatatest",
@@ -8542,8 +8562,7 @@ our %unified_info = (
             "test/secmemtest",
             "test/servername_test",
             "test/siphash_internal_test",
-            "test/sm2crypttest",
-            "test/sm2sigtest",
+            "test/sm2_internal_test",
             "test/sm4_internal_test",
             "test/srptest",
             "test/ssl_cert_table_internal_test",
@@ -8659,9 +8678,11 @@ our %unified_info = (
                 ],
             "libcrypto" =>
                 [
+                    "libcrypto.map",
                 ],
             "libssl" =>
                 [
+                    "libssl.map",
                 ],
             "test/aborttest" =>
                 [
@@ -8864,9 +8885,6 @@ our %unified_info = (
             "test/buildtest_sha" =>
                 [
                 ],
-            "test/buildtest_sm2" =>
-                [
-                ],
             "test/buildtest_srp" =>
                 [
                 ],
@@ -8996,6 +9014,9 @@ our %unified_info = (
             "test/enginetest" =>
                 [
                 ],
+            "test/errtest" =>
+                [
+                ],
             "test/evp_extra_test" =>
                 [
                 ],
@@ -9098,10 +9119,7 @@ our %unified_info = (
             "test/siphash_internal_test" =>
                 [
                 ],
-            "test/sm2crypttest" =>
-                [
-                ],
-            "test/sm2sigtest" =>
+            "test/sm2_internal_test" =>
                 [
                 ],
             "test/sm4_internal_test" =>
@@ -11611,6 +11629,10 @@ our %unified_info = (
                 [
                     "crypto/sm2/sm2_err.c",
                 ],
+            "crypto/sm2/sm2_pmeth.o" =>
+                [
+                    "crypto/sm2/sm2_pmeth.c",
+                ],
             "crypto/sm2/sm2_sign.o" =>
                 [
                     "crypto/sm2/sm2_sign.c",
@@ -11806,6 +11828,10 @@ our %unified_info = (
             "crypto/x509/x509_lu.o" =>
                 [
                     "crypto/x509/x509_lu.c",
+                ],
+            "crypto/x509/x509_meth.o" =>
+                [
+                    "crypto/x509/x509_meth.c",
                 ],
             "crypto/x509/x509_obj.o" =>
                 [
@@ -12696,6 +12722,7 @@ our %unified_info = (
                     "crypto/siphash/siphash_pmeth.o",
                     "crypto/sm2/sm2_crypt.o",
                     "crypto/sm2/sm2_err.o",
+                    "crypto/sm2/sm2_pmeth.o",
                     "crypto/sm2/sm2_sign.o",
                     "crypto/sm2/sm2_za.o",
                     "crypto/sm3/m_sm3.o",
@@ -12745,6 +12772,7 @@ our %unified_info = (
                     "crypto/x509/x509_err.o",
                     "crypto/x509/x509_ext.o",
                     "crypto/x509/x509_lu.o",
+                    "crypto/x509/x509_meth.o",
                     "crypto/x509/x509_obj.o",
                     "crypto/x509/x509_r2x.o",
                     "crypto/x509/x509_req.o",
@@ -13568,14 +13596,6 @@ our %unified_info = (
                 [
                     "test/buildtest_sha.c",
                 ],
-            "test/buildtest_sm2" =>
-                [
-                    "test/buildtest_sm2.o",
-                ],
-            "test/buildtest_sm2.o" =>
-                [
-                    "test/buildtest_sm2.c",
-                ],
             "test/buildtest_srp" =>
                 [
                     "test/buildtest_srp.o",
@@ -13927,6 +13947,14 @@ our %unified_info = (
                 [
                     "test/enginetest.c",
                 ],
+            "test/errtest" =>
+                [
+                    "test/errtest.o",
+                ],
+            "test/errtest.o" =>
+                [
+                    "test/errtest.c",
+                ],
             "test/evp_extra_test" =>
                 [
                     "test/evp_extra_test.o",
@@ -14211,21 +14239,13 @@ our %unified_info = (
                 [
                     "test/siphash_internal_test.c",
                 ],
-            "test/sm2crypttest" =>
+            "test/sm2_internal_test" =>
                 [
-                    "test/sm2crypttest.o",
+                    "test/sm2_internal_test.o",
                 ],
-            "test/sm2crypttest.o" =>
+            "test/sm2_internal_test.o" =>
                 [
-                    "test/sm2crypttest.c",
-                ],
-            "test/sm2sigtest" =>
-                [
-                    "test/sm2sigtest.o",
-                ],
-            "test/sm2sigtest.o" =>
-                [
-                    "test/sm2sigtest.c",
+                    "test/sm2_internal_test.c",
                 ],
             "test/sm4_internal_test" =>
                 [
@@ -14534,6 +14554,7 @@ my @makevars = (
     'LDLIBS',
     'MT',
     'MTFLAGS',
+    'PERL',
     'RANLIB',
     'RC',
     'RCFLAGS',
@@ -14667,7 +14688,7 @@ _____
     if ($dump || $cmdline) {
         print "\nCommand line (with current working directory = $here):\n\n";
         print '    ',join(' ',
-                          $config{perl},
+                          $config{PERL},
                           catfile($config{sourcedir}, 'Configure'),
                           @{$config{perlargv}}), "\n";
         print "\nPerl information:\n\n";

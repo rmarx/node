@@ -265,7 +265,7 @@ sha512_block_data_order:
 	teq	r9,#148
 
 	ldr	r12,[sp,#16+0]	@ c.lo
-#if __ARM_ARCH__>=7
+#ifdef	__thumb2__
 	it	eq			@ Thumb2 thing, sanity check in ARM
 #endif
 	orreq	r14,r14,#1
@@ -405,7 +405,7 @@ sha512_block_data_order:
 	teq	r9,#23
 
 	ldr	r12,[sp,#16+0]	@ c.lo
-#if __ARM_ARCH__>=7
+#ifdef	__thumb2__
 	it	eq			@ Thumb2 thing, sanity check in ARM
 #endif
 	orreq	r14,r14,#1
@@ -442,7 +442,7 @@ sha512_block_data_order:
 	adc	r6,r6,r4		@ h += T
 	tst	r14,#1
 	add	r14,r14,#8
-#if __ARM_ARCH__>=7
+#ifdef	__thumb2__
 	ittt	eq			@ Thumb2 thing, sanity check in ARM
 #endif
 	ldreq	r9,[sp,#184+0]

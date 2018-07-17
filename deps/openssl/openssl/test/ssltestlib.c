@@ -680,12 +680,14 @@ int create_ssl_objects(SSL_CTX *serverctx, SSL_CTX *clientctx, SSL **sssl,
     return 0;
 }
 
-int create_ssl_connection(SSL *serverssl, SSL *clientssl, int want)
+/*
+ * Create an SSL connection, but does not ready any post-handshake
+ * NewSessionTicket messages.
+ */
+int create_bare_ssl_connection(SSL *serverssl, SSL *clientssl, int want)
 {
     int retc = -1, rets = -1, err, abortctr = 0;
     int clienterr = 0, servererr = 0;
-    unsigned char buf;
-    size_t readbytes;
     int isdtls = SSL_is_dtls(serverssl);
 
     do {
@@ -738,16 +740,35 @@ int create_ssl_connection(SSL *serverssl, SSL *clientssl, int want)
         }
     } while (retc <=0 || rets <= 0);
 
+    return 1;
+}
+
+/*
+ * Create an SSL connection including any post handshake NewSessionTicket
+ * messages.
+ */
+int create_ssl_connection(SSL *serverssl, SSL *clientssl, int want)
+{
+    int i;
+    unsigned char buf;
+    size_t readbytes;
+
+    if (!create_bare_ssl_connection(serverssl, clientssl, want))
+        return 0;
+
     /*
      * We attempt to read some data on the client side which we expect to fail.
      * This will ensure we have received the NewSessionTicket in TLSv1.3 where
-     * appropriate.
+     * appropriate. We do this twice because there are 2 NewSesionTickets.
      */
-    if (SSL_read_ex(clientssl, &buf, sizeof(buf), &readbytes) > 0) {
-        if (!TEST_ulong_eq(readbytes, 0))
+    for (i = 0; i < 2; i++) {
+        if (SSL_read_ex(clientssl, &buf, sizeof(buf), &readbytes) > 0) {
+            if (!TEST_ulong_eq(readbytes, 0))
+                return 0;
+        } else if (!TEST_int_eq(SSL_get_error(clientssl, 0),
+                                SSL_ERROR_WANT_READ)) {
             return 0;
-    } else if (!TEST_int_eq(SSL_get_error(clientssl, 0), SSL_ERROR_WANT_READ)) {
-        return 0;
+        }
     }
 
     return 1;

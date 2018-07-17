@@ -140,6 +140,8 @@ int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
     if (dest == src)
         return 1;
 
+    dest->curve_name = src->curve_name;
+
     /* Copy precomputed */
     dest->pre_comp_type = src->pre_comp_type;
     switch (src->pre_comp_type) {
@@ -207,7 +209,6 @@ int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
             return 0;
     }
 
-    dest->curve_name = src->curve_name;
     dest->asn1_flag = src->asn1_flag;
     dest->asn1_form = src->asn1_form;
 
@@ -572,6 +573,7 @@ EC_POINT *EC_POINT_new(const EC_GROUP *group)
     }
 
     ret->meth = group->meth;
+    ret->curve_name = group->curve_name;
 
     if (!ret->meth->point_init(ret)) {
         OPENSSL_free(ret);
@@ -609,7 +611,10 @@ int EC_POINT_copy(EC_POINT *dest, const EC_POINT *src)
         ECerr(EC_F_EC_POINT_COPY, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (dest->meth != src->meth) {
+    if (dest->meth != src->meth
+            || (dest->curve_name != src->curve_name
+                && dest->curve_name != 0
+                && src->curve_name != 0)) {
         ECerr(EC_F_EC_POINT_COPY, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -666,7 +671,7 @@ int EC_POINT_set_Jprojective_coordinates_GFp(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_SET_JPROJECTIVE_COORDINATES_GFP,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -685,7 +690,7 @@ int EC_POINT_get_Jprojective_coordinates_GFp(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_GET_JPROJECTIVE_COORDINATES_GFP,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -703,7 +708,7 @@ int EC_POINT_set_affine_coordinates_GFp(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_SET_AFFINE_COORDINATES_GFP,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -729,7 +734,7 @@ int EC_POINT_set_affine_coordinates_GF2m(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_SET_AFFINE_COORDINATES_GF2M,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -755,7 +760,7 @@ int EC_POINT_get_affine_coordinates_GFp(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_GET_AFFINE_COORDINATES_GFP,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -773,7 +778,7 @@ int EC_POINT_get_affine_coordinates_GF2m(const EC_GROUP *group,
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_GET_AFFINE_COORDINATES_GF2M,
               EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
@@ -789,8 +794,8 @@ int EC_POINT_add(const EC_GROUP *group, EC_POINT *r, const EC_POINT *a,
         ECerr(EC_F_EC_POINT_ADD, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if ((group->meth != r->meth) || (r->meth != a->meth)
-        || (a->meth != b->meth)) {
+    if (!ec_point_is_compat(r, group) || !ec_point_is_compat(a, group)
+        || !ec_point_is_compat(b, group)) {
         ECerr(EC_F_EC_POINT_ADD, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -804,7 +809,7 @@ int EC_POINT_dbl(const EC_GROUP *group, EC_POINT *r, const EC_POINT *a,
         ECerr(EC_F_EC_POINT_DBL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if ((group->meth != r->meth) || (r->meth != a->meth)) {
+    if (!ec_point_is_compat(r, group) || !ec_point_is_compat(a, group)) {
         ECerr(EC_F_EC_POINT_DBL, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -817,7 +822,7 @@ int EC_POINT_invert(const EC_GROUP *group, EC_POINT *a, BN_CTX *ctx)
         ECerr(EC_F_EC_POINT_INVERT, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != a->meth) {
+    if (!ec_point_is_compat(a, group)) {
         ECerr(EC_F_EC_POINT_INVERT, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -831,7 +836,7 @@ int EC_POINT_is_at_infinity(const EC_GROUP *group, const EC_POINT *point)
               ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_IS_AT_INFINITY, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -852,7 +857,7 @@ int EC_POINT_is_on_curve(const EC_GROUP *group, const EC_POINT *point,
         ECerr(EC_F_EC_POINT_IS_ON_CURVE, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_IS_ON_CURVE, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -866,7 +871,7 @@ int EC_POINT_cmp(const EC_GROUP *group, const EC_POINT *a, const EC_POINT *b,
         ECerr(EC_F_EC_POINT_CMP, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return -1;
     }
-    if ((group->meth != a->meth) || (a->meth != b->meth)) {
+    if (!ec_point_is_compat(a, group) || !ec_point_is_compat(b, group)) {
         ECerr(EC_F_EC_POINT_CMP, EC_R_INCOMPATIBLE_OBJECTS);
         return -1;
     }
@@ -879,7 +884,7 @@ int EC_POINT_make_affine(const EC_GROUP *group, EC_POINT *point, BN_CTX *ctx)
         ECerr(EC_F_EC_POINT_MAKE_AFFINE, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
-    if (group->meth != point->meth) {
+    if (!ec_point_is_compat(point, group)) {
         ECerr(EC_F_EC_POINT_MAKE_AFFINE, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -896,7 +901,7 @@ int EC_POINTs_make_affine(const EC_GROUP *group, size_t num,
         return 0;
     }
     for (i = 0; i < num; i++) {
-        if (group->meth != points[i]->meth) {
+        if (!ec_point_is_compat(points[i], group)) {
             ECerr(EC_F_EC_POINTS_MAKE_AFFINE, EC_R_INCOMPATIBLE_OBJECTS);
             return 0;
         }
@@ -1012,11 +1017,83 @@ int ec_group_simple_order_bits(const EC_GROUP *group)
     return BN_num_bits(group->order);
 }
 
-int EC_GROUP_do_inverse_ord(const EC_GROUP *group, BIGNUM *res,
-                            BIGNUM *x, BN_CTX *ctx)
+static int ec_field_inverse_mod_ord(const EC_GROUP *group, BIGNUM *r,
+                                    const BIGNUM *x, BN_CTX *ctx)
+{
+    BIGNUM *e = NULL;
+    BN_CTX *new_ctx = NULL;
+    int ret = 0;
+
+    if (group->mont_data == NULL)
+        return 0;
+
+    if (ctx == NULL && (ctx = new_ctx = BN_CTX_secure_new()) == NULL)
+        return 0;
+
+    BN_CTX_start(ctx);
+    if ((e = BN_CTX_get(ctx)) == NULL)
+        goto err;
+
+    /*-
+     * We want inverse in constant time, therefore we utilize the fact
+     * order must be prime and use Fermats Little Theorem instead.
+     */
+    if (!BN_set_word(e, 2))
+        goto err;
+    if (!BN_sub(e, group->order, e))
+        goto err;
+    /*-
+     * Exponent e is public.
+     * No need for scatter-gather or BN_FLG_CONSTTIME.
+     */
+    if (!BN_mod_exp_mont(r, x, e, group->order, ctx, group->mont_data))
+        goto err;
+
+    ret = 1;
+
+ err:
+    if (ctx != NULL)
+        BN_CTX_end(ctx);
+    BN_CTX_free(new_ctx);
+    return ret;
+}
+
+/*-
+ * Default behavior, if group->meth->field_inverse_mod_ord is NULL:
+ * - When group->order is even, this function returns an error.
+ * - When group->order is otherwise composite, the correctness
+ *   of the output is not guaranteed.
+ * - When x is outside the range [1, group->order), the correctness
+ *   of the output is not guaranteed.
+ * - Otherwise, this function returns the multiplicative inverse in the
+ *   range [1, group->order).
+ *
+ * EC_METHODs must implement their own field_inverse_mod_ord for
+ * other functionality.
+ */
+int ec_group_do_inverse_ord(const EC_GROUP *group, BIGNUM *res,
+                            const BIGNUM *x, BN_CTX *ctx)
 {
     if (group->meth->field_inverse_mod_ord != NULL)
         return group->meth->field_inverse_mod_ord(group, res, x, ctx);
     else
-        return 0;
+        return ec_field_inverse_mod_ord(group, res, x, ctx);
+}
+
+/*-
+ * Coordinate blinding for EC_POINT.
+ *
+ * The underlying EC_METHOD can optionally implement this function:
+ * underlying implementations should return 0 on errors, or 1 on
+ * success.
+ *
+ * This wrapper returns 1 in case the underlying EC_METHOD does not
+ * support coordinate blinding.
+ */
+int ec_point_blind_coordinates(const EC_GROUP *group, EC_POINT *p, BN_CTX *ctx)
+{
+    if (group->meth->blind_coordinates == NULL)
+        return 1; /* ignore if not implemented */
+
+    return group->meth->blind_coordinates(group, p, ctx);
 }

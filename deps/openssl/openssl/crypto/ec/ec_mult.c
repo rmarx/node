@@ -132,10 +132,11 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
                             const BIGNUM *scalar, const EC_POINT *point,
                             BN_CTX *ctx)
 {
-    int i, order_bits, group_top, kbit, pbit, Z_is_one;
+    int i, cardinality_bits, group_top, kbit, pbit, Z_is_one;
     EC_POINT *s = NULL;
     BIGNUM *k = NULL;
     BIGNUM *lambda = NULL;
+    BIGNUM *cardinality = NULL;
     BN_CTX *new_ctx = NULL;
     int ret = 0;
 
@@ -143,8 +144,6 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
         return 0;
 
     BN_CTX_start(ctx);
-
-    order_bits = BN_num_bits(group->order);
 
     s = EC_POINT_new(group);
     if (s == NULL)
@@ -160,18 +159,20 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
 
     EC_POINT_BN_set_flags(s, BN_FLG_CONSTTIME);
 
+    cardinality = BN_CTX_get(ctx);
     lambda = BN_CTX_get(ctx);
     k = BN_CTX_get(ctx);
-    if (k == NULL)
+    if (k == NULL || !BN_mul(cardinality, group->order, group->cofactor, ctx))
         goto err;
 
     /*
-     * Group orders are often on a word boundary.
+     * Group cardinalities are often on a word boundary.
      * So when we pad the scalar, some timing diff might
      * pop if it needs to be expanded due to carries.
      * So expand ahead of time.
      */
-    group_top = bn_get_top(group->order);
+    cardinality_bits = BN_num_bits(cardinality);
+    group_top = bn_get_top(cardinality);
     if ((bn_wexpand(k, group_top + 1) == NULL)
         || (bn_wexpand(lambda, group_top + 1) == NULL))
         goto err;
@@ -181,25 +182,25 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
 
     BN_set_flags(k, BN_FLG_CONSTTIME);
 
-    if ((BN_num_bits(k) > order_bits) || (BN_is_negative(k))) {
+    if ((BN_num_bits(k) > cardinality_bits) || (BN_is_negative(k))) {
         /*-
          * this is an unusual input, and we don't guarantee
          * constant-timeness
          */
-        if (!BN_nnmod(k, k, group->order, ctx))
+        if (!BN_nnmod(k, k, cardinality, ctx))
             goto err;
     }
 
-    if (!BN_add(lambda, k, group->order))
+    if (!BN_add(lambda, k, cardinality))
         goto err;
     BN_set_flags(lambda, BN_FLG_CONSTTIME);
-    if (!BN_add(k, lambda, group->order))
+    if (!BN_add(k, lambda, cardinality))
         goto err;
     /*
-     * lambda := scalar + order
-     * k := scalar + 2*order
+     * lambda := scalar + cardinality
+     * k := scalar + 2*cardinality
      */
-    kbit = BN_is_bit_set(lambda, order_bits);
+    kbit = BN_is_bit_set(lambda, cardinality_bits);
     BN_consttime_swap(kbit, k, lambda, group_top + 1);
 
     group_top = bn_get_top(group->field);
@@ -209,6 +210,17 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
         || (bn_wexpand(r->X, group_top) == NULL)
         || (bn_wexpand(r->Y, group_top) == NULL)
         || (bn_wexpand(r->Z, group_top) == NULL))
+        goto err;
+
+    /*-
+     * Apply coordinate blinding for EC_POINT.
+     *
+     * The underlying EC_METHOD can optionally implement this function:
+     * ec_point_blind_coordinates() returns 0 in case of errors or 1 on
+     * success or if coordinate blinding is not implemented for this
+     * group.
+     */
+    if (!ec_point_blind_coordinates(group, s, ctx))
         goto err;
 
     /* top bit is a 1, in a fixed pos */
@@ -289,7 +301,7 @@ static int ec_mul_consttime(const EC_GROUP *group, EC_POINT *r,
      * This is XOR. pbit tracks the previous bit of k.
      */
 
-    for (i = order_bits - 1; i >= 0; i--) {
+    for (i = cardinality_bits - 1; i >= 0; i--) {
         kbit = BN_is_bit_set(k, i) ^ pbit;
         EC_POINT_CSWAP(kbit, r, s, group_top, Z_is_one);
         if (!EC_POINT_add(group, s, r, s, ctx))
@@ -368,7 +380,7 @@ int ec_wNAF_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *scalar,
                                  * precomputation is not available */
     int ret = 0;
 
-    if (group->meth != r->meth) {
+    if (!ec_point_is_compat(r, group)) {
         ECerr(EC_F_EC_WNAF_MUL, EC_R_INCOMPATIBLE_OBJECTS);
         return 0;
     }
@@ -377,34 +389,36 @@ int ec_wNAF_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *scalar,
         return EC_POINT_set_to_infinity(group, r);
     }
 
-    /*-
-     * Handle the common cases where the scalar is secret, enforcing a constant
-     * time scalar multiplication algorithm.
-     */
-    if ((scalar != NULL) && (num == 0)) {
+    if (!BN_is_zero(group->order) && !BN_is_zero(group->cofactor)) {
         /*-
-         * In this case we want to compute scalar * GeneratorPoint: this
-         * codepath is reached most prominently by (ephemeral) key generation
-         * of EC cryptosystems (i.e. ECDSA keygen and sign setup, ECDH
-         * keygen/first half), where the scalar is always secret. This is why
-         * we ignore if BN_FLG_CONSTTIME is actually set and we always call the
-         * constant time version.
+         * Handle the common cases where the scalar is secret, enforcing a constant
+         * time scalar multiplication algorithm.
          */
-        return ec_mul_consttime(group, r, scalar, NULL, ctx);
-    }
-    if ((scalar == NULL) && (num == 1)) {
-        /*-
-         * In this case we want to compute scalar * GenericPoint: this codepath
-         * is reached most prominently by the second half of ECDH, where the
-         * secret scalar is multiplied by the peer's public point. To protect
-         * the secret scalar, we ignore if BN_FLG_CONSTTIME is actually set and
-         * we always call the constant time version.
-         */
-        return ec_mul_consttime(group, r, scalars[0], points[0], ctx);
+        if ((scalar != NULL) && (num == 0)) {
+            /*-
+             * In this case we want to compute scalar * GeneratorPoint: this
+             * codepath is reached most prominently by (ephemeral) key generation
+             * of EC cryptosystems (i.e. ECDSA keygen and sign setup, ECDH
+             * keygen/first half), where the scalar is always secret. This is why
+             * we ignore if BN_FLG_CONSTTIME is actually set and we always call the
+             * constant time version.
+             */
+            return ec_mul_consttime(group, r, scalar, NULL, ctx);
+        }
+        if ((scalar == NULL) && (num == 1)) {
+            /*-
+             * In this case we want to compute scalar * GenericPoint: this codepath
+             * is reached most prominently by the second half of ECDH, where the
+             * secret scalar is multiplied by the peer's public point. To protect
+             * the secret scalar, we ignore if BN_FLG_CONSTTIME is actually set and
+             * we always call the constant time version.
+             */
+            return ec_mul_consttime(group, r, scalars[0], points[0], ctx);
+        }
     }
 
     for (i = 0; i < num; i++) {
-        if (group->meth != points[i]->meth) {
+        if (!ec_point_is_compat(points[i], group)) {
             ECerr(EC_F_EC_WNAF_MUL, EC_R_INCOMPATIBLE_OBJECTS);
             return 0;
         }

@@ -3431,3 +3431,100 @@ L$x_mask42:
 .quad	0x3ffffffffff,0x3ffffffffff,0x3ffffffffff,0x3ffffffffff
 .byte	80,111,108,121,49,51,48,53,32,102,111,114,32,120,56,54,95,54,52,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .p2align	4
+.globl	_xor128_encrypt_n_pad
+
+.p2align	4
+_xor128_encrypt_n_pad:
+	subq	%rdx,%rsi
+	subq	%rdx,%rdi
+	movq	%rcx,%r10
+	shrq	$4,%rcx
+	jz	L$tail_enc
+	nop
+L$oop_enc_xmm:
+	movdqu	(%rsi,%rdx,1),%xmm0
+	pxor	(%rdx),%xmm0
+	movdqu	%xmm0,(%rdi,%rdx,1)
+	movdqa	%xmm0,(%rdx)
+	leaq	16(%rdx),%rdx
+	decq	%rcx
+	jnz	L$oop_enc_xmm
+
+	andq	$15,%r10
+	jz	L$done_enc
+
+L$tail_enc:
+	movq	$16,%rcx
+	subq	%r10,%rcx
+	xorl	%eax,%eax
+L$oop_enc_byte:
+	movb	(%rsi,%rdx,1),%al
+	xorb	(%rdx),%al
+	movb	%al,(%rdi,%rdx,1)
+	movb	%al,(%rdx)
+	leaq	1(%rdx),%rdx
+	decq	%r10
+	jnz	L$oop_enc_byte
+
+	xorl	%eax,%eax
+L$oop_enc_pad:
+	movb	%al,(%rdx)
+	leaq	1(%rdx),%rdx
+	decq	%rcx
+	jnz	L$oop_enc_pad
+
+L$done_enc:
+	movq	%rdx,%rax
+	.byte	0xf3,0xc3
+
+
+.globl	_xor128_decrypt_n_pad
+
+.p2align	4
+_xor128_decrypt_n_pad:
+	subq	%rdx,%rsi
+	subq	%rdx,%rdi
+	movq	%rcx,%r10
+	shrq	$4,%rcx
+	jz	L$tail_dec
+	nop
+L$oop_dec_xmm:
+	movdqu	(%rsi,%rdx,1),%xmm0
+	movdqa	(%rdx),%xmm1
+	pxor	%xmm0,%xmm1
+	movdqu	%xmm1,(%rdi,%rdx,1)
+	movdqa	%xmm0,(%rdx)
+	leaq	16(%rdx),%rdx
+	decq	%rcx
+	jnz	L$oop_dec_xmm
+
+	pxor	%xmm1,%xmm1
+	andq	$15,%r10
+	jz	L$done_dec
+
+L$tail_dec:
+	movq	$16,%rcx
+	subq	%r10,%rcx
+	xorl	%eax,%eax
+	xorq	%r11,%r11
+L$oop_dec_byte:
+	movb	(%rsi,%rdx,1),%r11b
+	movb	(%rdx),%al
+	xorb	%r11b,%al
+	movb	%al,(%rdi,%rdx,1)
+	movb	%r11b,(%rdx)
+	leaq	1(%rdx),%rdx
+	decq	%r10
+	jnz	L$oop_dec_byte
+
+	xorl	%eax,%eax
+L$oop_dec_pad:
+	movb	%al,(%rdx)
+	leaq	1(%rdx),%rdx
+	decq	%rcx
+	jnz	L$oop_dec_pad
+
+L$done_dec:
+	movq	%rdx,%rax
+	.byte	0xf3,0xc3
+

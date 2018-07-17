@@ -383,11 +383,6 @@
 # define SSL_PKEY_ED25519        7
 # define SSL_PKEY_ED448          8
 # define SSL_PKEY_NUM            9
-/*
- * Pseudo-constant. GOST cipher suites can use different certs for 1
- * SSL_CIPHER. So let's see which one we have in fact.
- */
-# define SSL_PKEY_GOST_EC SSL_PKEY_NUM+1
 
 /*-
  * SSL_kRSA <- RSA_ENC
@@ -475,6 +470,8 @@ struct ssl_method_st {
     long (*ssl_ctx_callback_ctrl) (SSL_CTX *s, int cb_id, void (*fp) (void));
 };
 
+# define TLS13_MAX_RESUMPTION_PSK_LENGTH      64
+
 /*-
  * Lets make this into an ASN.1 type structure as follows
  * SSL_SESSION_ID ::= SEQUENCE {
@@ -510,9 +507,9 @@ struct ssl_session_st {
     unsigned char early_secret[EVP_MAX_MD_SIZE];
     /*
      * For <=TLS1.2 this is the master_key. For TLS1.3 this is the resumption
-     * master secret
+     * PSK
      */
-    unsigned char master_key[TLS13_MAX_RESUMPTION_MASTER_LENGTH];
+    unsigned char master_key[TLS13_MAX_RESUMPTION_PSK_LENGTH];
     /* session_id - valid? */
     size_t session_id_length;
     unsigned char session_id[SSL_MAX_SSL_SESSION_ID_LENGTH];
@@ -572,8 +569,6 @@ struct ssl_session_st {
         /* Session lifetime hint in seconds */
         unsigned long tick_lifetime_hint;
         uint32_t tick_age_add;
-        unsigned char *tick_nonce;
-        size_t tick_nonce_len;
         int tick_identity;
         /* Max number of bytes that can be sent as early data */
         uint32_t max_early_data;
@@ -1037,8 +1032,17 @@ struct ssl_ctx_st {
      */
     SSL_CTX_keylog_cb_func keylog_callback;
 
-    /* The maximum number of bytes that can be sent as early data */
+    /*
+     * The maximum number of bytes advertised in session tickets that can be
+     * sent as early data.
+     */
     uint32_t max_early_data;
+
+    /*
+     * The maximum number of bytes of early data that a server will tolerate
+     * (which should be at least as much as max_early_data).
+     */
+    uint32_t recv_max_early_data;
 
     /* TLS1.3 padding callback */
     size_t (*record_padding_cb)(SSL *s, int type, size_t len, void *arg);
@@ -1049,6 +1053,13 @@ struct ssl_ctx_st {
     SSL_CTX_generate_session_ticket_fn generate_ticket_cb;
     SSL_CTX_decrypt_session_ticket_fn decrypt_ticket_cb;
     void *ticket_cb_data;
+
+    /* The number of TLS1.3 tickets to automatically send */
+    size_t num_tickets;
+
+    /* Callback to determine if early_data is acceptable or not */
+    SSL_allow_early_data_cb_fn allow_early_data_cb;
+    void *allow_early_data_cb_data;
 };
 
 struct ssl_st {
@@ -1112,6 +1123,11 @@ struct ssl_st {
     void (*msg_callback) (int write_p, int version, int content_type,
                           const void *buf, size_t len, SSL *ssl, void *arg);
     void *msg_callback_arg;
+    int (*key_callback)(SSL *ssl, int name, const unsigned char *secret,
+                        size_t secretlen, const unsigned char *key,
+                        size_t keylen, const unsigned char *iv, size_t ivlen,
+                        void *arg);
+    void *key_callback_arg;
     int hit;                    /* reusing a previous session */
     X509_VERIFY_PARAM *param;
     /* Per connection DANE state */
@@ -1127,12 +1143,12 @@ struct ssl_st {
      */
     uint32_t mac_flags;
     /*
-     * The TLS1.3 secrets. The resumption master secret is stored in the
-     * session.
+     * The TLS1.3 secrets.
      */
     unsigned char early_secret[EVP_MAX_MD_SIZE];
     unsigned char handshake_secret[EVP_MAX_MD_SIZE];
     unsigned char master_secret[EVP_MAX_MD_SIZE];
+    unsigned char resumption_master_secret[EVP_MAX_MD_SIZE];
     unsigned char client_finished_secret[EVP_MAX_MD_SIZE];
     unsigned char server_finished_secret[EVP_MAX_MD_SIZE];
     unsigned char server_finished_hash[EVP_MAX_MD_SIZE];
@@ -1207,6 +1223,7 @@ struct ssl_st {
 # endif
     SSL_psk_find_session_cb_func psk_find_session_cb;
     SSL_psk_use_session_cb_func psk_use_session_cb;
+
     SSL_CTX *ctx;
     /* Verified chain of peer */
     STACK_OF(X509) *verified_chain;
@@ -1403,8 +1420,17 @@ struct ssl_st {
     ASYNC_WAIT_CTX *waitctx;
     size_t asyncrw;
 
-    /* The maximum number of plaintext bytes that can be sent as early data */
+    /*
+     * The maximum number of bytes advertised in session tickets that can be
+     * sent as early data.
+     */
     uint32_t max_early_data;
+    /*
+     * The maximum number of bytes of early data that a server will tolerate
+     * (which should be at least as much as max_early_data).
+     */
+    uint32_t recv_max_early_data;
+
     /*
      * The number of bytes of early data received so far. If we accepted early
      * data then this is a count of the plaintext bytes. If we rejected it then
@@ -1418,6 +1444,18 @@ struct ssl_st {
     size_t block_padding;
 
     CRYPTO_RWLOCK *lock;
+    RAND_DRBG *drbg;
+
+    /* The number of TLS1.3 tickets to automatically send */
+    size_t num_tickets;
+    /* The number of TLS1.3 tickets actually sent so far */
+    size_t sent_tickets;
+    /* The next nonce value to use when we send a ticket on this connection */
+    uint64_t next_ticket_nonce;
+
+    /* Callback to determine if early_data is acceptable or not */
+    SSL_allow_early_data_cb_fn allow_early_data_cb;
+    void *allow_early_data_cb_data;
 };
 
 /*
@@ -2206,6 +2244,8 @@ void ssl_cert_clear_certs(CERT *c);
 void ssl_cert_free(CERT *c);
 __owur int ssl_generate_session_id(SSL *s, SSL_SESSION *ss);
 __owur int ssl_get_new_session(SSL *s, int session);
+__owur SSL_SESSION *lookup_sess_in_cache(SSL *s, const unsigned char *sess_id,
+                                         size_t sess_id_len);
 __owur int ssl_get_prev_session(SSL *s, CLIENTHELLO_MSG *hello);
 __owur SSL_SESSION *ssl_session_dup(SSL_SESSION *src, int ticket);
 __owur int ssl_cipher_id_cmp(const SSL_CIPHER *a, const SSL_CIPHER *b);

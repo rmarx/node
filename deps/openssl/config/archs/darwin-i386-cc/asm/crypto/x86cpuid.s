@@ -424,19 +424,6 @@ L029nogo:
 	popl	%ebx
 	popl	%ebp
 	ret
-.globl	_OPENSSL_ia32_rdrand
-.align	4
-_OPENSSL_ia32_rdrand:
-L_OPENSSL_ia32_rdrand_begin:
-	movl	$8,%ecx
-L032loop:
-.byte	15,199,240
-	jc	L033break
-	loop	L032loop
-L033break:
-	cmpl	$0,%eax
-	cmovel	%ecx,%eax
-	ret
 .globl	_OPENSSL_ia32_rdrand_bytes
 .align	4
 _OPENSSL_ia32_rdrand_bytes:
@@ -447,48 +434,36 @@ L_OPENSSL_ia32_rdrand_bytes_begin:
 	movl	12(%esp),%edi
 	movl	16(%esp),%ebx
 	cmpl	$0,%ebx
-	je	L034done
+	je	L032done
 	movl	$8,%ecx
-L035loop:
+L033loop:
 .byte	15,199,242
-	jc	L036break
-	loop	L035loop
-	jmp	L034done
+	jc	L034break
+	loop	L033loop
+	jmp	L032done
 .align	4,0x90
-L036break:
+L034break:
 	cmpl	$4,%ebx
-	jb	L037tail
+	jb	L035tail
 	movl	%edx,(%edi)
 	leal	4(%edi),%edi
 	addl	$4,%eax
 	subl	$4,%ebx
-	jz	L034done
+	jz	L032done
 	movl	$8,%ecx
-	jmp	L035loop
+	jmp	L033loop
 .align	4,0x90
-L037tail:
+L035tail:
 	movb	%dl,(%edi)
 	leal	1(%edi),%edi
 	incl	%eax
 	shrl	$8,%edx
 	decl	%ebx
-	jnz	L037tail
-L034done:
+	jnz	L035tail
+L032done:
+	xorl	%edx,%edx
 	popl	%ebx
 	popl	%edi
-	ret
-.globl	_OPENSSL_ia32_rdseed
-.align	4
-_OPENSSL_ia32_rdseed:
-L_OPENSSL_ia32_rdseed_begin:
-	movl	$8,%ecx
-L038loop:
-.byte	15,199,248
-	jc	L039break
-	loop	L038loop
-L039break:
-	cmpl	$0,%eax
-	cmovel	%ecx,%eax
 	ret
 .globl	_OPENSSL_ia32_rdseed_bytes
 .align	4
@@ -500,33 +475,34 @@ L_OPENSSL_ia32_rdseed_bytes_begin:
 	movl	12(%esp),%edi
 	movl	16(%esp),%ebx
 	cmpl	$0,%ebx
-	je	L040done
+	je	L036done
 	movl	$8,%ecx
-L041loop:
+L037loop:
 .byte	15,199,250
-	jc	L042break
-	loop	L041loop
-	jmp	L040done
+	jc	L038break
+	loop	L037loop
+	jmp	L036done
 .align	4,0x90
-L042break:
+L038break:
 	cmpl	$4,%ebx
-	jb	L043tail
+	jb	L039tail
 	movl	%edx,(%edi)
 	leal	4(%edi),%edi
 	addl	$4,%eax
 	subl	$4,%ebx
-	jz	L040done
+	jz	L036done
 	movl	$8,%ecx
-	jmp	L041loop
+	jmp	L037loop
 .align	4,0x90
-L043tail:
+L039tail:
 	movb	%dl,(%edi)
 	leal	1(%edi),%edi
 	incl	%eax
 	shrl	$8,%edx
 	decl	%ebx
-	jnz	L043tail
-L040done:
+	jnz	L039tail
+L036done:
+	xorl	%edx,%edx
 	popl	%ebx
 	popl	%edi
 	ret

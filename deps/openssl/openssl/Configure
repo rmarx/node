@@ -125,6 +125,7 @@ my $gcc_devteam_warn = "-DDEBUG_UNUSED"
         . " -Wswitch"
         . " -Wsign-compare"
         . " -Wmissing-prototypes"
+        . " -Wstrict-prototypes"
         . " -Wshadow"
         . " -Wformat"
         . " -Wtype-limits"
@@ -552,6 +553,7 @@ my %user = (
     LDLIBS      => [],  # -l
     MT          => undef,
     MTFLAGS     => [],
+    PERL        => env('PERL') || ($^O ne "VMS" ? $^X : "perl"),
     RANLIB      => env('RANLIB'),
     RC          => env('RC') || env('WINDRES'),
     RCFLAGS     => [],
@@ -822,17 +824,17 @@ while (@argvcopy)
 			{
 			read_config $1;
 			}
-		elsif (/^-L(.*)$/)
-			{
-			push @{$useradd{LDFLAGS}}, $_;
-			}
-		elsif (/^-l(.*)$/ or /^-Wl,/)
+		elsif (/^-l(.*)$/)
 			{
 			push @{$useradd{LDLIBS}}, $_;
 			}
 		elsif (/^-framework$/)
 			{
 			push @{$useradd{LDLIBS}}, $_, shift(@argvcopy);
+			}
+		elsif (/^-L(.*)$/ or /^-Wl,/)
+			{
+			push @{$useradd{LDFLAGS}}, $_;
 			}
 		elsif (/^-rpath$/ or /^-R$/)
 			# -rpath is the OSF1 rpath flag
@@ -953,7 +955,7 @@ foreach (keys %user) {
     }
 }
 
-if (grep { $_ =~ /(^|\s)-Wl,-rpath,/ } ($user{LDLIBS} ? @{$user{LDLIBS}} : ())
+if (grep { /-rpath\b/ } ($user{LDFLAGS} ? @{$user{LDFLAGS}} : ())
     && !$disabled{shared}
     && !($disabled{asan} && $disabled{msan} && $disabled{ubsan})) {
     die "***** Cannot simultaneously use -rpath, shared libraries, and\n",
@@ -1110,15 +1112,14 @@ $target{exe_extension}=".exe" if ($config{target} eq "DJGPP"
 $target{exe_extension}=".pm"  if ($config{target} =~ /vos/);
 
 ($target{shared_extension_simple}=$target{shared_extension})
-    =~ s|\.\$\(SHLIB_VERSION_NUMBER\)||;
-$target{dso_extension}=$target{shared_extension_simple};
+    =~ s|\.\$\(SHLIB_VERSION_NUMBER\)||
+    unless defined($target{shared_extension_simple});
+$target{dso_extension}//=$target{shared_extension_simple};
 ($target{shared_import_extension}=$target{shared_extension_simple}.".a")
     if ($config{target} =~ /^(?:Cygwin|mingw)/);
 
-# Allow overriding the names of some tools.  USE WITH CARE
-# Note: only Unix cares about HASHBANGPERL...  that explains
-# the default string.
-$config{perl} =    ($^O ne "VMS" ? $^X : "perl");
+# Fill %config with values from %user, and in case those are undefined or
+# empty, use values from %target (acting as a default).
 foreach (keys %user) {
     my $ref_type = ref $user{$_};
 
@@ -2457,7 +2458,7 @@ _____
     if ($dump || $cmdline) {
         print "\nCommand line (with current working directory = $here):\n\n";
         print '    ',join(' ',
-                          $config{perl},
+                          $config{PERL},
                           catfile($config{sourcedir}, 'Configure'),
                           @{$config{perlargv}}), "\n";
         print "\nPerl information:\n\n";
@@ -2777,7 +2778,10 @@ sub threads {
     return sub { add($disabled{threads} ? () : @flags)->(); }
 }
 
-
+sub shared {
+    my @flags = @_;
+    return sub { add($disabled{shared} ? () : @flags)->(); }
+}
 
 our $add_called = 0;
 # Helper function to implement adding values to already existing configuration
@@ -3060,7 +3064,7 @@ sub run_dofile
     foreach (@templates) {
         die "Can't open $_, $!" unless -f $_;
     }
-    my $perlcmd = (quotify("maybeshell", $config{perl}))[0];
+    my $perlcmd = (quotify("maybeshell", $config{PERL}))[0];
     my $cmd = "$perlcmd \"-I.\" \"-Mconfigdata\" \"$dofile\" -o\"Configure\" \"".join("\" \"",@templates)."\" > \"$out.new\"";
     #print STDERR "DEBUG[run_dofile]: \$cmd = $cmd\n";
     system($cmd);

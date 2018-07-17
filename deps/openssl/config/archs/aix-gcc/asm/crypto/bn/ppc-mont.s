@@ -180,15 +180,16 @@ Lsub:	lwzx	12,22,21
 	li	21,0
 	mtctr	8
 	subfe	3,21,3
-	and	4,22,3
-	andc	6,9,3
-	or	4,4,6
 
 .align	4
 Lcopy:
-	lwzx	12,4,21
-	stwx	12,9,21
+	lwzx	12,22,21
+	lwzx	10,9,21
+	and	12,12,3
+	andc	10,10,3
 	stwx	21,22,21
+	or	10,10,12
+	stwx	10,9,21
 	addi	21,21,4
 	bc	16,0,Lcopy
 

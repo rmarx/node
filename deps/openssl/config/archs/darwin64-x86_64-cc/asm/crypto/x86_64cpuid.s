@@ -245,6 +245,18 @@ _CRYPTO_memcmp:
 	xorq	%r10,%r10
 	cmpq	$0,%rdx
 	je	L$no_data
+	cmpq	$16,%rdx
+	jne	L$oop_cmp
+	movq	(%rdi),%r10
+	movq	8(%rdi),%r11
+	movq	$1,%rdx
+	xorq	(%rsi),%r10
+	xorq	8(%rsi),%r11
+	orq	%r11,%r10
+	cmovnzq	%rdx,%rax
+	.byte	0xf3,0xc3
+
+.p2align	4
 L$oop_cmp:
 	movb	(%rdi),%r10b
 	leaq	1(%rdi),%rdi
@@ -368,21 +380,6 @@ L$done2:
 	subq	%rcx,%rax
 	.byte	0xf3,0xc3
 
-.globl	_OPENSSL_ia32_rdrand
-
-.p2align	4
-_OPENSSL_ia32_rdrand:
-	movl	$8,%ecx
-L$oop_rdrand:
-.byte	72,15,199,240
-	jc	L$break_rdrand
-	loop	L$oop_rdrand
-L$break_rdrand:
-	cmpq	$0,%rax
-	cmoveq	%rcx,%rax
-	.byte	0xf3,0xc3
-
-
 .globl	_OPENSSL_ia32_rdrand_bytes
 
 .p2align	4
@@ -416,27 +413,13 @@ L$tail_rdrand_bytes:
 	movb	%r10b,(%rdi)
 	leaq	1(%rdi),%rdi
 	incq	%rax
-	shrq	$8,%r8
+	shrq	$8,%r10
 	decq	%rsi
 	jnz	L$tail_rdrand_bytes
 
 L$done_rdrand_bytes:
+	xorq	%r10,%r10
 	.byte	0xf3,0xc3
-
-.globl	_OPENSSL_ia32_rdseed
-
-.p2align	4
-_OPENSSL_ia32_rdseed:
-	movl	$8,%ecx
-L$oop_rdseed:
-.byte	72,15,199,248
-	jc	L$break_rdseed
-	loop	L$oop_rdseed
-L$break_rdseed:
-	cmpq	$0,%rax
-	cmoveq	%rcx,%rax
-	.byte	0xf3,0xc3
-
 
 .globl	_OPENSSL_ia32_rdseed_bytes
 
@@ -471,10 +454,11 @@ L$tail_rdseed_bytes:
 	movb	%r10b,(%rdi)
 	leaq	1(%rdi),%rdi
 	incq	%rax
-	shrq	$8,%r8
+	shrq	$8,%r10
 	decq	%rsi
 	jnz	L$tail_rdseed_bytes
 
 L$done_rdseed_bytes:
+	xorq	%r10,%r10
 	.byte	0xf3,0xc3
 
