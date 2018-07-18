@@ -60,7 +60,7 @@ protected:
   static const int kInitialClientBufferLength = 4096;
 
 
-  QTLSWrap(Environment *env, crypto::SecureContext *sc, Kind kind);
+  QTLSWrap(Environment *env, crypto::SecureContext *sc, Kind kind, bool enableLogging);
   void InitSSL();
 
 
@@ -85,6 +85,8 @@ protected:
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+  void Log(const char* message);
+
 private:
   crypto::SecureContext *sc_;
   BIO *enc_in_;
@@ -95,6 +97,8 @@ private:
   size_t local_transport_parameters_length;
   unsigned char* remote_transport_parameters;
   size_t remote_transport_parameters_length;
+
+  bool logging_enabled;
 };
 
 } // namespace node

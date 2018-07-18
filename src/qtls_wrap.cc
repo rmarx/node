@@ -30,8 +30,17 @@ using v8::Object;
 using v8::String;
 using v8::Value;
 
+void QTLSWrap::Log(const char* message){
+  if( this->logging_enabled ){ 
+    fprintf(stderr, "src/qtls_wrap.cc : ");   
+    fprintf(stderr, message);
+    fprintf(stderr, "\n");
+  }
+}
+
 QTLSWrap::~QTLSWrap()
 {
+  // TODO: verify that this is all we need to do and we don't get memleaks! 
   this->sc_ = nullptr;
   this->enc_in_ = nullptr;
   this->enc_out_ = nullptr;
@@ -43,6 +52,35 @@ QTLSWrap::~QTLSWrap()
     delete this->remote_transport_parameters;
     this->remote_transport_parameters = nullptr;
   }
+}
+
+// This is the first function called from JS-land and actually creates the QTLSWrap object 
+void QTLSWrap::Wrap(const FunctionCallbackInfo<Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  if (args.Length() < 1 || !args[0]->IsObject())
+  {
+    return env->ThrowTypeError("first argument should be a SecureContext instance");
+  }
+  if (args.Length() < 2 || !args[1]->IsBoolean())
+    return env->ThrowTypeError("second argument should be boolean (isServer)");
+  if (args.Length() < 3 || !args[2]->IsBoolean())
+    return env->ThrowTypeError("third argument should be boolean (shouldLog)");
+
+  Local<Object> sc = args[0].As<Object>();
+  Kind kind = args[1]->IsTrue() ? SSLWrap<QTLSWrap>::kServer : SSLWrap<QTLSWrap>::kClient;
+  bool shouldLog = args[2]->IsTrue();
+
+  if( shouldLog ){
+    fprintf(stderr, "src/qtls_wrap.cc : Wrap called");
+    fprintf(stderr, (kind == kServer) ? "server" : "client");
+    fprintf(stderr, "\n");
+  }
+
+  QTLSWrap *res = new QTLSWrap(env, Unwrap<SecureContext>(sc), kind, shouldLog);
+
+  args.GetReturnValue().Set(res->object());
 }
 
 void QTLSWrap::Initialize(Local<Object> target,
@@ -91,7 +129,7 @@ void QTLSWrap::Initialize(Local<Object> target,
   target->Set(qtlsWrapString, t->GetFunction());
 }
 
-QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
+QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind, bool enableLogging)
     : AsyncWrap(env,
                 env->qtls_wrap_constructor_function()
                     ->NewInstance(env->context())
@@ -103,7 +141,8 @@ QTLSWrap::QTLSWrap(Environment *env, SecureContext *sc, Kind kind)
       local_transport_parameters(nullptr),
       local_transport_parameters_length(0),
       remote_transport_parameters(nullptr),
-      remote_transport_parameters_length(0)
+      remote_transport_parameters_length(0),
+      logging_enabled(enableLogging)
 {
   node::Wrap(object(), this);
   MakeWeak(this);
@@ -326,32 +365,14 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
   }
 }
 
-void QTLSWrap::Wrap(const FunctionCallbackInfo<Value> &args)
-{
-  Environment *env = Environment::GetCurrent(args);
-
-  if (args.Length() < 1 || !args[0]->IsObject())
-  {
-    return env->ThrowTypeError(
-        "first argument should be a SecureContext instance");
-  }
-  if (args.Length() < 2 || !args[1]->IsBoolean())
-    return env->ThrowTypeError("second argument should be boolean");
-
-  Local<Object> sc = args[0].As<Object>();
-  Kind kind = args[1]->IsTrue() ? SSLWrap<QTLSWrap>::kServer : SSLWrap<QTLSWrap>::kClient;
-
-  QTLSWrap *res = new QTLSWrap(env, Unwrap<SecureContext>(sc), kind);
-
-  args.GetReturnValue().Set(res->object());
-}
-
 void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
 {
   Environment *env = Environment::GetCurrent(args);
 
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  wrap->Log("GetClientInitial");
 
   // Send ClientHello handshake
   CHECK(wrap->is_client());
