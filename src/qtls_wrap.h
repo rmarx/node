@@ -55,6 +55,15 @@ public:
                            size_t inlen, X509 *x, size_t chainidx, int *al,
                            void *parse_arg);
   static void SSLInfoCallback(const SSL *ssl_, int where, int ret);
+
+  // draft-13 via tatsuhiro openssl
+  static int SSLKeyCallback(SSL *ssl_, int name,
+                                     const unsigned char *secret,
+                                     size_t secretlen, const unsigned char *key,
+                                     size_t keylen, const unsigned char *iv,
+                                     size_t ivlen, void *arg);
+
+  void Log(const char* message);
   
 protected:
   static const int kInitialClientBufferLength = 4096;
@@ -84,8 +93,6 @@ protected:
   static void IsEarlyDataAllowed(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  void Log(const char* message);
 
 private:
   crypto::SecureContext *sc_;

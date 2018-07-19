@@ -32,9 +32,11 @@ using v8::Value;
 
 void QTLSWrap::Log(const char* message){
   if( this->logging_enabled ){ 
+    //fprintf(stderr, "------------------------------------------ \n");
     fprintf(stderr, "src/qtls_wrap.cc : ");   
     fprintf(stderr, message);
     fprintf(stderr, "\n");
+    //fprintf(stderr, "------------------------------------------ \n");
   }
 }
 
@@ -252,6 +254,11 @@ void QTLSWrap::InitSSL()
   SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_RELEASE_BUFFERS);
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
+  // draft-13 via tatsuhiro openssl hack
+  // TODO: remove in favor of real openssl implementation later
+  SSL_CTX_set_mode(sc_->ctx_, SSL_MODE_QUIC_HACK);
+  SSL_set_key_callback(ssl_, SSLKeyCallback, NULL); // TODO: last argument is "void *args", later pasesd into the callback, probably to easily differentiate between different callbacks -> see what is actually needed here from ngtpc2 source! 
+
   if (is_server())
   {
     SSL_set_accept_state(ssl_);
@@ -363,6 +370,51 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
       c->MakeCallback(callback.As<Function>(), 0, nullptr);
     }
   }
+}
+
+// draft-13 via tatsuhiro openssl 
+int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
+                                     const unsigned char *secret,
+                                     size_t secretlen, const unsigned char *key,
+                                     size_t keylen, const unsigned char *iv,
+                                     size_t ivlen, void *arg){
+  SSL *ssl = const_cast<SSL *>(ssl_);
+  QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
+  Environment *env = wrap->env();
+  wrap->Log("SSLKeyCallback");
+
+
+  /* 
+  // Used this to check in JS-land if the values are correctly send using the complex casts below
+  // both for-loops should print the same, but I was paranoid
+  for( int i = 0; i < secretlen; ++i )
+	fprintf(stderr, "%u ", secret[i] );
+  fprintf(stderr, "\n");
+  for( int i = 0; i < secretlen; ++i ){
+        short c = (short) *(secret + i);
+	fprintf(stderr, "%i ", c);
+  }
+  fprintf(stderr, "\n");
+  */
+
+
+    // TODO: see if these are actually the best ways to pass data back to JS-land
+    // current code is based on node_crypto.cc::NewSessionCallback 
+    // for JS-land interface, see lib/qtls_wrap.js:onnewkey
+    Local<Value> argv[] = {
+        Integer::New(env->isolate(), name),
+        Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(secret)), secretlen).ToLocalChecked(),
+        Integer::New(env->isolate(), (int) secretlen),
+        Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(key)), keylen).ToLocalChecked(),
+        Integer::New(env->isolate(), (int) keylen),
+        Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(iv)), ivlen).ToLocalChecked(),
+        Integer::New(env->isolate(), (int) ivlen),
+        Integer::New(env->isolate(), 666) // "arg" is currently not used, pass a generic integer (in JS-land, it's all JS objects anyway, so can change this later trivially here 
+    };
+
+    wrap->MakeCallback(env->onnewkey_string(), arraysize(argv), argv); 
+
+  return 1;
 }
 
 void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)

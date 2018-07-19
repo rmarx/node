@@ -292,7 +292,9 @@ class ModuleWrap;
   V(write_host_object_string, "_writeHostObject")                             \
   V(write_queue_size_string, "writeQueueSize")                                \
   V(x_forwarded_string, "x-forwarded-for")                                    \
-  V(zero_return_string, "ZERO_RETURN")
+  V(zero_return_string, "ZERO_RETURN")					      \
+  V(onnewkey_string, "onnewkey")                                                
+  // "onnewkey" added by Robin Marx for QUIC draft-13
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
   V(as_external, v8::External)                                                \
@@ -329,6 +331,7 @@ class ModuleWrap;
   V(vm_parsing_context_symbol, v8::Symbol)                                    \
   V(url_constructor_function, v8::Function)                                   \
   V(write_wrap_constructor_function, v8::Function)                            \
+
 
 class Environment;
 
