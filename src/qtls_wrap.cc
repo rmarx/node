@@ -284,7 +284,56 @@ void QTLSWrap::InitSSL()
   SSL_set_cert_cb(ssl_, SSLWrap<QTLSWrap>::SSLCertCallback, this);
 
   // draft-13 via tatsuhiro openssl hack
-  // TODO: remove in favor of real openssl implementation later
+  // TODO: remove in favor of real openssl implementation later 
+  // the main logic:
+  // - All data we need to SEND TO our peer from TLS is gotten via the SSLMessageCallback
+  //     -> this is called for each individual TLS message (e.g., ServerHello, Encrypted Extensions, Certificate, ...) 
+  // - All data we RECEIVE FROM our peer that needs to be put into TLS is done using BIO_write
+  //	-> processing of this data is then triggered by SSL_do_handshake
+  // Keep in mind: data can be split over multiple packets. BIO_write needs to be called for all, which might or might not produce a new message callback
+ 	// -> use separate check to see if handshake has been successfully completed 
+  // We do all this primarily to get KEY updates at the correct moments via the KeyCallback
+	// this is used to update the encryption level. The KeyCallback is also automatically called after an SSL_do_handshake() is done with data in the BIO buffer that leads to key update
+
+  // Client						Server
+  // (setup all stuff like transport parameters)
+  // SSL_do_handshake()
+  // ClientHello: MessageCallback called
+  //						     => 
+  //							BIO_write ClientHello
+  //							SSL_read_early_data (put in correct state/needed to enable 0-RTT if present)
+  //							SSL_do_handshake()
+  //							ServerHello: MessageCallback called
+  //							SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
+  //							SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
+  //						    <=
+  // BIO_write ServerHello
+  // SSL_do_handshake()
+  // SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
+  //							EncryptedExtensions: MessageCallback called
+  // BIO_write EncryptedExtensions
+  // SSL_do_handshake()
+  // nothing really happens TODO: CHECK, 
+  // should update transport params
+  //							Certificate: MessageCallback called
+  // BIO_write Certificate
+  // SSL_do_handshake()
+  //						     <=	CertificateVerify: MessageCallback called
+  // BIO_write CertificateVerify
+  // SSL_do_handshake()
+  // SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback Called
+  //						     <=	Finished: MessageCallback called
+  // 							SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback called
+  // 
+  //						        SSL_read_ex to get SessionTicket (not consumed by SSL_do_handshake)
+  // BIG TODO: how does 0-RTT fit into this mess?!? 
+  // BIG TODO: ngtpc2 does SSL_read_ex() for sessionticket, need to do this too! not sure if it's at the correct place in the schema above though... seems to be how ngtcp2 does it (even after handshake has completely finished there)
+
+
+  // Possible API:
+  // GetClientInitial() (do_handshake) -> leads to OnNewHandshakeData(CRYPTO) callback 
+  // ProcessReceivedHandshakeData(CRYPTO) (BIO + do_handshake) -> leads to OnNewHandshakeData(CRYPTO) callback 
+
   SSL_set_key_callback(ssl_, SSLKeyCallback, NULL); // last argument is used to pass around app state, but we use SSL_get_app_data to pass around our SSL* object 
   SSL_set_msg_callback(ssl_, SSLMessageCallback);
   //SSL_set_msg_callback_arg(ssl_, this); // ngtcp2 uses this to pass context, but here we just get the SSL* object directly bye using SSL_get_app_data
