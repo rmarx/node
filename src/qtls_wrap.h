@@ -38,11 +38,11 @@ public:
   // If |msg| is not nullptr, caller is responsible for calling `delete[] *msg`.
   v8::Local<v8::Value> GetSSLError(int status, int* err, const char** msg);
 
+  static crypto::SecureContext* PrepareContext(crypto::SecureContext *sc, Kind kind);
 
   ////////////////////////////////////////////////
   //            SSL Callback methods            //
   ////////////////////////////////////////////////
-  static crypto::SecureContext* AddContextCallbacks(crypto::SecureContext *sc, Kind kind);
   static int AddTransportParamsCallback(SSL *ssl, unsigned int ext_type,
                          unsigned int content, const unsigned char **out,
                          size_t *outlen, X509 *x, size_t chainidx, int *al,
@@ -63,11 +63,23 @@ public:
                                      size_t keylen, const unsigned char *iv,
                                      size_t ivlen, void *arg);
 
+  static void SSLMessageCallback(	int write_p, 
+					int version, 
+					int content_type, 
+					const void *buf, 
+					size_t len, 
+					SSL *ssl,  
+					void *arg);
+
   void Log(const char* message);
+
+  char* handshakeDataDEBUG = NULL;
+  int handshakeLengthDEBUG = 0;
+
+  std::vector<char> serverHandshakeDataDEBUG;
   
 protected:
   static const int kInitialClientBufferLength = 4096;
-
 
   QTLSWrap(Environment *env, crypto::SecureContext *sc, Kind kind, bool enableLogging);
   void InitSSL();
