@@ -169,8 +169,12 @@ SecureContext* QTLSWrap::PrepareContext(SecureContext *sc, Kind kind)
     /**
      * set to ffffffff according to QUIC to enable 0-RTT
      */
-    SSL_CTX_set_max_early_data(sc->ctx_, std::numeric_limits<uint32_t>::max());
+
+    std::cerr << "PrepareContext : setting max early data so we can use early data later on " << std::numeric_limits<uint32_t>::max() << std::endl;
+    SSL_CTX_set_max_early_data(sc->ctx_, std::numeric_limits<uint32_t>::max()); 
   }
+
+
 
   // min version of QUIC (v1) is TLS 1.3
   SSL_CTX_set_min_proto_version(sc->ctx_, TLS1_3_VERSION);
@@ -296,13 +300,18 @@ void QTLSWrap::InitSSL()
 	// this is used to update the encryption level. The KeyCallback is also automatically called after an SSL_do_handshake() is done with data in the BIO buffer that leads to key update
 
   // Client						Server
-  // (setup all stuff like transport parameters)
+  // (setup all stuff like transport parameters) (for 0-RTT: set SSL_SESSION)
+  // if 0RTT: EarlyDataToken + ClientHello: MessageCallback called
+  // if 0RTT: SSL_KEY_CLIENT_EARLY_TRAFFIC: KeyCallback called
+  // 
   // SSL_do_handshake()
-  // ClientHello: MessageCallback called
+  // if non-0RTT: ClientHello: MessageCallback called
   //						     => 
-  //							BIO_write ClientHello
+  //							BIO_write ClientHello 
+  //							if 0RTT: SSL_KEY_CLIENT_EARLY_TRAFFIC: KeyCallback called
+  //								-> in 0RTT, we don't need SSL_do_handshake(), ServerHello and the rest are auto-generated after writing ClientHello
   //							SSL_read_early_data (put in correct state/needed to enable 0-RTT if present)
-  //							SSL_do_handshake()
+  //							if not-0RTT:SSL_do_handshake()
   //							ServerHello: MessageCallback called
   //							SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
   //							SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
@@ -325,9 +334,25 @@ void QTLSWrap::InitSSL()
   //						     <=	Finished: MessageCallback called
   // 							SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback called
   // 
-  //						        SSL_read_ex to get SessionTicket (not consumed by SSL_do_handshake)
-  // BIG TODO: how does 0-RTT fit into this mess?!? 
+  //  ??? these next two lines: not entirely sure about this, only happens in 0-RTT 
+  // if 0RTT: EOED: MessageCallback called (4 bytes)
+  // if 0RTT: SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
+  // 						    => 
+  //							if 0RTT: EOED: MessageCallback called
+  // 							if 0RTT: SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
+  // Finished: MessageCallback called (also calls SSLInfoCallback with HANDSHAKE_DONE)
+  // SSL_KEY_CLIENT_APPLICATION_TRAFFIC: KeyCallback called 
+  // 
+  //						    =>  
+  // 							NewSessionTicket:MessageCallback called (also calls SSLInfoCallback with HANDSHAKE_DONE)
+  //							if not-0RTT: 2nd NewSessionTicket:MessageCallback called (AGAIN calls SSLInfoCallback with HANDSHAKE_DONE)
+  //						    <=	
+  // TODO: not sure if this is even needed... 
+  // SSL_read_ex to get SessionTicket (not consumed by SSL_do_handshake)
+  
   // BIG TODO: ngtpc2 does SSL_read_ex() for sessionticket, need to do this too! not sure if it's at the correct place in the schema above though... seems to be how ngtcp2 does it (even after handshake has completely finished there)
+  // BIG TODO: check about calling SSL_do_handshake in 0-RTT flow: seems not to be necessary? do we still call it anyway in the current code or not?
+  // BIG TODO: HANDSHAKE_DONE callback is called multiple times now, that probably shouldn't happen / be caught better (application now takes this into account, but only in 1 function and not very well)
 
 
   // Possible API:
@@ -537,19 +562,31 @@ void QTLSWrap::SSLMessageCallback(	int write_p,
   if( write_p && content_type == SSL3_RT_HANDSHAKE ){
     
     QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
-    if( qtlsWrap->kind_ == kServer ){
+
+    // TODO: FIXME: REMOVE! very ugly, just for quick testing! 
+    //if( qtlsWrap->kind_ != kServer ){
+	//qtlsWrap->serverHandshakeDataDEBUG = std::vector<char>();
+   //}
+
+    //if( qtlsWrap->kind_ == kServer ){
 	//qtlsWrap->serverHandshakeDataDEBUG.insert(qtlsWrap->serverHandshakeDataDEBUG.end(), len, reinterpret_cast<char*>(const_cast<void*>(buf)));
 	char* buf2 = reinterpret_cast<char*>(const_cast<void*>(buf));
 	//qtlsWrap->serverHandshakeDataDEBUG.insert(qtlsWrap->serverHandshakeDataDEBUG.end(), buf2[0], buf2[qtlsWrap->serverHandshakeDataDEBUG.size()] );
 
 	std::copy_n(buf2, len, std::back_inserter(qtlsWrap->serverHandshakeDataDEBUG));
 
-        std::cerr << "msg_cb : appended server handshakedata to vector " << len << " -> " << qtlsWrap->serverHandshakeDataDEBUG.size() << std::endl;
-    }
-    else{
-    	qtlsWrap->handshakeDataDEBUG = reinterpret_cast<char*>(const_cast<void*>(buf));
-    	qtlsWrap->handshakeLengthDEBUG = len;
-    }
+        std::cerr << "msg_cb : appended handshakedata to vector " << len << " -> " << qtlsWrap->serverHandshakeDataDEBUG.size() << std::endl;
+
+	  for( int i = 0; i < len; ++i )
+		fprintf(stderr, "%u ", reinterpret_cast<unsigned char*>(const_cast<void*>(buf))[i] );
+	  fprintf(stderr, "\n");
+	  fprintf(stderr, "\n");
+	  fprintf(stderr, "\n");
+    //}
+    //else{
+    //	qtlsWrap->handshakeDataDEBUG = reinterpret_cast<char*>(const_cast<void*>(buf));
+    //	qtlsWrap->handshakeLengthDEBUG = len;
+    //}
   }
 }
 
@@ -588,8 +625,16 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
   args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
   #endif
 
-  std::cerr << "GetClientInitial: bubbling up handshakedata " << wrap->handshakeLengthDEBUG << std::endl;
-  args.GetReturnValue().Set(Buffer::Copy(env, wrap->handshakeDataDEBUG, wrap->handshakeLengthDEBUG).ToLocalChecked());
+  //std::cerr << "GetClientInitial: bubbling up handshakedata " << wrap->handshakeLengthDEBUG << std::endl;
+  //args.GetReturnValue().Set(Buffer::Copy(env, wrap->handshakeDataDEBUG, wrap->handshakeLengthDEBUG).ToLocalChecked());
+
+  std::cerr << "GetClientInitial: bubbling up handshakedata " << wrap->handshakeLengthDEBUG << ", PENDING: " << wrap->serverHandshakeDataDEBUG.size() << std::endl;  
+  size_t write_size = wrap->serverHandshakeDataDEBUG.size();
+  char* data = new char[write_size];
+  std::copy(wrap->serverHandshakeDataDEBUG.begin(), wrap->serverHandshakeDataDEBUG.end(), data);
+
+  wrap->serverHandshakeDataDEBUG = std::vector<char>();
+  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size).ToLocalChecked());
 }
 
 void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -669,6 +714,8 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   size_t write_size = wrap->serverHandshakeDataDEBUG.size();
   char* data = new char[write_size];//wrap->serverHandshakeDataDEBUG[0];//new char[ write_size ];
   std::copy(wrap->serverHandshakeDataDEBUG.begin(), wrap->serverHandshakeDataDEBUG.end(), data);
+
+  wrap->serverHandshakeDataDEBUG = std::vector<char>();
   //*(wrap->serverHandshakeDataDEBUG.data()), wrap->serverHandshakeDataDEBUG.size()
   args.GetReturnValue().Set(Buffer::Copy(env, data, write_size).ToLocalChecked());
 
@@ -730,7 +777,9 @@ void QTLSWrap::ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args)
     char* dp = dataVector.at(i / buffSize);
     allData[i] = dp[i % buffSize];
   }
-  
+
+  std::cerr << "QTLSWrap::ReadSSL : reading " << totalRead << std::endl;  
+
   args.GetReturnValue().Set(Buffer::Copy(env, allData, totalRead).ToLocalChecked());
 }
 
