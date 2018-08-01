@@ -117,6 +117,8 @@ private:
   unsigned char* remote_transport_parameters;
   size_t remote_transport_parameters_length;
 
+  bool server_has_setup_early_data;
+
   bool logging_enabled;
 };
 
