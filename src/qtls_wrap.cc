@@ -299,6 +299,9 @@ void QTLSWrap::InitSSL()
  	// -> use separate check to see if handshake has been successfully completed 
   // We do all this primarily to get KEY updates at the correct moments via the KeyCallback
 	// this is used to update the encryption level. The KeyCallback is also automatically called after an SSL_do_handshake() is done with data in the BIO buffer that leads to key update
+    // The order of MessageCallbacks and KeyCallbacks is also 100% well-defined (e.g., every message before a new KeyCallback belongs to the previous key/encryption level), no need to do anything else
+    // e.g., order will always be : MessageCallback(ServerHello), KeyCallback(SERVER_HANDSHAKE), MessageCallback(EncryptedExtensions), MessageCallback(Certificate) ... 
+    // and we will know ServerHello needs to be sent in an Initial encryption level, and EE etc. in Handshake encryption level 
 
   // Client						Server
   // (setup all stuff like transport parameters) (for 0-RTT: set SSL_SESSION)
@@ -310,50 +313,57 @@ void QTLSWrap::InitSSL()
   // if non-0RTT: ClientHello: MessageCallback called
   //						     => 
   //							BIO_write ClientHello 
-  //							if 0RTT: SSL_KEY_CLIENT_EARLY_TRAFFIC: KeyCallback called
-  //								-> in 0RTT, we don't need SSL_do_handshake(), ServerHello and the rest are auto-generated after writing ClientHello
   //							SSL_read_early_data (put in correct state/needed to enable 0-RTT if present)
+  //							if 0RTT: SSL_KEY_CLIENT_EARLY_TRAFFIC: KeyCallback called
+  //								-> in 0RTT, we don't need SSL_do_handshake(), ServerHello and the rest are auto-generated after SSL_read_early_data
   //							if not-0RTT:SSL_do_handshake()
   //							ServerHello: MessageCallback called
-  //							SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
-  //							SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
   //						    <=
+  //							SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
+  //							if not 0RTT: SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
   // BIO_write ServerHello
   // SSL_do_handshake()
   // SSL_KEY_SERVER_HANDSHAKE_TRAFFIC: KeyCallback called
   //							EncryptedExtensions: MessageCallback called
   // BIO_write EncryptedExtensions
   // SSL_do_handshake()
-  // nothing really happens TODO: CHECK, 
-  // should update transport params
+  // ~transport params are updated
   //							Certificate: MessageCallback called
   // BIO_write Certificate
   // SSL_do_handshake()
-  //						     <=	CertificateVerify: MessageCallback called
+  //						    CertificateVerify: MessageCallback called
   // BIO_write CertificateVerify
   // SSL_do_handshake()
-  // SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback Called
-  //						     <=	Finished: MessageCallback called
+  //						    ServerFinished: MessageCallback called
+  //							<=	
   // 							SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback called
+  // BIO_write ServerFinished
+  // SSL_do_handshake()
+  // SSL_KEY_SERVER_APPLICATION_TRAFFIC: KeyCallback Called
   // 
-  //  ??? these next two lines: not entirely sure about this, only happens in 0-RTT 
   // if 0RTT: EOED: MessageCallback called (4 bytes)
-  // if 0RTT: SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
   // 						    => 
-  //							if 0RTT: EOED: MessageCallback called
+  // SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
+  //							if 0RTT: BIO_write EOED
+  //							if 0RTT: SSL_do_handshake() 
+  // 							if 0RTT: MessageCallback called
   // 							if 0RTT: SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC: KeyCallback called
-  // Finished: MessageCallback called (also calls SSLInfoCallback with HANDSHAKE_DONE)
-  // SSL_KEY_CLIENT_APPLICATION_TRAFFIC: KeyCallback called 
-  // 
+  // ClientFinished: MessageCallback called (also calls SSLInfoCallback with HANDSHAKE_DONE)
   //						    =>  
+  // SSL_KEY_CLIENT_APPLICATION_TRAFFIC: KeyCallback called 
+  //							BIO_write ClientFinished
+  //							SSL_do_handshake()
+  // 							SSL_KEY_CLIENT_APPLICATION_TRAFFIC: KeyCallback called 
   // 							NewSessionTicket:MessageCallback called (also calls SSLInfoCallback with HANDSHAKE_DONE)
   //							if not-0RTT: 2nd NewSessionTicket:MessageCallback called (AGAIN calls SSLInfoCallback with HANDSHAKE_DONE)
   //						    <=	
-  // TODO: not sure if this is even needed... 
+  // BIO_write NewSessionTicket
+  // SSL_do_handshake()
   // SSL_read_ex to get SessionTicket (not consumed by SSL_do_handshake)
-  
-  // BIG TODO: ngtpc2 does SSL_read_ex() for sessionticket, need to do this too! not sure if it's at the correct place in the schema above though... seems to be how ngtcp2 does it (even after handshake has completely finished there)
-  // BIG TODO: check about calling SSL_do_handshake in 0-RTT flow: seems not to be necessary? do we still call it anyway in the current code or not?
+  // SSLInfoCallback called (HANDSHAKE_DONE)
+  // if not-0RTT: SSL_read_ex to get 2nd SessionTicket (not consumed by SSL_do_handshake)
+  // SSLInfoCallback called (HANDSHAKE_DONE)
+
   // BIG TODO: HANDSHAKE_DONE callback is called multiple times now, that probably shouldn't happen / be caught better (application now takes this into account, but only in 1 function and not very well)
 
 
@@ -371,8 +381,7 @@ void QTLSWrap::EnableSessionCallbacks(
   QTLSWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
   if (wrap->ssl_ == nullptr) {
-    return wrap->env()->ThrowTypeError(
-        "EnableSessionCallbacks after destroySSL");
+    return wrap->env()->ThrowTypeError("EnableSessionCallbacks after destroySSL");
   }
   wrap->enable_session_callbacks();
 }
@@ -444,20 +453,24 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
   // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
   // a non-const SSL* in OpenSSL <= 0.9.7e.
   SSL *ssl = const_cast<SSL *>(ssl_);
-  QTLSWrap *c = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
-  Environment *env = c->env();
-  Local<Object> object = c->object();
+  QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
+
 
   if (where & SSL_CB_HANDSHAKE_START)
   {
-    // On handshake start
+  	wrap->Log("SSLInfoCallback : SSL_CB_HANDSHAKE_START");
   }
 
   if (where & SSL_CB_HANDSHAKE_DONE)
   {
+  	wrap->Log("SSLInfoCallback : SSL_CB_HANDSHAKE_DONE");
+
+    Environment *env = wrap->env();
+    Local<Object> object = wrap->object();
+
     Local<Value> callback = object->Get(env->onhandshakedone_string());
     if (callback->IsFunction()) {
-      c->MakeCallback(callback.As<Function>(), 0, nullptr);
+      wrap->MakeCallback(callback.As<Function>(), 0, nullptr);
     }
   }
 }
@@ -808,8 +821,8 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   // for example, NewSessionTickets aren't regarded as part of the handshake. We write them with BIO_write, but they are not consumed by SSL_do_handshake
   // so, we need to trigger this consumption with SSL_read_ex (if we don't, we cannot resume + NewSessionCallback isn't called at client side (as the SSL buffer is not completely empty))
   // if there is nothing left in the buffer (e.g., SSL_do_handshake processed everything) or it's waiting for extra handshake data, SSL_read_ex will be a no-op
-  // TODO: I can't seem to find a reason this is needed server-side, since we don't process anything after the handshake there... 
-  //       -> indeed, without it, the server seems to just continue working. However, ngtcp2 also calls this server-side, so we keep it here for good measure 
+  // we also call this at the server side, because OpenSSL might have generated an Alert that we want to catch
+  // TODO: TLS alerts aren't notified via the Crypto stream, so maybe needs additional handling here? 
   // the following code was adapted from ngtcp2::Client::read_tls (server's version is almost identical)
 
   std::array<uint8_t, 4096> buf;
