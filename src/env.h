@@ -292,9 +292,10 @@ class ModuleWrap;
   V(write_host_object_string, "_writeHostObject")                             \
   V(write_queue_size_string, "writeQueueSize")                                \
   V(x_forwarded_string, "x-forwarded-for")                                    \
-  V(zero_return_string, "ZERO_RETURN")					      \
-  V(onnewkey_string, "onnewkey")                                                
-  // "onnewkey" added by Robin Marx for QUIC draft-13
+  V(zero_return_string, "ZERO_RETURN")					      				  \
+  V(onnewkey_string, "onnewkey")					      				      \
+  V(onnewtlsmessage_string, "onnewtlsmessage")                                                      
+  // "onnewkey" and "onnewtlsmessage" added by Robin Marx for QUIC draft-13
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
   V(as_external, v8::External)                                                \

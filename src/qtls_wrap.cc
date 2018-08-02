@@ -565,44 +565,37 @@ void QTLSWrap::SSLMessageCallback(	int write_p,
 	    << "----------------------------------------" << std::endl;
 
 	// code from https://github.com/ngtcp2/ngtcp2/commit/19cce627eed659ce47816e201f93abd26d7ac365
-/*
-  if (!write_p || content_type != SSL3_RT_HANDSHAKE) {
-    return;
-  }
-
-  auto c = static_cast<Client *>(arg);
-
-  rv = c->write_client_handshake(reinterpret_cast<const uint8_t *>(buf), len);
-*/
 
   if( write_p && content_type == SSL3_RT_HANDSHAKE ){
-    
-    QTLSWrap *qtlsWrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
 
-    // TODO: FIXME: REMOVE! very ugly, just for quick testing! 
-    //if( qtlsWrap->kind_ != kServer ){
-	//qtlsWrap->serverHandshakeDataDEBUG = std::vector<char>();
-   //}
+	SSL *ssl2 = const_cast<SSL *>(ssl);
+	QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl2));
+	Environment *env = wrap->env();
 
-    //if( qtlsWrap->kind_ == kServer ){
-	//qtlsWrap->serverHandshakeDataDEBUG.insert(qtlsWrap->serverHandshakeDataDEBUG.end(), len, reinterpret_cast<char*>(const_cast<void*>(buf)));
+	wrap->Log("SSLMessageCallback");
+
+	Local<Value> argv[] = {
+        Buffer::Copy(env, reinterpret_cast<char*>(const_cast<void*>(buf)), len).ToLocalChecked(),
+        Integer::New(env->isolate(), (int) len)
+    };
+
+    wrap->MakeCallback(env->onnewtlsmessage_string(), arraysize(argv), argv);   
+
+
+
+
 	char* buf2 = reinterpret_cast<char*>(const_cast<void*>(buf));
-	//qtlsWrap->serverHandshakeDataDEBUG.insert(qtlsWrap->serverHandshakeDataDEBUG.end(), buf2[0], buf2[qtlsWrap->serverHandshakeDataDEBUG.size()] );
 
-	std::copy_n(buf2, len, std::back_inserter(qtlsWrap->serverHandshakeDataDEBUG));
+	std::copy_n(buf2, len, std::back_inserter(wrap->serverHandshakeDataDEBUG));
 
-        std::cerr << "msg_cb : appended handshakedata to vector " << len << " -> " << qtlsWrap->serverHandshakeDataDEBUG.size() << std::endl;
+        std::cerr << "msg_cb : appended handshakedata to vector " << len << " -> " << wrap->serverHandshakeDataDEBUG.size() << std::endl;
 
 	  for( int i = 0; i < len; ++i )
 		fprintf(stderr, "%u ", reinterpret_cast<unsigned char*>(const_cast<void*>(buf))[i] );
+
 	  fprintf(stderr, "\n");
 	  fprintf(stderr, "\n");
 	  fprintf(stderr, "\n");
-    //}
-    //else{
-    //	qtlsWrap->handshakeDataDEBUG = reinterpret_cast<char*>(const_cast<void*>(buf));
-    //	qtlsWrap->handshakeLengthDEBUG = len;
-    //}
   }
 }
 
