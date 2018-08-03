@@ -72,11 +72,6 @@ public:
 					void *arg);
 
   void Log(const char* message);
-
-  char* handshakeDataDEBUG = NULL;
-  int handshakeLengthDEBUG = 0;
-
-  std::vector<char> serverHandshakeDataDEBUG;
   
 protected:
   static const int kInitialClientBufferLength = 4096;
@@ -91,10 +86,6 @@ protected:
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetClientInitial(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ReadEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args);
   static void EnableSessionCallbacks(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetTransportParams(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -105,6 +96,12 @@ protected:
   static void IsEarlyDataAllowed(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetNegotiatedCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
+  
+  // DEPRECATED:
+  static void WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadEarlyData(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args);
 
 private:
   crypto::SecureContext *sc_;

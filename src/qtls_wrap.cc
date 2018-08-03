@@ -312,6 +312,11 @@ void QTLSWrap::InitSSL()
   // SSL_do_handshake()
   // if non-0RTT: ClientHello: MessageCallback called
   //						     => 
+  //                            if version negotiation: VersionNegotation packet sent by QUIC (nothing written to TLS stack)
+  //                            <=
+  // if vneg: full new TLS stack (new QTLS object)
+  // if vneg: start all over again 
+  //                            => 
   //							BIO_write ClientHello 
   //							SSL_read_early_data (put in correct state/needed to enable 0-RTT if present)
   //							if 0RTT: SSL_KEY_CLIENT_EARLY_TRAFFIC: KeyCallback called
@@ -368,12 +373,11 @@ void QTLSWrap::InitSSL()
 
 
   // Possible API:
-  // GetClientInitial(client_transport_params) ((write_early_data) + do_handshake) -> leads to OnNewHandshakeData(CRYPTO) callback 
-  // ProcessReceivedHandshakeData(CRYPTO) (BIO + (read_early_data) + do_handshake + read_ssl_ex) -> leads to OnNewHandshakeData(CRYPTO) callback 
+  // TriggerClientInitial(client_transport_params) ((write_early_data) + do_handshake) -> leads to OnNewTLSMessage(CRYPTO) callback 
+  // ProcessReceivedCryptoData(CRYPTO) (BIO + (read_early_data) + do_handshake + read_ssl_ex) -> leads to OnNewTLSMessage(CRYPTO) callback 
 
   SSL_set_key_callback(ssl_, SSLKeyCallback, NULL); // last argument is used to pass around app state, but we use SSL_get_app_data to pass around our SSL* object 
   SSL_set_msg_callback(ssl_, SSLMessageCallback);
-  //SSL_set_msg_callback_arg(ssl_, this); // ngtcp2 uses this to pass context, but here we just get the SSL* object directly bye using SSL_get_app_data
 }
 
 void QTLSWrap::EnableSessionCallbacks(
@@ -487,21 +491,6 @@ int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
 
   wrap->Log("SSLKeyCallback");
 
-
-  /* 
-  // Used this to check in JS-land if the values are correctly send using the complex casts below
-  // both for-loops should print the same, but I was paranoid
-  for( int i = 0; i < secretlen; ++i )
-	fprintf(stderr, "%u ", secret[i] );
-  fprintf(stderr, "\n");
-  for( int i = 0; i < secretlen; ++i ){
-        short c = (short) *(secret + i);
-	fprintf(stderr, "%i ", c);
-  }
-  fprintf(stderr, "\n");
-  */
-
-
     // TODO: see if these are actually the best ways to pass data back to JS-land
     // current code is based on node_crypto.cc::NewSessionCallback 
     // for JS-land interface, see lib/qtls_wrap.js:onnewkey
@@ -557,46 +546,37 @@ void QTLSWrap::SSLMessageCallback(	int write_p,
   // NOTE: we expect all messages to be complete. I.e., there is no fragmentation and we can be sure that this function is called just once in every stage of the handshake
   // this means we can just pass this message on to QUIC in full, which can then decide to fragment into crypto frames/packets as needed 
   // we can keep feeding received CRYPTO data into OpenSSL, being sure this callback will only be called when the received message is complete (
-  int rv;
 
-  std::cerr << "----------------------------------------" << std::endl << 
-	    "SSLMessageCallback: write_p=" << write_p << " version=" << version
-            << " content_type=" << content_type << " len=" << len << std::endl
-	    << "----------------------------------------" << std::endl;
+    SSL *ssl2 = const_cast<SSL *>(ssl);
+    QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl2));
+    Environment *env = wrap->env();
+	
+    if( wrap->logging_enabled ){
+        std::cerr << "----------------------------------------" << std::endl << 
+            "SSLMessageCallback: will_bubble_to_JS=" << write_p << ", version=" << version
+                << " == 772?,  content_type=" << content_type << " == 22?, len=" << len << std::endl
+            << "----------------------------------------" << std::endl;
+    }
+  
+    // code adapted from https://github.com/ngtcp2/ngtcp2/commit/19cce627eed659ce47816e201f93abd26d7ac365
+    int rv;
+    if( write_p && content_type == SSL3_RT_HANDSHAKE ){ // TODO: FIXME: OpenSSL alerts (SSL_RT_ALERT) should also be dealt with somehow! 
 
-	// code from https://github.com/ngtcp2/ngtcp2/commit/19cce627eed659ce47816e201f93abd26d7ac365
+        Local<Value> argv[] = {
+            Buffer::Copy(env, reinterpret_cast<char*>(const_cast<void*>(buf)), len).ToLocalChecked(),
+            Integer::New(env->isolate(), (int) len)
+        };
 
-  if( write_p && content_type == SSL3_RT_HANDSHAKE ){
-
-	SSL *ssl2 = const_cast<SSL *>(ssl);
-	QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl2));
-	Environment *env = wrap->env();
-
-	wrap->Log("SSLMessageCallback");
-
-	Local<Value> argv[] = {
-        Buffer::Copy(env, reinterpret_cast<char*>(const_cast<void*>(buf)), len).ToLocalChecked(),
-        Integer::New(env->isolate(), (int) len)
-    };
-
-    wrap->MakeCallback(env->onnewtlsmessage_string(), arraysize(argv), argv);   
-
-
-
-
-	char* buf2 = reinterpret_cast<char*>(const_cast<void*>(buf));
-
-	std::copy_n(buf2, len, std::back_inserter(wrap->serverHandshakeDataDEBUG));
-
-        std::cerr << "msg_cb : appended handshakedata to vector " << len << " -> " << wrap->serverHandshakeDataDEBUG.size() << std::endl;
-
-	  for( int i = 0; i < len; ++i )
-		fprintf(stderr, "%u ", reinterpret_cast<unsigned char*>(const_cast<void*>(buf))[i] );
-
-	  fprintf(stderr, "\n");
-	  fprintf(stderr, "\n");
-	  fprintf(stderr, "\n");
-  }
+        // bubble data up to JS-land
+        // NOTE: It is important to do this now directly instead of buffering everything and then sending it up in 1 go
+        // this is because individual TLS messages have to be encrypted with different keys
+        // e.g., we could have a call to SSLMessageCallback, then KeyCallback, then SSLMessageCallback SSLMessageCallback, all in 1 go
+        // but we can't coalesce the messages, since the 1st one needs different keys than nr 2 and 3
+        // EVENTUALLY if this turns out to be too much overhead to go back to JS-land for each message and key
+        // we could create a smart buffer here, coupling messages to the key-type, and bubbling everything up in 1 go, but that's a TODO
+        // Since this only happens during handshake and only about 2-4 times total per connection, it's possibly fine
+        wrap->MakeCallback(env->onnewtlsmessage_string(), arraysize(argv), argv);   
+    }
 }
 
 void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
@@ -641,39 +621,29 @@ void QTLSWrap::GetClientInitial(const FunctionCallbackInfo<Value> &args)
   // next call will return -1 because OpenSSL can't complete the handshake when it is just starting
   int read = SSL_do_handshake(wrap->ssl_);
 
-  std::cerr << "GetClientInitial: SSL_do_handshake returned " << read << std::endl;
-
   int err;
   const char *error_str = nullptr;
   Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
   if (!arg.IsEmpty())
   {
+    wrap->Log("GetClientInitial:SSL_do_handshake:ERROR occured");
     wrap->MakeCallback(env->onerror_string(), 1, &arg);
     delete[] error_str;
     return;
   }
 
-  #if DRAFT12
-  int pending = BIO_pending(wrap->enc_out_);
-  char *data = new char[pending];
-  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->Read(data, pending);
-  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
-  #endif
- 
-  //std::cerr << "GetClientInitial: bubbling up handshakedata " << wrap->handshakeLengthDEBUG << std::endl;
-  //args.GetReturnValue().Set(Buffer::Copy(env, wrap->handshakeDataDEBUG, wrap->handshakeLengthDEBUG).ToLocalChecked());
-
-  std::cerr << "GetClientInitial: bubbling up handshakedata " << wrap->handshakeLengthDEBUG << ", PENDING: " << wrap->serverHandshakeDataDEBUG.size() << std::endl;  
-  size_t write_size = wrap->serverHandshakeDataDEBUG.size();
-  char* data = new char[write_size];
-  std::copy(wrap->serverHandshakeDataDEBUG.begin(), wrap->serverHandshakeDataDEBUG.end(), data);
-
-  wrap->serverHandshakeDataDEBUG = std::vector<char>();
-  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size).ToLocalChecked());
+  args.GetReturnValue().Set(read);
 }
 
 void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
 {
+  // 0. Everything we receive that belongs to the handshake is written to OpenSSL using bio_write
+  //    This now needs to be interpreted by OpenSSL
+  //    (Note: this is called first at the server after receiving ClientHello (generated by GetClientInitial above) but afterwards also at the Client)
+  // 1. Check if there is some early_data (shouldn't be here, but we do want those early-data keys for use in QUIC-space) : mainly important at Server
+  // 2. SSL_do_handshake() will read and interpret and generate new messages in response (see MessageCallback)
+  // 3. SSL_do_handshake() doesn't process everything, so we use SSL_read_ex to process the leftovers : mainly important at Client
+  
   Environment *env = Environment::GetCurrent(args);
 
   QTLSWrap *wrap;
@@ -688,11 +658,18 @@ void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &arg
   }
   const char *data = Buffer::Data(args[0]);
   size_t length = Buffer::Length(args[0]);
-
+  
+  // 0.
   // note: this doesn't do anything by itself, just puts data in a buffer
   // top-level apps then call ReadHandshakeData (which calls SSL_do_handshake) immediately afterwards to get new TLS messages generated based on what we've just written 
   int written = BIO_write(wrap->enc_in_, data, length);
+  
+  
 
+   
+
+
+  // 1.
   if( wrap->kind_ == kServer && !wrap->server_has_setup_early_data ){
     wrap->server_has_setup_early_data = true;
 
@@ -749,41 +726,9 @@ void QTLSWrap::WriteHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &arg
 	    //  break;
 	  }    
   } // end server_has_setup_early_data
-
-
-  args.GetReturnValue().Set(written);
-}
-
-void QTLSWrap::WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value> &args)
-{
-  Environment *env = Environment::GetCurrent(args);
-
-  QTLSWrap *wrap;
-  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-
-  if (!args[0]->IsUint8Array())
-  {
-    env->ThrowTypeError("First argument must be a buffer");
-    return;
-  }
-  const char *data = Buffer::Data(args[0]);
-  size_t length = Buffer::Length(args[0]);
-
-  size_t written;
-  // DRAFT-13 : shouldn't be a problem that we're calling this. First call is with empty string, which is exactly what ngtcp2 also does (see ngtcp2/client.cc:tls_handshake)
-  int status = SSL_write_early_data(wrap->ssl_, data, length, &written);
-  args.GetReturnValue().Set(Integer::New(env->isolate(), status));
-}
-
-void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
-{
-  Environment *env = Environment::GetCurrent(args);
-
-  QTLSWrap *wrap;
-  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-
-  wrap->Log("ReadHandshakeData");
-
+  
+  
+  // 2.
   int read = SSL_do_handshake(wrap->ssl_);
 
   int err;
@@ -791,25 +736,14 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
   if (!arg.IsEmpty())
   {
+    wrap->Log("ReadHandshakeData:SSL_do_handshake:ERROR occured!");
     wrap->MakeCallback(env->onerror_string(), 1, &arg);
     delete[] error_str;
     return;
   }
 
-  #if DRAFT12
-  int pending = BIO_pending(wrap->enc_out_);
-  char *data = new char[pending];
-  size_t write_size_ = crypto::NodeBIO::FromBIO(wrap->enc_out_)->Read(data, pending);
-  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size_).ToLocalChecked());
-  #endif
 
-
-  size_t write_size = wrap->serverHandshakeDataDEBUG.size();
-  char* data = new char[write_size];
-  std::copy(wrap->serverHandshakeDataDEBUG.begin(), wrap->serverHandshakeDataDEBUG.end(), data);
-
-
-
+  // 3.
   // SSL_do_handshake doesn't always process all crypto data we put into SSL
   // for example, NewSessionTickets aren't regarded as part of the handshake. We write them with BIO_write, but they are not consumed by SSL_do_handshake
   // so, we need to trigger this consumption with SSL_read_ex (if we don't, we cannot resume + NewSessionCallback isn't called at client side (as the SSL buffer is not completely empty))
@@ -821,7 +755,7 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   std::array<uint8_t, 4096> buf;
   size_t nread;
 
-  for (;;) { // only needed at client 
+  for (;;) { // only needed at client, server should only read once  
 
     auto rv = SSL_read_ex(wrap->ssl_, buf.data(), buf.size(), &nread);
 
@@ -855,8 +789,103 @@ void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args
   }
 
 
-  wrap->serverHandshakeDataDEBUG = std::vector<char>(); // prepare for next time 
-  args.GetReturnValue().Set(Buffer::Copy(env, data, write_size).ToLocalChecked());
+  args.GetReturnValue().Set(written);
+}
+
+void QTLSWrap::WriteEarlyData(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  
+  wrap->Log("WriteEarlyData");
+  wrap->Log("THIS SHOULD NOT HAPPEN ANYMORE!");
+  return;
+
+  if (!args[0]->IsUint8Array())
+  {
+    env->ThrowTypeError("First argument must be a buffer");
+    return;
+  }
+  const char *data = Buffer::Data(args[0]);
+  size_t length = Buffer::Length(args[0]);
+
+  size_t written;
+  // DRAFT-13 : shouldn't be a problem that we're calling this. First call is with empty string, which is exactly what ngtcp2 also does (see ngtcp2/client.cc:tls_handshake)
+  int status = SSL_write_early_data(wrap->ssl_, data, length, &written);
+  args.GetReturnValue().Set(Integer::New(env->isolate(), status));
+}
+
+void QTLSWrap::ReadHandshakeData(const v8::FunctionCallbackInfo<v8::Value> &args)
+{
+  Environment *env = Environment::GetCurrent(args);
+
+  QTLSWrap *wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  wrap->Log("ReadHandshakeData");
+  wrap->Log("THIS SHOULD NOT HAPPEN ANYMORE!");
+  return;
+
+  int read = SSL_do_handshake(wrap->ssl_);
+
+  int err;
+  const char *error_str = nullptr;
+  Local<Value> arg = wrap->GetSSLError(read, &err, &error_str);
+  if (!arg.IsEmpty())
+  {
+    wrap->Log("ReadHandshakeData:SSL_do_handshake:ERROR occured!");
+    wrap->MakeCallback(env->onerror_string(), 1, &arg);
+    delete[] error_str;
+    return;
+  }
+
+  // SSL_do_handshake doesn't always process all crypto data we put into SSL
+  // for example, NewSessionTickets aren't regarded as part of the handshake. We write them with BIO_write, but they are not consumed by SSL_do_handshake
+  // so, we need to trigger this consumption with SSL_read_ex (if we don't, we cannot resume + NewSessionCallback isn't called at client side (as the SSL buffer is not completely empty))
+  // if there is nothing left in the buffer (e.g., SSL_do_handshake processed everything) or it's waiting for extra handshake data, SSL_read_ex will be a no-op
+  // we also call this at the server side, because OpenSSL might have generated an Alert that we want to catch
+  // TODO: TLS alerts aren't notified via the Crypto stream, so maybe needs additional handling here? 
+  // the following code was adapted from ngtcp2::Client::read_tls (server's version is almost identical)
+
+  std::array<uint8_t, 4096> buf;
+  size_t nread;
+
+  for (;;) { // only needed at client, server should only read once  
+
+    auto rv = SSL_read_ex(wrap->ssl_, buf.data(), buf.size(), &nread);
+
+    if (rv == 1) {
+  	  wrap->Log("ReadHandshakeData:SSL_read_ex succeeded");
+
+      if( wrap->kind_ == kServer ){ // server shouldn't be getting extraneous SSL data outside handshake 
+  		wrap->Log("ReadHandshakeData:SSL_read_ex:ERROR occured: server isn't supposed to get data outside of the handshake flow, only client!");
+		const char* message = "ReadHandshakeData:SSL_read_ex:ERROR occured: server isn't supposed to get data outside of the handshake flow, only client!\0";
+	    Local<Object> messageBuffer = Buffer::Copy(env, message, strlen(message) + 1).ToLocalChecked();
+		Local<Value> arg[] = {messageBuffer};
+		wrap->MakeCallback(env->onerror_string(), 1, arg );
+        return;
+      }
+      else // at client, these are our NewSessionTicket(s), keep reading until we're done 
+	   	continue;
+    }
+    else{ // error 
+		int err;
+		const char *error_str = nullptr;
+		Local<Value> arg = wrap->GetSSLError(rv, &err, &error_str);
+		if (!arg.IsEmpty()) 
+		{
+			wrap->MakeCallback(env->onerror_string(), 1, &arg);
+			delete[] error_str;
+			return;
+		}
+		else
+		    break; // SSL_want_read or want_write : need to get another packet to resolve that, break out of this loop 
+	}
+  }
+
+  args.GetReturnValue().Set(read);
 }
 
 void QTLSWrap::ReadEarlyData(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -866,6 +895,10 @@ void QTLSWrap::ReadEarlyData(const v8::FunctionCallbackInfo<v8::Value> &args)
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
+  wrap->Log("ReadEarlyData");
+  wrap->Log("THIS SHOULD NOT HAPPEN ANYMORE!");
+  return;
+  
   size_t read;
   int status;
   int totalRead = 0;
@@ -896,6 +929,10 @@ void QTLSWrap::ReadSSL(const v8::FunctionCallbackInfo<v8::Value> &args)
   QTLSWrap *wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
+  wrap->Log("ReadSSL");
+  wrap->Log("THIS SHOULD NOT HAPPEN ANYMORE!");
+  return;
+  
   size_t read;
   int status;
   int totalRead = 0;
@@ -1090,3 +1127,6 @@ void QTLSWrap::SetServername(const FunctionCallbackInfo<Value>& args) {
 } // namespace node
 
 NODE_MODULE_CONTEXT_AWARE_BUILTIN(qtls_wrap, node::QTLSWrap::Initialize)
+
+
+
