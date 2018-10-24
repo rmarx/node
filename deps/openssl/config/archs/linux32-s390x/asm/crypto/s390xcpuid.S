@@ -234,6 +234,30 @@ OPENSSL_vx_probe:
 	.word	0xe700,0x0000,0x0044	# vzero %v0
 	br	%r14
 .size	OPENSSL_vx_probe,.-OPENSSL_vx_probe
+.globl	s390x_kimd
+.type	s390x_kimd,@function
+.align	16
+s390x_kimd:
+	llgfr	%r0,%r4
+	lgr	%r1,%r5
+
+	.long	0xb93e0002	# kimd %r0,%r2
+	brc	1,.-4		# pay attention to "partial completion"
+
+	br	%r14
+.size	s390x_kimd,.-s390x_kimd
+.globl	s390x_klmd
+.type	s390x_klmd,@function
+.align	32
+s390x_klmd:
+	llgfr	%r0,%r6
+	l	%r1,96(%r15)
+
+	.long	0xb93f0042	# klmd %r4,%r2
+	brc	1,.-4		# pay attention to "partial completion"
+
+	br	%r14
+.size	s390x_klmd,.-s390x_klmd
 .globl	s390x_km
 .type	s390x_km,@function
 .align	16

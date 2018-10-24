@@ -4,13 +4,22 @@
 
 .p2align	5
 _x25519_fe51_mul:
+
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	leaq	-40(%rsp),%rsp
+
+L$fe51_mul_body:
 
 	movq	0(%rsi),%rax
 	movq	0(%rdx),%r11
@@ -138,19 +147,30 @@ _x25519_fe51_mul:
 
 	movq	32(%rsp),%rdi
 	jmp	L$reduce51
+L$fe51_mul_epilogue:
+
 
 
 .globl	_x25519_fe51_sqr
 
 .p2align	5
 _x25519_fe51_sqr:
+
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	leaq	-40(%rsp),%rsp
+
+L$fe51_sqr_body:
 
 	movq	0(%rsi),%rax
 	movq	16(%rsi),%r15
@@ -293,27 +313,45 @@ L$reduce51:
 	movq	%r10,32(%rdi)
 
 	movq	40(%rsp),%r15
+
 	movq	48(%rsp),%r14
+
 	movq	56(%rsp),%r13
+
 	movq	64(%rsp),%r12
+
 	movq	72(%rsp),%rbx
+
 	movq	80(%rsp),%rbp
+
 	leaq	88(%rsp),%rsp
+
+L$fe51_sqr_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .globl	_x25519_fe51_mul121666
 
 .p2align	5
 _x25519_fe51_mul121666:
+
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
-	movl	$121666,%eax
+
 	leaq	-40(%rsp),%rsp
+
+L$fe51_mul121666_body:
+	movl	$121666,%eax
 
 	mulq	0(%rsi)
 	movq	%rax,%rbx
@@ -336,6 +374,8 @@ _x25519_fe51_mul121666:
 	movq	%rdx,%r15
 
 	jmp	L$reduce51
+L$fe51_mul121666_epilogue:
+
 
 
 .globl	_x25519_fe64_eligible
@@ -354,14 +394,24 @@ _x25519_fe64_eligible:
 
 .p2align	5
 _x25519_fe64_mul:
+
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	pushq	%rdi
+
 	leaq	-16(%rsp),%rsp
+
+L$fe64_mul_body:
 
 	movq	%rdx,%rax
 	movq	0(%rdx),%rbp
@@ -428,20 +478,32 @@ _x25519_fe64_mul:
 	adoxq	%rdi,%r15
 
 	jmp	L$reduce64
+L$fe64_mul_epilogue:
+
 
 
 .globl	_x25519_fe64_sqr
 
 .p2align	5
 _x25519_fe64_sqr:
+
 	pushq	%rbp
+
 	pushq	%rbx
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	pushq	%rdi
+
 	leaq	-16(%rsp),%rsp
+
+L$fe64_sqr_body:
 
 	movq	0(%rsi),%rdx
 	movq	8(%rsi),%rcx
@@ -531,19 +593,29 @@ L$reduce64:
 	movq	%r8,0(%rdi)
 
 	movq	24(%rsp),%r15
+
 	movq	32(%rsp),%r14
+
 	movq	40(%rsp),%r13
+
 	movq	48(%rsp),%r12
+
 	movq	56(%rsp),%rbx
+
 	movq	64(%rsp),%rbp
+
 	leaq	72(%rsp),%rsp
+
+L$fe64_sqr_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .globl	_x25519_fe64_mul121666
 
 .p2align	5
 _x25519_fe64_mul121666:
+L$fe64_mul121666_body:
 	movl	$121666,%edx
 	mulxq	0(%rsi),%r8,%rcx
 	mulxq	8(%rsi),%r9,%rax
@@ -570,6 +642,7 @@ _x25519_fe64_mul121666:
 	movq	%r11,24(%rdi)
 	movq	%r8,0(%rdi)
 
+L$fe64_mul121666_epilogue:
 	.byte	0xf3,0xc3
 
 
@@ -577,6 +650,7 @@ _x25519_fe64_mul121666:
 
 .p2align	5
 _x25519_fe64_add:
+L$fe64_add_body:
 	movq	0(%rsi),%r8
 	movq	8(%rsi),%r9
 	movq	16(%rsi),%r10
@@ -592,13 +666,18 @@ _x25519_fe64_add:
 
 	addq	%rax,%r8
 	adcq	$0,%r9
-	movq	%r8,0(%rdi)
 	adcq	$0,%r10
 	movq	%r9,8(%rdi)
 	adcq	$0,%r11
 	movq	%r10,16(%rdi)
+	sbbq	%rax,%rax
 	movq	%r11,24(%rdi)
+	andq	$38,%rax
 
+	addq	%rax,%r8
+	movq	%r8,0(%rdi)
+
+L$fe64_add_epilogue:
 	.byte	0xf3,0xc3
 
 
@@ -606,6 +685,7 @@ _x25519_fe64_add:
 
 .p2align	5
 _x25519_fe64_sub:
+L$fe64_sub_body:
 	movq	0(%rsi),%r8
 	movq	8(%rsi),%r9
 	movq	16(%rsi),%r10
@@ -621,13 +701,18 @@ _x25519_fe64_sub:
 
 	subq	%rax,%r8
 	sbbq	$0,%r9
-	movq	%r8,0(%rdi)
 	sbbq	$0,%r10
 	movq	%r9,8(%rdi)
 	sbbq	$0,%r11
 	movq	%r10,16(%rdi)
+	sbbq	%rax,%rax
 	movq	%r11,24(%rdi)
+	andq	$38,%rax
 
+	subq	%rax,%r8
+	movq	%r8,0(%rdi)
+
+L$fe64_sub_epilogue:
 	.byte	0xf3,0xc3
 
 
@@ -635,6 +720,7 @@ _x25519_fe64_sub:
 
 .p2align	5
 _x25519_fe64_tobytes:
+L$fe64_to_body:
 	movq	0(%rsi),%r8
 	movq	8(%rsi),%r9
 	movq	16(%rsi),%r10
@@ -645,6 +731,7 @@ _x25519_fe64_tobytes:
 	sarq	$63,%r11
 	shrq	$1,%rax
 	andq	$19,%r11
+	addq	$19,%r11
 
 	addq	%r11,%r8
 	adcq	$0,%r9
@@ -654,15 +741,20 @@ _x25519_fe64_tobytes:
 	leaq	(%rax,%rax,1),%r11
 	sarq	$63,%rax
 	shrq	$1,%r11
+	notq	%rax
 	andq	$19,%rax
 
-	addq	%rax,%r8
+	subq	%rax,%r8
+	sbbq	$0,%r9
+	sbbq	$0,%r10
+	sbbq	$0,%r11
 
+	movq	%r8,0(%rdi)
 	movq	%r9,8(%rdi)
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
-	movq	%r8,0(%rdi)
 
+L$fe64_to_epilogue:
 	.byte	0xf3,0xc3
 
 .byte	88,50,53,53,49,57,32,112,114,105,109,105,116,105,118,101,115,32,102,111,114,32,120,56,54,95,54,52,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
