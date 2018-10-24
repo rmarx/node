@@ -423,11 +423,19 @@ static WRITE_TRAN ossl_statem_client13_write_transition(SSL *s)
             st->hand_state = TLS_ST_CW_CERT;
             return WRITE_TRAN_CONTINUE;
         }
-        /* Shouldn't happen - same as default case */
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                 SSL_F_OSSL_STATEM_CLIENT13_WRITE_TRANSITION,
-                 ERR_R_INTERNAL_ERROR);
-        return WRITE_TRAN_ERROR;
+        /*
+         * We should only get here if we received a CertificateRequest after
+         * we already sent close_notify
+         */
+        if (!ossl_assert((s->shutdown & SSL_SENT_SHUTDOWN) != 0)) {
+            /* Shouldn't happen - same as default case */
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_OSSL_STATEM_CLIENT13_WRITE_TRANSITION,
+                     ERR_R_INTERNAL_ERROR);
+            return WRITE_TRAN_ERROR;
+        }
+        st->hand_state = TLS_ST_OK;
+        return WRITE_TRAN_CONTINUE;
 
     case TLS_ST_CR_FINISHED:
         if (s->early_data_state == SSL_EARLY_DATA_WRITE_RETRY
@@ -442,7 +450,8 @@ static WRITE_TRAN ossl_statem_client13_write_transition(SSL *s)
         return WRITE_TRAN_CONTINUE;
 
     case TLS_ST_PENDING_EARLY_DATA_END:
-        if (s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
+        if (!(s->mode & SSL_MODE_QUIC_HACK)
+            && s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
             st->hand_state = TLS_ST_CW_END_OF_EARLY_DATA;
             return WRITE_TRAN_CONTINUE;
         }
@@ -1119,7 +1128,7 @@ int tls_construct_client_hello(SSL *s, WPACKET *pkt)
     }
 
     if (sess == NULL
-            || !ssl_version_supported(s, sess->ssl_version)
+            || !ssl_version_supported(s, sess->ssl_version, NULL)
             || !SSL_SESSION_is_resumable(sess)) {
         if (s->hello_retry_request == SSL_HRR_NONE
                 && !ssl_get_new_session(s, 0)) {
@@ -1409,7 +1418,6 @@ MSG_PROCESS_RETURN tls_process_server_hello(SSL *s, PACKET *pkt)
     unsigned int compression;
     unsigned int sversion;
     unsigned int context;
-    int discard;
     RAW_EXTENSION *extensions = NULL;
 #ifndef OPENSSL_NO_COMP
     SSL_COMP *comp;
@@ -1616,8 +1624,7 @@ MSG_PROCESS_RETURN tls_process_server_hello(SSL *s, PACKET *pkt)
                 || (SSL_IS_TLS13(s)
                     && s->session->ext.tick_identity
                        != TLSEXT_PSK_BAD_IDENTITY)) {
-            CRYPTO_atomic_add(&s->session_ctx->stats.sess_miss, 1, &discard,
-                              s->session_ctx->lock);
+            tsan_counter(&s->session_ctx->stats.sess_miss);
             if (!ssl_get_new_session(s, 0)) {
                 /* SSLfatal() already called */
                 goto err;
@@ -2448,6 +2455,15 @@ MSG_PROCESS_RETURN tls_process_certificate_request(SSL *s, PACKET *pkt)
         PACKET reqctx, extensions;
         RAW_EXTENSION *rawexts = NULL;
 
+        if ((s->shutdown & SSL_SENT_SHUTDOWN) != 0) {
+            /*
+             * We already sent close_notify. This can only happen in TLSv1.3
+             * post-handshake messages. We can't reasonably respond to this, so
+             * we just ignore it
+             */
+            return MSG_PROCESS_FINISHED_READING;
+        }
+
         /* Free and zero certificate types: it is not present in TLS 1.3 */
         OPENSSL_free(s->s3->tmp.ctype);
         s->s3->tmp.ctype = NULL;
@@ -2647,10 +2663,16 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL *s, PACKET *pkt)
         PACKET extpkt;
 
         if (!PACKET_as_length_prefixed_2(pkt, &extpkt)
-                || PACKET_remaining(pkt) != 0
-                || !tls_collect_extensions(s, &extpkt,
-                                           SSL_EXT_TLS1_3_NEW_SESSION_TICKET,
-                                           &exts, NULL, 1)
+                || PACKET_remaining(pkt) != 0) {
+            SSLfatal(s, SSL_AD_DECODE_ERROR,
+                     SSL_F_TLS_PROCESS_NEW_SESSION_TICKET,
+                     SSL_R_LENGTH_MISMATCH);
+            goto err;
+        }
+
+        if (!tls_collect_extensions(s, &extpkt,
+                                    SSL_EXT_TLS1_3_NEW_SESSION_TICKET, &exts,
+                                    NULL, 1)
                 || !tls_parse_all_extensions(s,
                                              SSL_EXT_TLS1_3_NEW_SESSION_TICKET,
                                              exts, NULL, 0, 1)) {

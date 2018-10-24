@@ -145,8 +145,8 @@
                    put together one-size-fits-all instructions. You might
                    have to pass more flags or set up environment variables
                    to actually make it work. Android and iOS cases are
-                   discussed in corresponding Configurations/10-main.cf
-                   sections. But there are cases when this option alone is
+                   discussed in corresponding Configurations/15-*.conf
+                   files. But there are cases when this option alone is
                    sufficient. For example to build the mingw64 target on
                    Linux "--cross-compile-prefix=x86_64-w64-mingw32-"
                    works. Naturally provided that mingw packages are
@@ -157,10 +157,12 @@
                    "--cross-compile-prefix=mipsel-linux-gnu-" suffices
                    in such case. Needless to mention that you have to
                    invoke ./Configure, not ./config, and pass your target
-                   name explicitly.
+                   name explicitly. Also, note that --openssldir refers
+                   to target's file system, not one you are building on.
 
   --debug
-                   Build OpenSSL with debugging symbols.
+                   Build OpenSSL with debugging symbols and zero optimization
+                   level.
 
   --libdir=DIR
                    The name of the directory under the top of the installation
@@ -256,8 +258,10 @@
                    no-shared option.
 
   no-asm
-                   Do not use assembler code. On some platforms a small amount
-                   of assembler code may still be used.
+                   Do not use assembler code. This should be viewed as
+                   debugging/trouble-shooting option rather than production.
+                   On some platforms a small amount of assembler code may
+                   still be used even with this option.
 
   no-async
                    Do not build support for async operations.
@@ -472,16 +476,6 @@
                    require additional system-dependent options! See "Note on
                    multi-threading" below.
 
-  enable-tls13downgrade
-                   TODO(TLS1.3): Make this enabled by default and remove the
-                   option when TLSv1.3 is out of draft
-                   TLSv1.3 offers a downgrade protection mechanism. This is
-                   implemented but disabled by default. It should not typically
-                   be enabled except for testing purposes. Otherwise this could
-                   cause problems if a pre-RFC version of OpenSSL talks to an
-                   RFC implementation (it will erroneously be detected as a
-                   downgrade).
-
   no-ts
                    Don't build Time Stamping Authority support.
 
@@ -620,8 +614,8 @@
                                    Windows, and as a comma separated list of
                                    libraries on VMS.
                    RANLIB          The library archive indexer.
-                   RC              The Windows resources manipulator.
-                   RCFLAGS         Flags for the Windows reources manipulator.
+                   RC              The Windows resource compiler.
+                   RCFLAGS         Flags for the Windows resource compiler.
                    RM              The command to remove files and directories.
 
                    These cannot be mixed with compiling / linking flags given
@@ -975,7 +969,7 @@
 
  BUILDFILE
                 Use a different build file name than the platform default
-                ("Makefile" on Unixly platforms, "makefile" on native Windows,
+                ("Makefile" on Unix-like platforms, "makefile" on native Windows,
                 "descrip.mms" on OpenVMS).  This requires that there is a
                 corresponding build file template.  See Configurations/README
                 for further information.
@@ -1177,7 +1171,7 @@
  part of the file name, i.e. for OpenSSL 1.1.x, 1.1 is somehow part of
  the name.
 
- On most POSIXly platforms, shared libraries are named libcrypto.so.1.1
+ On most POSIX platforms, shared libraries are named libcrypto.so.1.1
  and libssl.so.1.1.
 
  on Cygwin, shared libraries are named cygcrypto-1.1.dll and cygssl-1.1.dll
@@ -1208,7 +1202,7 @@
  The seeding method can be configured using the --with-rand-seed option,
  which can be used to specify a comma separated list of seed methods.
  However in most cases OpenSSL will choose a suitable default method,
- so it is not necessary to explicitely provide this option. Note also
+ so it is not necessary to explicitly provide this option. Note also
  that not all methods are available on all platforms.
 
  I) On operating systems which provide a suitable randomness source (in

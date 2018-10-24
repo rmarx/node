@@ -44,6 +44,7 @@ typedef struct {
     int taglen;
     int iv_gen;                 /* It is OK to generate IVs */
     int tls_aad_len;            /* TLS AAD length */
+    uint64_t tls_enc_records;   /* Number of TLS records encrypted */
     ctr128_f ctr;
 } EVP_AES_GCM_CTX;
 
@@ -143,6 +144,22 @@ void AES_xts_decrypt(const unsigned char *inp, unsigned char *out, size_t len,
                      const AES_KEY *key1, const AES_KEY *key2,
                      const unsigned char iv[16]);
 #endif
+
+/* increment counter (64-bit int) by 1 */
+static void ctr64_inc(unsigned char *counter)
+{
+    int n = 8;
+    unsigned char c;
+
+    do {
+        --n;
+        c = counter[n];
+        ++c;
+        counter[n] = c;
+        if (c)
+            return;
+    } while (n);
+}
 
 #if defined(OPENSSL_CPUID_OBJ) && (defined(__powerpc__) || defined(__ppc__) || defined(_ARCH_PPC))
 # include "ppc_arch.h"
@@ -1053,6 +1070,7 @@ typedef struct {
     int kreslen;
 
     int tls_aad_len;
+    uint64_t tls_enc_records;   /* Number of TLS records encrypted */
 } S390X_AES_GCM_CTX;
 
 typedef struct {
@@ -1654,7 +1672,7 @@ static int s390x_aes_gcm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
          * Invocation field will be at least 8 bytes in size and so no need
          * to check wrap around or increment more than last 8 bytes.
          */
-        (*(unsigned long long *)(gctx->iv + gctx->ivlen - 8))++;
+        ctr64_inc(gctx->iv + gctx->ivlen - 8);
         gctx->iv_set = 1;
         return 1;
 
@@ -1676,6 +1694,7 @@ static int s390x_aes_gcm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
         buf = EVP_CIPHER_CTX_buf_noconst(c);
         memcpy(buf, ptr, arg);
         gctx->tls_aad_len = arg;
+        gctx->tls_enc_records = 0;
 
         len = buf[arg - 2] << 8 | buf[arg - 1];
         /* Correct length for explicit iv. */
@@ -1774,6 +1793,17 @@ static int s390x_aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 
     if (out != in || len < (EVP_GCM_TLS_EXPLICIT_IV_LEN + EVP_GCM_TLS_TAG_LEN))
         return -1;
+
+    /*
+     * Check for too many keys as per FIPS 140-2 IG A.5 "Key/IV Pair Uniqueness
+     * Requirements from SP 800-38D".  The requirements is for one party to the
+     * communication to fail after 2^64 - 1 keys.  We do this on the encrypting
+     * side only.
+     */
+    if (ctx->encrypt && ++gctx->tls_enc_records == 0) {
+        EVPerr(EVP_F_S390X_AES_GCM_TLS_CIPHER, EVP_R_TOO_MANY_RECORDS);
+        goto err;
+    }
 
     if (EVP_CIPHER_CTX_ctrl(ctx, enc ? EVP_CTRL_GCM_IV_GEN
                                      : EVP_CTRL_GCM_SET_IV_INV,
@@ -2225,7 +2255,7 @@ static int s390x_aes_ccm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 
     if (!cctx->aes.ccm.len_set) {
         /*-
-         * In case message length was not previously set explicitely via
+         * In case message length was not previously set explicitly via
          * Update(), set it now.
          */
         ivec = EVP_CIPHER_CTX_iv_noconst(ctx);
@@ -2291,7 +2321,7 @@ static int s390x_aes_ccm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
         memcpy(buf, ptr, arg);
         cctx->aes.ccm.tls_aad_len = arg;
 
-        len = *(uint16_t *)(buf + arg - 2);
+        len = buf[arg - 2] << 8 | buf[arg - 1];
         if (len < EVP_CCM_TLS_EXPLICIT_IV_LEN)
             return 0;
 
@@ -2307,7 +2337,9 @@ static int s390x_aes_ccm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
             len -= cctx->aes.ccm.m;
         }
 
-        *(uint16_t *)(buf + arg - 2) = len;
+        buf[arg - 2] = len >> 8;
+        buf[arg - 1] = len & 0xff;
+
         /* Extra padding: tag appended to record. */
         return cctx->aes.ccm.m;
 
@@ -2791,22 +2823,6 @@ static int aes_gcm_cleanup(EVP_CIPHER_CTX *c)
     return 1;
 }
 
-/* increment counter (64-bit int) by 1 */
-static void ctr64_inc(unsigned char *counter)
-{
-    int n = 8;
-    unsigned char c;
-
-    do {
-        --n;
-        c = counter[n];
-        ++c;
-        counter[n] = c;
-        if (c)
-            return;
-    } while (n);
-}
-
 static int aes_gcm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
 {
     EVP_AES_GCM_CTX *gctx = EVP_C_DATA(EVP_AES_GCM_CTX,c);
@@ -2899,6 +2915,7 @@ static int aes_gcm_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
             return 0;
         memcpy(c->buf, ptr, arg);
         gctx->tls_aad_len = arg;
+        gctx->tls_enc_records = 0;
         {
             unsigned int len = c->buf[arg - 2] << 8 | c->buf[arg - 1];
             /* Correct length for explicit IV */
@@ -3033,6 +3050,18 @@ static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
     if (out != in
         || len < (EVP_GCM_TLS_EXPLICIT_IV_LEN + EVP_GCM_TLS_TAG_LEN))
         return -1;
+    
+    /*
+     * Check for too many keys as per FIPS 140-2 IG A.5 "Key/IV Pair Uniqueness
+     * Requirements from SP 800-38D".  The requirements is for one party to the
+     * communication to fail after 2^64 - 1 keys.  We do this on the encrypting
+     * side only.
+     */
+    if (ctx->encrypt && ++gctx->tls_enc_records == 0) {
+        EVPerr(EVP_F_AES_GCM_TLS_CIPHER, EVP_R_TOO_MANY_RECORDS);
+        goto err;
+    }
+
     /*
      * Set IV from start of buffer or generate IV and write to start of
      * buffer.
@@ -3408,10 +3437,30 @@ static int aes_xts_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                           const unsigned char *in, size_t len)
 {
     EVP_AES_XTS_CTX *xctx = EVP_C_DATA(EVP_AES_XTS_CTX,ctx);
-    if (!xctx->xts.key1 || !xctx->xts.key2)
+
+    if (xctx->xts.key1 == NULL
+            || xctx->xts.key2 == NULL
+            || out == NULL
+            || in == NULL
+            || len < AES_BLOCK_SIZE)
         return 0;
-    if (!out || !in || len < AES_BLOCK_SIZE)
+
+    /*
+     * Verify that the two keys are different.
+     *
+     * This addresses the vulnerability described in Rogaway's September 2004
+     * paper (http://web.cs.ucdavis.edu/~rogaway/papers/offsets.pdf):
+     *      "Efficient Instantiations of Tweakable Blockciphers and Refinements
+     *       to Modes OCB and PMAC".
+     *
+     * FIPS 140-2 IG A.9 XTS-AES Key Generation Requirements states that:
+     *      "The check for Key_1 != Key_2 shall be done at any place BEFORE
+     *       using the keys in the XTS-AES algorithm to process data with them."
+    */
+    if (CRYPTO_memcmp(xctx->xts.key1, xctx->xts.key2,
+                      EVP_CIPHER_CTX_key_length(ctx) / 2) == 0)
         return 0;
+
     if (xctx->stream)
         (*xctx->stream) (in, out, len,
                          xctx->xts.key1, xctx->xts.key2,

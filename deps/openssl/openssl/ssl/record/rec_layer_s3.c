@@ -348,8 +348,6 @@ int ssl3_write_bytes(SSL *s, int type, const void *buf_, size_t len,
     int i;
     size_t tmpwrit;
 
-    fprintf(stderr, "ssl3_write_bytes len=%zu\n", len);
-
     if (s->mode & SSL_MODE_QUIC_HACK) {
         /* If we have an alert to send, lets send it */
         if (s->s3->alert_dispatch) {
@@ -839,8 +837,8 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
     /* Clear our SSL3_RECORD structures */
     memset(wr, 0, sizeof(wr));
     for (j = 0; j < numpipes; j++) {
-        unsigned int version = SSL_TREAT_AS_TLS13(s) ? TLS1_2_VERSION
-                                                     : s->version;
+        unsigned int version = (s->version == TLS1_3_VERSION) ? TLS1_2_VERSION
+                                                              : s->version;
         unsigned char *compressdata = NULL;
         size_t maxcomplen;
         unsigned int rectype;
@@ -852,7 +850,10 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
          * In TLSv1.3, once encrypting, we always use application data for the
          * record type
          */
-        if (SSL_TREAT_AS_TLS13(s) && s->enc_write_ctx != NULL)
+        if (SSL_TREAT_AS_TLS13(s)
+                && s->enc_write_ctx != NULL
+                && (s->statem.enc_write_state != ENC_WRITE_STATE_WRITE_PLAIN_ALERTS
+                    || type != SSL3_RT_ALERT))
             rectype = SSL3_RT_APPLICATION_DATA;
         else
             rectype = type;
@@ -915,7 +916,10 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
             SSL3_RECORD_reset_input(&wr[j]);
         }
 
-        if (SSL_TREAT_AS_TLS13(s) && s->enc_write_ctx != NULL) {
+        if (SSL_TREAT_AS_TLS13(s)
+                && s->enc_write_ctx != NULL
+                && (s->statem.enc_write_state != ENC_WRITE_STATE_WRITE_PLAIN_ALERTS
+                    || type != SSL3_RT_ALERT)) {
             size_t rlen, max_send_fragment;
 
             if (!WPACKET_put_bytes_u8(thispkt, type)) {
@@ -1004,8 +1008,7 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
         SSL3_RECORD_set_length(thiswr, len);
     }
 
-    if (s->early_data_state == SSL_EARLY_DATA_WRITING
-            || s->early_data_state == SSL_EARLY_DATA_WRITE_RETRY) {
+    if (s->statem.enc_write_state == ENC_WRITE_STATE_WRITE_PLAIN_ALERTS) {
         /*
          * We haven't actually negotiated the version yet, but we're trying to
          * send early data - so we need to use the tls13enc function.
@@ -1298,41 +1301,18 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
 
             switch (rbuf->buf[rbuf->offset]) {
             case SSL3_MT_CLIENT_HELLO:
-                fprintf(stderr, "client hello\n");
-                break;
             case SSL3_MT_SERVER_HELLO:
-                fprintf(stderr, "server hello\n");
-                break;
             case SSL3_MT_NEWSESSION_TICKET:
-                fprintf(stderr, "new session ticket\n");
-                break;
             case SSL3_MT_END_OF_EARLY_DATA:
-                fprintf(stderr, "end of early data\n");
-                break;
             case SSL3_MT_ENCRYPTED_EXTENSIONS:
-                fprintf(stderr, "encrypted extensions\n");
-                break;
             case SSL3_MT_CERTIFICATE:
-                fprintf(stderr, "certificate\n");
-                break;
             case SSL3_MT_CERTIFICATE_REQUEST:
-                fprintf(stderr, "certificate request\n");
-                break;
             case SSL3_MT_CERTIFICATE_VERIFY:
-                fprintf(stderr, "certificate verify\n");
-                break;
             case SSL3_MT_FINISHED:
-                fprintf(stderr, "finished\n");
-                break;
             case SSL3_MT_KEY_UPDATE:
-                fprintf(stderr, "key update\n");
-                break;
             case SSL3_MT_MESSAGE_HASH:
-                fprintf(stderr, "message hash\n");
                 break;
             default:
-                fprintf(stderr, "unexpected handshake type %02x received\n",
-                        rbuf->buf[rbuf->offset]);
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL3_READ_BYTES,
                          ERR_R_INTERNAL_ERROR);
                 return -1;
@@ -1377,7 +1357,6 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
             return 1;
         }
 
-        fprintf(stderr, "unreachable\n");
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL3_READ_BYTES,
                  ERR_R_INTERNAL_ERROR);
         return -1;
@@ -1711,30 +1690,30 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
         return -1;
     }
 
-    /*
-     * If we've sent a close_notify but not yet received one back then ditch
-     * anything we read.
-     */
     if ((s->shutdown & SSL_SENT_SHUTDOWN) != 0) {
-        /*
-         * In TLSv1.3 this could get problematic if we receive a KeyUpdate
-         * message after we sent a close_notify because we're about to ditch it,
-         * so we won't be able to read a close_notify sent afterwards! We don't
-         * support that.
-         */
-        SSL3_RECORD_set_length(rr, 0);
-        SSL3_RECORD_set_read(rr);
-
         if (SSL3_RECORD_get_type(rr) == SSL3_RT_HANDSHAKE) {
             BIO *rbio;
 
-            if ((s->mode & SSL_MODE_AUTO_RETRY) != 0)
-                goto start;
+            /*
+             * We ignore any handshake messages sent to us unless they are
+             * TLSv1.3 in which case we want to process them. For all other
+             * handshake messages we can't do anything reasonable with them
+             * because we are unable to write any response due to having already
+             * sent close_notify.
+             */
+            if (!SSL_IS_TLS13(s)) {
+                SSL3_RECORD_set_length(rr, 0);
+                SSL3_RECORD_set_read(rr);
 
-            s->rwstate = SSL_READING;
-            rbio = SSL_get_rbio(s);
-            BIO_clear_retry_flags(rbio);
-            BIO_set_retry_read(rbio);
+                if ((s->mode & SSL_MODE_AUTO_RETRY) != 0)
+                    goto start;
+
+                s->rwstate = SSL_READING;
+                rbio = SSL_get_rbio(s);
+                BIO_clear_retry_flags(rbio);
+                BIO_set_retry_read(rbio);
+                return -1;
+            }
         } else {
             /*
              * The peer is continuing to send application data, but we have
@@ -1743,10 +1722,12 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
              * above.
              * No alert sent because we already sent close_notify
              */
+            SSL3_RECORD_set_length(rr, 0);
+            SSL3_RECORD_set_read(rr);
             SSLfatal(s, SSL_AD_NO_ALERT, SSL_F_SSL3_READ_BYTES,
                      SSL_R_APPLICATION_DATA_AFTER_CLOSE_NOTIFY);
+            return -1;
         }
-        return -1;
     }
 
     /*

@@ -810,7 +810,7 @@ int tls_construct_extensions(SSL *s, WPACKET *pkt, unsigned int context,
     }
 
     if ((context & SSL_EXT_CLIENT_HELLO) != 0) {
-        reason = ssl_get_min_max_version(s, &min_version, &max_version);
+        reason = ssl_get_min_max_version(s, &min_version, &max_version, NULL);
         if (reason != 0) {
             SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_CONSTRUCT_EXTENSIONS,
                      reason);
@@ -904,15 +904,19 @@ static int final_renegotiate(SSL *s, unsigned int context, int sent)
 
 static int init_server_name(SSL *s, unsigned int context)
 {
-    if (s->server)
+    if (s->server) {
         s->servername_done = 0;
+
+        OPENSSL_free(s->ext.hostname);
+        s->ext.hostname = NULL;
+    }
 
     return 1;
 }
 
 static int final_server_name(SSL *s, unsigned int context, int sent)
 {
-    int ret = SSL_TLSEXT_ERR_NOACK, discard;
+    int ret = SSL_TLSEXT_ERR_NOACK;
     int altmp = SSL_AD_UNRECOGNIZED_NAME;
     int was_ticket = (SSL_get_options(s) & SSL_OP_NO_TICKET) == 0;
 
@@ -929,9 +933,25 @@ static int final_server_name(SSL *s, unsigned int context, int sent)
         ret = s->session_ctx->ext.servername_cb(s, &altmp,
                                        s->session_ctx->ext.servername_arg);
 
-    if (!sent) {
-        OPENSSL_free(s->session->ext.hostname);
-        s->session->ext.hostname = NULL;
+    /*
+     * For servers, propagate the SNI hostname from the temporary
+     * storage in the SSL to the persistent SSL_SESSION, now that we
+     * know we accepted it.
+     * Clients make this copy when parsing the server's response to
+     * the extension, which is when they find out that the negotiation
+     * was successful.
+     */
+    if (s->server) {
+        /* TODO(OpenSSL1.2) revisit !sent case */
+        if (sent && ret == SSL_TLSEXT_ERR_OK && (!s->hit || SSL_IS_TLS13(s))) {
+            /* Only store the hostname in the session if we accepted it. */
+            OPENSSL_free(s->session->ext.hostname);
+            s->session->ext.hostname = OPENSSL_strdup(s->ext.hostname);
+            if (s->session->ext.hostname == NULL && s->ext.hostname != NULL) {
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_FINAL_SERVER_NAME,
+                         ERR_R_INTERNAL_ERROR);
+            }
+        }
     }
 
     /*
@@ -941,10 +961,8 @@ static int final_server_name(SSL *s, unsigned int context, int sent)
      * exceed sess_accept (zero) for the new context.
      */
     if (SSL_IS_FIRST_HANDSHAKE(s) && s->ctx != s->session_ctx) {
-        CRYPTO_atomic_add(&s->ctx->stats.sess_accept, 1, &discard,
-                          s->ctx->lock);
-        CRYPTO_atomic_add(&s->session_ctx->stats.sess_accept, -1, &discard,
-                          s->session_ctx->lock);
+        tsan_counter(&s->ctx->stats.sess_accept);
+        tsan_counter(&s->session_ctx->stats.sess_accept);
     }
 
     /*

@@ -13,7 +13,14 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 
-#define TLS13_MAX_LABEL_LEN     246
+/*
+ * RFC 8446, 7.1 Key Schedule, says:
+ * Note: With common hash functions, any label longer than 12 characters
+ * requires an additional iteration of the hash function to compute.
+ * The labels in this specification have all been chosen to fit within
+ * this limit.
+ */
+#define TLS13_MAX_LABEL_LEN     12
 
 /* Always filled with zeros */
 static const unsigned char default_zeros[EVP_MAX_MD_SIZE];
@@ -29,8 +36,8 @@ int tls13_hkdf_expand(SSL *s, const EVP_MD *md, const unsigned char *secret,
                              const unsigned char *data, size_t datalen,
                              unsigned char *out, size_t outlen)
 {
-    const unsigned char tls13_label_prefix[] = "tls13 ";
-    const unsigned char quic_label_prefix[] = "quic ";
+    static const unsigned char tls13_label_prefix[] = "tls13 ";
+    static const unsigned char quic_label_prefix[] = "quic ";
     const unsigned char *label_prefix;
     size_t label_prefixlen;
     EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
@@ -38,8 +45,9 @@ int tls13_hkdf_expand(SSL *s, const EVP_MD *md, const unsigned char *secret,
     size_t hkdflabellen;
     size_t hashlen;
     /*
-     * 2 bytes for length of whole HkdfLabel + 1 byte for length of combined
-     * prefix and label + bytes for the label itself + bytes for the hash
+     * 2 bytes for length of derived secret + 1 byte for length of combined
+     * prefix and label + bytes for the label itself + 1 byte length of hash
+     * + bytes for the hash itself
      */
     unsigned char hkdflabel[sizeof(uint16_t) + sizeof(uint8_t)
                             + sizeof(tls13_label_prefix) + TLS13_MAX_LABEL_LEN
@@ -282,6 +290,7 @@ size_t tls13_final_finish_mac(SSL *s, const char *str, size_t slen,
 
         key = EVP_PKEY_new_raw_private_key(EVP_PKEY_HMAC, NULL, finsecret,
                                            hashlen);
+        OPENSSL_cleanse(finsecret, sizeof(finsecret));
     }
 
     if (key == NULL
@@ -427,7 +436,6 @@ int tls13_change_cipher_state(SSL *s, int which)
         } else {
             s->enc_read_ctx = EVP_CIPHER_CTX_new();
             if (s->enc_read_ctx == NULL) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR malloc 1");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, ERR_R_MALLOC_FAILURE);
                 goto err;
@@ -438,13 +446,12 @@ int tls13_change_cipher_state(SSL *s, int which)
 
         RECORD_LAYER_reset_read_sequence(&s->rlayer);
     } else {
-        s->statem.invalid_enc_write_ctx = 1;
+        s->statem.enc_write_state = ENC_WRITE_STATE_INVALID;
         if (s->enc_write_ctx != NULL) {
             EVP_CIPHER_CTX_reset(s->enc_write_ctx);
         } else {
             s->enc_write_ctx = EVP_CIPHER_CTX_new();
             if (s->enc_write_ctx == NULL) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR malloc 2");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, ERR_R_MALLOC_FAILURE);
                 goto err;
@@ -472,7 +479,6 @@ int tls13_change_cipher_state(SSL *s, int which)
 
             handlen = BIO_get_mem_data(s->s3->handshake_buffer, &hdata);
             if (handlen <= 0) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR bad handshake length 1");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE,
                          SSL_R_BAD_HANDSHAKE_LENGTH);
@@ -490,7 +496,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                 if (!ossl_assert(s->psksession != NULL
                         && s->max_early_data ==
                            s->psksession->ext.max_early_data)) {
- 		    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR early data 1");
                     SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                              SSL_F_TLS13_CHANGE_CIPHER_STATE,
                              ERR_R_INTERNAL_ERROR);
@@ -499,7 +504,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                 sslcipher = SSL_SESSION_get0_cipher(s->psksession);
             }
             if (sslcipher == NULL) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR bad_psk 1");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, SSL_R_BAD_PSK);
                 goto err;
@@ -512,7 +516,6 @@ int tls13_change_cipher_state(SSL *s, int which)
              */
             mdctx = EVP_MD_CTX_new();
             if (mdctx == NULL) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR malloc 3");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, ERR_R_MALLOC_FAILURE);
                 goto err;
@@ -522,7 +525,6 @@ int tls13_change_cipher_state(SSL *s, int which)
             if (md == NULL || !EVP_DigestInit_ex(mdctx, md, NULL)
                     || !EVP_DigestUpdate(mdctx, hdata, handlen)
                     || !EVP_DigestFinal_ex(mdctx, hashval, &hashlenui)) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR DigestUpdate 1");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, ERR_R_INTERNAL_ERROR);
                 EVP_MD_CTX_free(mdctx);
@@ -536,7 +538,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                                    sizeof(early_exporter_master_secret) - 1,
                                    hashval, hashlen,
                                    s->early_exporter_master_secret, hashlen)) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR tls13_hkdf_expand 1");
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS13_CHANGE_CIPHER_STATE, ERR_R_INTERNAL_ERROR);
                 goto err;
@@ -544,7 +545,6 @@ int tls13_change_cipher_state(SSL *s, int which)
 
             if (!ssl_log_secret(s, EARLY_EXPORTER_SECRET_LABEL,
                                 s->early_exporter_master_secret, hashlen)) {
- 		fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR log_secret 1");
                 /* SSLfatal() already called */
                 goto err;
             }
@@ -600,7 +600,6 @@ int tls13_change_cipher_state(SSL *s, int which)
         cipher = s->s3->tmp.new_sym_enc;
         if (!ssl3_digest_cached_records(s, 1)
                 || !ssl_handshake_hash(s, hashval, sizeof(hashval), &hashlen)) {
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR handshake_hash 1");
             /* SSLfatal() already called */;
             goto err;
         }
@@ -626,7 +625,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                                sizeof(resumption_master_secret) - 1,
                                hashval, hashlen, s->resumption_master_secret,
                                hashlen)) {
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR tls13_hkdf_expand 2");
             /* SSLfatal() already called */
             goto err;
         }
@@ -636,7 +634,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                                   insecret, hash, label, labellen, secret, key,
                                   iv, ciph_ctx)) {
         /* SSLfatal() already called */
-	fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR derive_secret_key_and_iv 1");
         goto err;
     }
 
@@ -653,7 +650,6 @@ int tls13_change_cipher_state(SSL *s, int which)
         } else if (label == server_application_traffic) {
             type = SSL_KEY_SERVER_APPLICATION_TRAFFIC;
         } else {
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR key_callback 1 %d", type);
             SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS13_CHANGE_CIPHER_STATE,
                      ERR_R_INTERNAL_ERROR);
             goto err;
@@ -662,7 +658,6 @@ int tls13_change_cipher_state(SSL *s, int which)
                              EVP_CIPHER_CTX_key_length(ciph_ctx), iv,
                              EVP_CIPHER_CTX_iv_length(ciph_ctx),
                              s->key_callback_arg)) {
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR key_callback 2 %d", type);
             SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS13_CHANGE_CIPHER_STATE,
                      ERR_R_INTERNAL_ERROR);
             goto err;
@@ -673,11 +668,10 @@ int tls13_change_cipher_state(SSL *s, int which)
             case SSL_KEY_CLIENT_HANDSHAKE_TRAFFIC:
             case SSL_KEY_CLIENT_APPLICATION_TRAFFIC:
                 if (s->rlayer.rbuf.left) {
-	    	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR illegal key for server 1 %d : TODO: RE-ENABLE in openssl/ssl/tls13_enc.c!!!\n", type);
-                    //SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                    //         SSL_F_TLS13_CHANGE_CIPHER_STATE,
-                    //         ERR_R_INTERNAL_ERROR);
-                    //goto err;
+                    SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                             SSL_F_TLS13_CHANGE_CIPHER_STATE,
+                             ERR_R_INTERNAL_ERROR);
+                    goto err;
                 }
                 break;
             }
@@ -686,11 +680,10 @@ int tls13_change_cipher_state(SSL *s, int which)
             case SSL_KEY_SERVER_HANDSHAKE_TRAFFIC:
             case SSL_KEY_SERVER_APPLICATION_TRAFFIC:
                 if (s->rlayer.rbuf.left) {
-	    	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR illegal key for client 1 %d : TODO: RE-ENABLE in openssl/ssl/tls13_enc.c!!!\n", type);
-                    //SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                    //         SSL_F_TLS13_CHANGE_CIPHER_STATE,
-                    //         ERR_R_INTERNAL_ERROR);
-                    //goto err;
+                    SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                             SSL_F_TLS13_CHANGE_CIPHER_STATE,
+                             ERR_R_INTERNAL_ERROR);
+                    goto err;
                 }
                 break;
             }
@@ -706,13 +699,11 @@ int tls13_change_cipher_state(SSL *s, int which)
                                hash, hashlen, s->exporter_master_secret,
                                hashlen)) {
             /* SSLfatal() already called */
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR tls13_hkdf_expand 3");
             goto err;
         }
 
         if (!ssl_log_secret(s, EXPORTER_SECRET_LABEL, s->exporter_master_secret,
                             hashlen)) {
-	    fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR ssl_log_secret 2");
             /* SSLfatal() already called */
             goto err;
         }
@@ -720,7 +711,6 @@ int tls13_change_cipher_state(SSL *s, int which)
         memcpy(s->client_app_traffic_secret, secret, hashlen);
 
     if (!ssl_log_secret(s, log_label, secret, hashlen)) {
-	fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR ssl_log_secret 3");
         /* SSLfatal() already called */
         goto err;
     }
@@ -728,12 +718,14 @@ int tls13_change_cipher_state(SSL *s, int which)
     if (finsecret != NULL
             && !tls13_derive_finishedkey(s, ssl_handshake_md(s), secret,
                                          finsecret, finsecretlen)) {
-	fprintf(stderr, "ROBIN tls13_change_cipher_state ERROR tls13_derive_finishedkey 1");
         /* SSLfatal() already called */
         goto err;
     }
 
-    s->statem.invalid_enc_write_ctx = 0;
+    if (!s->server && label == client_early_traffic)
+        s->statem.enc_write_state = ENC_WRITE_STATE_WRITE_PLAIN_ALERTS;
+    else
+        s->statem.enc_write_state = ENC_WRITE_STATE_VALID;
     ret = 1;
  err:
     OPENSSL_cleanse(secret, sizeof(secret));
@@ -757,7 +749,7 @@ int tls13_update_key(SSL *s, int sending)
         insecret = s->client_app_traffic_secret;
 
     if (sending) {
-        s->statem.invalid_enc_write_ctx = 1;
+        s->statem.enc_write_state = ENC_WRITE_STATE_INVALID;
         iv = s->write_iv;
         ciph_ctx = s->enc_write_ctx;
         RECORD_LAYER_reset_write_sequence(&s->rlayer);
@@ -777,7 +769,7 @@ int tls13_update_key(SSL *s, int sending)
 
     memcpy(insecret, secret, hashlen);
 
-    s->statem.invalid_enc_write_ctx = 0;
+    s->statem.enc_write_state = ENC_WRITE_STATE_VALID;
     ret = 1;
  err:
     OPENSSL_cleanse(secret, sizeof(secret));
@@ -786,7 +778,8 @@ int tls13_update_key(SSL *s, int sending)
 
 int tls13_alert_code(int code)
 {
-    if (code == SSL_AD_MISSING_EXTENSION)
+    /* There are 2 additional alerts in TLSv1.3 compared to TLSv1.2 */
+    if (code == SSL_AD_MISSING_EXTENSION || code == SSL_AD_CERTIFICATE_REQUIRED)
         return code;
 
     return tls1_alert_code(code);

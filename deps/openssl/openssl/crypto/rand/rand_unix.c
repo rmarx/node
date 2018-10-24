@@ -77,7 +77,16 @@ static uint64_t get_timer_bits(void);
 # endif
 #endif /* defined(OPENSSL_SYS_UNIX) || defined(__DJGPP__) */
 
-int syscall_random(void *buf, size_t buflen);
+#if defined(OPENSSL_RAND_SEED_NONE)
+/* none means none. this simplifies the following logic */
+# undef OPENSSL_RAND_SEED_OS
+# undef OPENSSL_RAND_SEED_GETRANDOM
+# undef OPENSSL_RAND_SEED_LIBRANDOM
+# undef OPENSSL_RAND_SEED_DEVRANDOM
+# undef OPENSSL_RAND_SEED_RDTSC
+# undef OPENSSL_RAND_SEED_RDCPU
+# undef OPENSSL_RAND_SEED_EGD
+#endif
 
 #if (defined(OPENSSL_SYS_VXWORKS) || defined(OPENSSL_SYS_UEFI)) && \
         !defined(OPENSSL_RAND_SEED_NONE)
@@ -192,13 +201,18 @@ void rand_pool_keep_random_devices_open(int keep)
 #  if (defined(__FreeBSD__) || defined(__NetBSD__)) && defined(KERN_ARND)
 /*
  * sysctl_random(): Use sysctl() to read a random number from the kernel
- * Returns the size on success, 0 on failure.
+ * Returns the number of bytes returned in buf on success, -1 on failure.
  */
-static size_t sysctl_random(char *buf, size_t buflen)
+static ssize_t sysctl_random(char *buf, size_t buflen)
 {
     int mib[2];
     size_t done = 0;
     size_t len;
+
+    /*
+     * Note: sign conversion between size_t and ssize_t is safe even
+     * without a range check, see comment in syscall_random()
+     */
 
     /*
      * On FreeBSD old implementations returned longs, newer versions support
@@ -206,8 +220,10 @@ static size_t sysctl_random(char *buf, size_t buflen)
      * when the sysctl returns long and we want to request something not a
      * multiple of longs, which should never be the case.
      */
-    if (!ossl_assert(buflen % sizeof(long) == 0))
-        return 0;
+    if (!ossl_assert(buflen % sizeof(long) == 0)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     /*
      * On NetBSD before 4.0 KERN_ARND was an alias for KERN_URND, and only
@@ -217,7 +233,8 @@ static size_t sysctl_random(char *buf, size_t buflen)
      * Just return an error on older NetBSD versions.
      */
 #if   defined(__NetBSD__) && __NetBSD_Version__ < 400000000
-    return 0;
+    errno = ENOSYS;
+    return -1;
 #endif
 
     mib[0] = CTL_KERN;
@@ -226,7 +243,7 @@ static size_t sysctl_random(char *buf, size_t buflen)
     do {
         len = buflen;
         if (sysctl(mib, 2, buf, &len, NULL, 0) == -1)
-            return done;
+            return done > 0 ? done : -1;
         done += len;
         buf += len;
         buflen -= len;
@@ -236,12 +253,23 @@ static size_t sysctl_random(char *buf, size_t buflen)
 }
 #  endif
 
+#  if defined(OPENSSL_RAND_SEED_GETRANDOM)
 /*
  * syscall_random(): Try to get random data using a system call
- * returns the number of bytes returned in buf, or <= 0 on error.
+ * returns the number of bytes returned in buf, or < 0 on error.
  */
-int syscall_random(void *buf, size_t buflen)
+static ssize_t syscall_random(void *buf, size_t buflen)
 {
+    /*
+     * Note: 'buflen' equals the size of the buffer which is used by the
+     * get_entropy() callback of the RAND_DRBG. It is roughly bounded by
+     *
+     *   2 * DRBG_MINMAX_FACTOR * (RAND_DRBG_STRENGTH / 8) = 2^13
+     *
+     * which is way below the OSSL_SSIZE_MAX limit. Therefore sign conversion
+     * between size_t and ssize_t is safe even without a range check.
+     */
+
     /*
      * Do runtime detection to find getentropy().
      *
@@ -253,10 +281,10 @@ int syscall_random(void *buf, size_t buflen)
      * - FreeBSD since 12.0 (1200061)
      */
 #  if defined(__GNUC__) && __GNUC__>=2 && defined(__ELF__) && !defined(__hpux)
-    extern int getentropy(void *bufer, size_t length) __attribute__((weak));
+    extern int getentropy(void *buffer, size_t length) __attribute__((weak));
 
     if (getentropy != NULL)
-        return getentropy(buf, buflen) == 0 ? buflen : 0;
+        return getentropy(buf, buflen) == 0 ? (ssize_t)buflen : -1;
 #  else
     union {
         void *p;
@@ -271,22 +299,22 @@ int syscall_random(void *buf, size_t buflen)
     p_getentropy.p = DSO_global_lookup("getentropy");
     ERR_pop_to_mark();
     if (p_getentropy.p != NULL)
-        return p_getentropy.f(buf, buflen) == 0 ? buflen : 0;
+        return p_getentropy.f(buf, buflen) == 0 ? (ssize_t)buflen : -1;
 #  endif
 
     /* Linux supports this since version 3.17 */
 #  if defined(__linux) && defined(SYS_getrandom)
-    return (int)syscall(SYS_getrandom, buf, buflen, 0);
-#  endif
-
-#  if (defined(__FreeBSD__) || defined(__NetBSD__)) && defined(KERN_ARND)
-    return (int)sysctl_random(buf, buflen);
-#  endif
-
+    return syscall(SYS_getrandom, buf, buflen, 0);
+#  elif (defined(__FreeBSD__) || defined(__NetBSD__)) && defined(KERN_ARND)
+    return sysctl_random(buf, buflen);
+#  else
+    errno = ENOSYS;
     return -1;
+#  endif
 }
+#  endif    /* defined(OPENSSL_RAND_SEED_GETRANDOM) */
 
-#if  !defined(OPENSSL_RAND_SEED_NONE) && defined(OPENSSL_RAND_SEED_DEVRANDOM)
+#  if defined(OPENSSL_RAND_SEED_DEVRANDOM)
 static const char *random_device_paths[] = { DEVRANDOM };
 static struct random_device {
     int fd;
@@ -393,9 +421,7 @@ void rand_pool_keep_random_devices_open(int keep)
     keep_random_devices_open = keep;
 }
 
-#  else     /* defined(OPENSSL_RAND_SEED_NONE)
-             * || !defined(OPENSSL_RAND_SEED_DEVRANDOM)
-             */
+#  else     /* !defined(OPENSSL_RAND_SEED_DEVRANDOM) */
 
 int rand_pool_init(void)
 {
@@ -410,9 +436,7 @@ void rand_pool_keep_random_devices_open(int keep)
 {
 }
 
-#  endif    /* !defined(OPENSSL_RAND_SEED_NONE)
-             * && defined(OPENSSL_RAND_SEED_DEVRANDOM)
-             */
+#  endif    /* defined(OPENSSL_RAND_SEED_DEVRANDOM) */
 
 /*
  * Try the various seeding methods in turn, exit when successful.
@@ -433,25 +457,33 @@ void rand_pool_keep_random_devices_open(int keep)
  */
 size_t rand_pool_acquire_entropy(RAND_POOL *pool)
 {
-#  ifdef OPENSSL_RAND_SEED_NONE
+#  if defined(OPENSSL_RAND_SEED_NONE)
     return rand_pool_entropy_available(pool);
 #  else
     size_t bytes_needed;
     size_t entropy_available = 0;
     unsigned char *buffer;
 
-#   ifdef OPENSSL_RAND_SEED_GETRANDOM
-    bytes_needed = rand_pool_bytes_needed(pool, 1 /*entropy_factor*/);
-    buffer = rand_pool_add_begin(pool, bytes_needed);
-    if (buffer != NULL) {
-        size_t bytes = 0;
+#   if defined(OPENSSL_RAND_SEED_GETRANDOM)
+    {
+        ssize_t bytes;
+        /* Maximum allowed number of consecutive unsuccessful attempts */
+        int attempts = 3;
 
-        if (syscall_random(buffer, bytes_needed) == (int)bytes_needed)
-            bytes = bytes_needed;
-
-        rand_pool_add_end(pool, bytes, 8 * bytes);
-        entropy_available = rand_pool_entropy_available(pool);
+        bytes_needed = rand_pool_bytes_needed(pool, 1 /*entropy_factor*/);
+        while (bytes_needed != 0 && attempts-- > 0) {
+            buffer = rand_pool_add_begin(pool, bytes_needed);
+            bytes = syscall_random(buffer, bytes_needed);
+            if (bytes > 0) {
+                rand_pool_add_end(pool, bytes, 8 * bytes);
+                bytes_needed -= bytes;
+                attempts = 3; /* reset counter after successful attempt */
+            } else if (bytes < 0 && errno != EINTR) {
+                break;
+            }
+        }
     }
+    entropy_available = rand_pool_entropy_available(pool);
     if (entropy_available > 0)
         return entropy_available;
 #   endif
@@ -462,28 +494,33 @@ size_t rand_pool_acquire_entropy(RAND_POOL *pool)
     }
 #   endif
 
-#   ifdef OPENSSL_RAND_SEED_DEVRANDOM
+#   if defined(OPENSSL_RAND_SEED_DEVRANDOM)
     bytes_needed = rand_pool_bytes_needed(pool, 1 /*entropy_factor*/);
     {
         size_t i;
 
         for (i = 0; bytes_needed > 0 && i < OSSL_NELEM(random_device_paths); i++) {
+            ssize_t bytes = 0;
+            /* Maximum allowed number of consecutive unsuccessful attempts */
+            int attempts = 3;
             const int fd = get_random_device(i);
 
             if (fd == -1)
                 continue;
-            buffer = rand_pool_add_begin(pool, bytes_needed);
-            if (buffer != NULL) {
-                const ssize_t n = read(fd, buffer, bytes_needed);
 
-                if (n <= 0) {
-                    close_random_device(i);
-                    continue;
+            while (bytes_needed != 0 && attempts-- > 0) {
+                buffer = rand_pool_add_begin(pool, bytes_needed);
+                bytes = read(fd, buffer, bytes_needed);
+
+                if (bytes > 0) {
+                    rand_pool_add_end(pool, bytes, 8 * bytes);
+                    bytes_needed -= bytes;
+                    attempts = 3; /* reset counter after successful attempt */
+                } else if (bytes < 0 && errno != EINTR) {
+                    break;
                 }
-
-                rand_pool_add_end(pool, n, 8 * n);
             }
-            if (!keep_random_devices_open)
+            if (bytes < 0 || !keep_random_devices_open)
                 close_random_device(i);
 
             bytes_needed = rand_pool_bytes_needed(pool, 1 /*entropy_factor*/);
@@ -494,19 +531,19 @@ size_t rand_pool_acquire_entropy(RAND_POOL *pool)
     }
 #   endif
 
-#   ifdef OPENSSL_RAND_SEED_RDTSC
+#   if defined(OPENSSL_RAND_SEED_RDTSC)
     entropy_available = rand_acquire_entropy_from_tsc(pool);
     if (entropy_available > 0)
         return entropy_available;
 #   endif
 
-#   ifdef OPENSSL_RAND_SEED_RDCPU
+#   if defined(OPENSSL_RAND_SEED_RDCPU)
     entropy_available = rand_acquire_entropy_from_cpu(pool);
     if (entropy_available > 0)
         return entropy_available;
 #   endif
 
-#   ifdef OPENSSL_RAND_SEED_EGD
+#   if defined(OPENSSL_RAND_SEED_EGD)
     bytes_needed = rand_pool_bytes_needed(pool, 1 /*entropy_factor*/);
     if (bytes_needed > 0) {
         static const char *paths[] = { DEVRANDOM_EGD, NULL };
@@ -547,7 +584,7 @@ int rand_pool_add_nonce_data(RAND_POOL *pool)
 
     /*
      * Add process id, thread id, and a high resolution timestamp to
-     * ensure that the nonce is unique whith high probability for
+     * ensure that the nonce is unique with high probability for
      * different process instances.
      */
     data.pid = getpid();

@@ -4,6 +4,7 @@
 ## {- join("\n## ", @autowarntext) -}
 {-
      our $objext = $target{obj_extension} || ".o";
+     our $defext = $target{def_extension} || ".ld";
      our $depext = $target{dep_extension} || ".d";
      our $exeext = $target{exe_extension} || "";
      our $libext = $target{lib_extension} || ".a";
@@ -112,7 +113,10 @@ DEPS={- join(" ", map { (my $x = $_) =~ s|\.o$|$depext|; $x; }
 {- output_on() if $disabled{makedepend}; "" -}
 GENERATED_MANDATORY={- join(" ", @{$unified_info{depends}->{""}}) -}
 GENERATED={- # common0.tmpl provides @generated
-             join(" ", @generated ) -}
+             join(" ", map { my $x = $_;
+                             $x =~ s|\.ld$|$defext|;
+                             $x }
+                       @generated ) -}
 
 INSTALL_LIBS={- join(" ", map { lib($_) } @{$unified_info{install}->{libraries}}) -}
 INSTALL_SHLIBS={- join(" ", map { shlib($_) } @{$unified_info{install}->{libraries}}) -}
@@ -121,7 +125,7 @@ INSTALL_ENGINES={- join(" ", map { dso($_) } @{$unified_info{install}->{engines}
 INSTALL_PROGRAMS={- join(" ", map { $_.$exeext } @{$unified_info{install}->{programs}}) -}
 {- output_off() if $disabled{apps}; "" -}
 BIN_SCRIPTS=$(BLDDIR)/tools/c_rehash
-MISC_SCRIPTS=$(BLDDIR)/apps/CA.pl $(BLDDIR)/apps/tsget
+MISC_SCRIPTS=$(BLDDIR)/apps/CA.pl $(BLDDIR)/apps/tsget.pl:tsget
 {- output_on() if $disabled{apps}; "" -}
 
 APPS_OPENSSL={- use File::Spec::Functions;
@@ -408,18 +412,18 @@ libclean:
 		fi; \
 	done
 	$(RM) $(LIBS)
-	$(RM) *.map
+	$(RM) *.{- $defext -}
 
 clean: libclean
 	$(RM) $(PROGRAMS) $(TESTPROGS) $(ENGINES) $(SCRIPTS)
 	$(RM) $(GENERATED_MANDATORY) $(GENERATED)
-	-$(RM) `find . -name '*{- $depext -}' -a \! -path "./.git/*"`
-	-$(RM) `find . -name '*{- $objext -}' -a \! -path "./.git/*"`
+	-$(RM) `find . -name .git -prune -o -name '*{- $depext -}' -print`
+	-$(RM) `find . -name .git -prune -o -name '*{- $objext -}' -print`
 	$(RM) core
 	$(RM) tags TAGS doc-nits
 	$(RM) -r test/test-runs
 	$(RM) openssl.pc libcrypto.pc libssl.pc
-	-$(RM) `find . -type l -a \! -path "./.git/*"`
+	-$(RM) `find . -name .git -prune -o -type l -print`
 	$(RM) $(TARFILE)
 
 distclean: clean
@@ -452,12 +456,25 @@ install_ssldirs:
 	@$(PERL) $(SRCDIR)/util/mkdir-p.pl $(DESTDIR)$(OPENSSLDIR)/misc
 	@set -e; for x in dummy $(MISC_SCRIPTS); do \
 		if [ "$$x" = "dummy" ]; then continue; fi; \
-		fn=`basename $$x`; \
-		$(ECHO) "install $$x -> $(DESTDIR)$(OPENSSLDIR)/misc/$$fn"; \
-		cp $$x $(DESTDIR)$(OPENSSLDIR)/misc/$$fn.new; \
+		x1=`echo "$$x" | cut -f1 -d:`; \
+		x2=`echo "$$x" | cut -f2 -d:`; \
+		fn=`basename $$x1`; \
+		$(ECHO) "install $$x1 -> $(DESTDIR)$(OPENSSLDIR)/misc/$$fn"; \
+		cp $$x1 $(DESTDIR)$(OPENSSLDIR)/misc/$$fn.new; \
 		chmod 755 $(DESTDIR)$(OPENSSLDIR)/misc/$$fn.new; \
 		mv -f $(DESTDIR)$(OPENSSLDIR)/misc/$$fn.new \
 		      $(DESTDIR)$(OPENSSLDIR)/misc/$$fn; \
+		if [ "$$x1" != "$$x2" ]; then \
+			ln=`basename "$$x2"`; \
+			: {- output_off() unless windowsdll(); "" -}; \
+			$(ECHO) "copy $(DESTDIR)$(OPENSSLDIR)/misc/$$ln -> $(DESTDIR)$(OPENSSLDIR)/misc/$$fn"; \
+			cp $(DESTDIR)$(OPENSSLDIR)/misc/$$fn $(DESTDIR)$(OPENSSLDIR)/misc/$$ln; \
+			: {- output_on() unless windowsdll();
+			     output_off() if windowsdll(); "" -}; \
+			$(ECHO) "link $(DESTDIR)$(OPENSSLDIR)/misc/$$ln -> $(DESTDIR)$(OPENSSLDIR)/misc/$$fn"; \
+			ln -sf $$fn $(DESTDIR)$(OPENSSLDIR)/misc/$$ln; \
+			: {- output_on() if windowsdll(); "" -}; \
+		fi; \
 	done
 	@$(ECHO) "install $(SRCDIR)/apps/openssl.cnf -> $(DESTDIR)$(OPENSSLDIR)/openssl.cnf.dist"
 	@cp $(SRCDIR)/apps/openssl.cnf $(DESTDIR)$(OPENSSLDIR)/openssl.cnf.new
@@ -792,9 +809,47 @@ errors:
                 -conf $$E `basename $$E .ec`.c ; \
           done )
 
+{- use File::Basename;
+
+   our @sslheaders =
+       qw( include/openssl/ssl.h
+           include/openssl/ssl2.h
+           include/openssl/ssl3.h
+           include/openssl/sslerr.h
+           include/openssl/tls1.h
+           include/openssl/dtls1.h
+           include/openssl/srtp.h );
+   our @cryptoheaders =
+       qw( include/internal/dso.h
+           include/internal/o_dir.h
+           include/internal/o_str.h
+           include/internal/err.h
+           include/internal/sslconf.h );
+   our @cryptoskipheaders = ( @sslheaders, 
+       qw( include/openssl/conf_api.h
+           include/openssl/ebcdic.h
+           include/openssl/opensslconf.h
+           include/openssl/symhacks.h ) );
+   foreach my $f ( glob(catfile($config{sourcedir},
+                                'include','openssl','*.h')) ) {
+       my $fn = "include/openssl/" . basename($f);
+       push @cryptoheaders, $fn unless grep { $_ eq $fn } @cryptoskipheaders;
+   }
+   "";
+-}
+CRYPTOHEADERS={- join(" \\\n\t", sort @cryptoheaders) -}
+SSLHEADERS={- join(" \\\n\t", sort @sslheaders) -}
 ordinals:
-	( b=`pwd`; cd $(SRCDIR); $(PERL) -I$$b util/mkdef.pl crypto update )
-	( b=`pwd`; cd $(SRCDIR); $(PERL) -I$$b util/mkdef.pl ssl update )
+	( cd $(SRCDIR); \
+          $(PERL) util/mknum.pl --version $(VERSION) --no-warnings \
+                  --ordinals util/libcrypto.num \
+                  --symhacks include/openssl/symhacks.h \
+                  $(CRYPTOHEADERS) )
+	( cd $(SRCDIR); \
+          $(PERL) util/mknum.pl --version $(VERSION) --no-warnings \
+                  --ordinals util/libssl.num \
+                  --symhacks include/openssl/symhacks.h \
+                  $(SSLHEADERS))
 
 test_ordinals:
 	( cd test; \
@@ -943,7 +998,17 @@ reconfigure reconf:
       my $incs = join("", map { " -I".$_ } @{$args{incs}});
       my $deps = join(" ", @{$args{generator_deps}}, @{$args{deps}});
 
-      if ($args{src} !~ /\.[sS]$/) {
+      if ($args{src} =~ /\.ld$/) {
+          (my $target = $args{src}) =~ s/\.ld$/${defext}/;
+          (my $mkdef_os = $target{shared_target}) =~ s|-shared$||;
+          my $ord_ver = $args{intent} eq 'lib' ? ' --version $(VERSION)' : '';
+          my $ord_name =
+              $args{generator}->[1] || basename($args{product}, $dsoext);
+          return <<"EOF";
+$target: $args{generator}->[0] $deps \$(SRCDIR)/util/mkdef.pl
+	\$(PERL) \$(SRCDIR)/util/mkdef.pl$ord_ver --ordinals $args{generator}->[0]  --name $ord_name --OS $mkdef_os > $target
+EOF
+      } elsif ($args{src} !~ /\.[sS]$/) {
           if ($args{generator}->[0] =~ m|^.*\.in$|) {
               my $dofile = abs2rel(rel2abs(catfile($config{sourcedir},
                                                    "util", "dofile.pl")),
@@ -971,6 +1036,7 @@ EOF
           }
 
           my $cppflags = {
+              shlib => '$(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               lib => '$(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               dso => '$(DSO_CFLAGS) $(DSO_CPPFLAGS)',
               bin => '$(BIN_CFLAGS) $(BIN_CPPFLAGS)'
@@ -1010,6 +1076,7 @@ EOF
           $cmd = '$(CXX)';
           $cmdcompile = ' -c';
           $cmdflags = {
+              shlib => '$(LIB_CXXFLAGS) $(LIB_CPPFLAGS)',
               lib => '$(LIB_CXXFLAGS) $(LIB_CPPFLAGS)',
               dso => '$(DSO_CXXFLAGS) $(DSO_CPPFLAGS)',
               bin => '$(BIN_CXXFLAGS) $(BIN_CPPFLAGS)'
@@ -1018,6 +1085,7 @@ EOF
           $cmd = '$(CC)';
           $cmdcompile = ' -c';
           $cmdflags = {
+              shlib => '$(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               lib => '$(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               dso => '$(DSO_CFLAGS) $(DSO_CPPFLAGS)',
               bin => '$(BIN_CFLAGS) $(BIN_CPPFLAGS)'
@@ -1069,7 +1137,7 @@ EOF
   # On Unix, we build shlibs from static libs, so we're ignoring the
   # object file array.  We *know* this routine is only called when we've
   # configure 'shared'.
-  sub libobj2shlib {
+  sub obj2shlib {
       my %args = @_;
       my $lib = $args{lib};
       my $shlib = $args{shlib};
@@ -1086,9 +1154,11 @@ EOF
                                     (my $l = $f) =~ s/^lib//;
                                     " -l$l" } @{$args{deps}});
       my @objs = map { (my $x = $_) =~ s|\.o$||; "$x$objext" }
-                 grep { $_ !~ m/\.(?:def|map)$/ }
+                 grep { $_ !~ m/\.ld$/ }
                  @{$args{objs}};
-      my @defs = grep { $_ =~ /\.(?:def|map)$/ } @{$args{objs}};
+      my @defs = map { (my $x = $_) =~ s|\.ld$||; "$x$defext" }
+                 grep { $_ =~ /\.ld$/ }
+                 @{$args{objs}};
       my @deps = compute_lib_depends(@{$args{deps}});
       die "More than one exported symbol map" if scalar @defs > 1;
       my $objs = join(" ", @objs);
@@ -1153,16 +1223,20 @@ EOF
                                     (my $l = $f) =~ s/^lib//;
                                     " -l$l" } @{$args{deps}});
       my @objs = map { (my $x = $_) =~ s|\.o$||; "$x$objext" }
-                 grep { $_ !~ m/\.(?:def|map)$/ }
+                 grep { $_ !~ m/\.ld$/ }
+                 @{$args{objs}};
+      my @defs = map { (my $x = $_) =~ s|\.ld$||; "$x$defext" }
+                 grep { $_ =~ /\.ld$/ }
                  @{$args{objs}};
       my @deps = compute_lib_depends(@{$args{deps}});
       my $objs = join(" ", @objs);
-      my $deps = join(" ", @deps);
+      my $deps = join(" ", @objs, @defs, @deps);
       my $target = dso($dso);
+      my $shared_def = join("", map { ' '.$target{shared_defflag}.$_ } @defs);
       return <<"EOF";
-$target: $objs $deps
+$target: $deps
 	\$(CC) \$(DSO_CFLAGS) $linkflags\$(DSO_LDFLAGS) \\
-		-o $target $objs \\
+		-o $target$shared_def $objs \\
                 $linklibs \$(DSO_EX_LIBS)
 EOF
   }

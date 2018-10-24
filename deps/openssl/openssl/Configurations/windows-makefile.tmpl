@@ -6,6 +6,7 @@
  our $objext = $target{obj_extension} || ".obj";
  our $resext = $target{res_extension} || ".res";
  our $depext = $target{dep_extension} || ".d";
+ our $defext = $target{dep_extension} || ".def";
  our $exeext = $target{exe_extension} || ".exe";
  our $libext = $target{lib_extension} || ".lib";
  our $shlibext = $target{shared_extension} || ".dll";
@@ -89,12 +90,15 @@ DEPS={- join(" ", map { (my $x = $_) =~ s|\.o$|$depext|; $x; }
 {- output_on() if $disabled{makedepend}; "" -}
 GENERATED_MANDATORY={- join(" ", @{$unified_info{depends}->{""}} ) -}
 GENERATED={- # common0.tmpl provides @generated
-             join(" ", map { (my $x = $_) =~ s|\.[sS]$|.asm|; $x }
+             join(" ", map { my $x = $_;
+                             $x =~ s|\.[sS]$|.asm|;
+                             $x =~ s|\.ld$|$defext|;
+                             $x }
                        @generated) -}
 
 INSTALL_LIBS={- join(" ", map { quotify1(lib($_)) } @{$unified_info{install}->{libraries}}) -}
-INSTALL_SHLIBS={- join(" ", map { quotify1(shlib($_)) } @{$unified_info{install}->{libraries}}) -}
-INSTALL_SHLIBPDBS={- join(" ", map { local $shlibext = ".pdb"; quotify1(shlib($_)) } @{$unified_info{install}->{libraries}}) -}
+INSTALL_SHLIBS={- join(" ", map { quotify_l(shlib($_)) } @{$unified_info{install}->{libraries}}) -}
+INSTALL_SHLIBPDBS={- join(" ", map { local $shlibext = ".pdb"; quotify_l(shlib($_)) } @{$unified_info{install}->{libraries}}) -}
 INSTALL_ENGINES={- join(" ", map { quotify1(dso($_)) } @{$unified_info{install}->{engines}}) -}
 INSTALL_ENGINEPDBS={- join(" ", map { local $dsoext = ".pdb"; quotify1(dso($_)) } @{$unified_info{install}->{engines}}) -}
 INSTALL_PROGRAMS={- join(" ", map { quotify1($_.$exeext) } grep { !m|^test\\| } @{$unified_info{install}->{programs}}) -}
@@ -496,7 +500,6 @@ reconfigure reconf:
 
   sub generatesrc {
       my %args = @_;
-      (my $target = $args{src}) =~ s/\.[sS]$/.asm/;
       my ($gen0, @gens) = @{$args{generator}};
       my $generator = '"'.$gen0.'"'.join('', map { " $_" } @gens);
       my $generator_incs = join("", map { " -I \"$_\"" } @{$args{generator_incs}});
@@ -504,7 +507,20 @@ reconfigure reconf:
       my $deps = @{$args{deps}} ?
           '"'.join('" "', @{$args{generator_deps}}, @{$args{deps}}).'"' : '';
 
-      if ($target !~ /\.asm$/) {
+      if ($args{src} =~ /\.ld$/) {
+          (my $target = $args{src}) =~ s/\.ld$/$defext/;
+          my $mkdef = abs2rel(rel2abs(catfile($config{sourcedir},
+                                              "util", "mkdef.pl")),
+                              rel2abs($config{builddir}));
+          my $ord_ver = $args{intent} eq 'lib' ? ' --version $(VERSION)' : '';
+          my $ord_name =
+              $args{generator}->[1] || basename($args{product}, $dsoext);
+          return <<"EOF";
+$target: $args{generator}->[0] $deps $mkdef
+	\$(PERL) $mkdef$ord_ver --ordinals $args{generator}->[0] --name $ord_name --OS windows > $target
+EOF
+      } elsif ($args{src} !~ /\.[sS]$/) {
+          my $target = $args{src};
           if ($args{generator}->[0] =~ m|^.*\.in$|) {
               my $dofile = abs2rel(rel2abs(catfile($config{sourcedir},
                                                    "util", "dofile.pl")),
@@ -521,6 +537,7 @@ $target: "$args{generator}->[0]" $deps
 EOF
 	  }
       } else {
+          (my $target = $args{src}) =~ s/\.[sS]$/.asm/;
           if ($args{generator}->[0] =~ /\.pl$/) {
               $generator = '"$(PERL)"'.$generator_incs.' '.$generator;
           } elsif ($args{generator}->[0] =~ /\.S$/) {
@@ -531,6 +548,7 @@ EOF
 
           my $cppflags = $incs;
           $cppflags .= {
+              shlib => ' $(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               lib => ' $(LIB_CFLAGS) $(LIB_CPPFLAGS)',
               dso => ' $(DSO_CFLAGS) $(DSO_CPPFLAGS)',
               bin => ' $(BIN_CFLAGS) $(BIN_CPPFLAGS)'
@@ -568,14 +586,17 @@ EOF
      my $srcs = '"'.join('" "',  @srcs).'"';
      my $deps = '"'.join('" "', @srcs, @{$args{deps}}).'"';
      my $incs = join("", map { ' /I "'.$_.'"' } @{$args{incs}});
-     my $cflags = { lib => ' $(LIB_CFLAGS)',
+     my $cflags = { shlib => ' $(LIB_CFLAGS)',
+		    lib => ' $(LIB_CFLAGS)',
 		    dso => ' $(DSO_CFLAGS)',
 		    bin => ' $(BIN_CFLAGS)' } -> {$args{intent}};
      $cflags .= $incs;
-     $cflags .= { lib => ' $(LIB_CPPFLAGS)',
+     $cflags .= { shlib => ' $(LIB_CPPFLAGS)',
+		  lib => ' $(LIB_CPPFLAGS)',
 		  dso => ' $(DSO_CPPFLAGS)',
 		  bin => ' $(BIN_CPPFLAGS)' } -> {$args{intent}};
-     my $asflags = { lib => ' $(LIB_ASFLAGS)',
+     my $asflags = { shlib => ' $(LIB_ASFLAGS)',
+		     lib => ' $(LIB_ASFLAGS)',
 		     dso => ' $(DSO_ASFLAGS)',
 		     bin => ' $(BIN_ASFLAGS)' } -> {$args{intent}};
      my $makedepprog = $config{makedepprog};
@@ -612,14 +633,16 @@ EOF
  # On Unix, we build shlibs from static libs, so we're ignoring the
  # object file array.  We *know* this routine is only called when we've
  # configure 'shared'.
- sub libobj2shlib {
+ sub obj2shlib {
      my %args = @_;
      my $lib = $args{lib};
      my $shlib = $args{shlib};
      my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x }
                 grep { $_ =~ m/\.(?:o|res)$/ }
                 @{$args{objs}};
-     my @defs = grep { $_ =~ /\.def$/ } @{$args{objs}};
+     my @defs = map { (my $x = $_) =~ s|\.ld$||; "$x$defext" }
+                grep { $_ =~ /\.ld$/ }
+                @{$args{objs}};
      my @deps = compute_lib_depends(@{$args{deps}});
      die "More than one exported symbols list" if scalar @defs > 1;
      my $linklibs = join("", map { "$_\n" } @deps);
@@ -650,20 +673,22 @@ EOF
      my %args = @_;
      my $dso = $args{lib};
      my $dso_n = basename($dso);
-     my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x } @{$args{objs}};
+     my @objs = map { (my $x = $_) =~ s|\.o$|$objext|; $x }
+                grep { $_ =~ m/\.(?:o|res)$/ }
+                @{$args{objs}};
+     my @defs = map { (my $x = $_) =~ s|\.ld$|$defext|; $x }
+                grep { $_ =~ /\.ld$/ }
+                @{$args{objs}};
      my @deps = compute_lib_depends(@{$args{deps}});
      my $objs = join("\n", @objs);
      my $linklibs = join("", map { "$_\n" } @deps);
-     my $deps = join(" ", @objs, @deps);
+     my $deps = join(" ", @objs, @defs, @deps);
+     my $shared_def = join("", map { " /def:$_" } @defs);
      return <<"EOF";
 $dso$dsoext: $deps
 	IF EXIST $dso$dsoext.manifest DEL /F /Q $dso$dsoext.manifest
-	\$(LD) \$(LDFLAGS) \$(DSO_LDFLAGS) \$(LDOUTFLAG)$dso$dsoext /def:<< @<<
-LIBRARY         $dso_n
-EXPORTS
-    bind_engine		@1
-    v_check		@2
-<<
+	\$(LD) \$(LDFLAGS) \$(DSO_LDFLAGS) \\
+		\$(LDOUTFLAG)$dso$dsoext$shared_def @<< || (DEL /Q \$(\@B).* $dso.* && EXIT 1)
 $objs
 $linklibs \$(DSO_EX_LIBS)
 <<

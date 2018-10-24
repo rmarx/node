@@ -1622,6 +1622,11 @@ int s_server_main(int argc, char *argv[])
         goto end;
     }
 #endif
+    if (early_data && (www > 0 || rev)) {
+        BIO_printf(bio_err,
+                   "Can't use -early_data in combination with -www, -WWW, -HTTP, or -rev\n");
+        goto end;
+    }
 
 #ifndef OPENSSL_NO_SCTP
     if (protocol == IPPROTO_SCTP) {
@@ -2968,8 +2973,10 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
 
     if (context != NULL
         && !SSL_set_session_id_context(con, context,
-                                       strlen((char *)context)))
+                                       strlen((char *)context))) {
+        SSL_free(con);
         goto err;
+    }
 
     sbio = BIO_new_socket(s, BIO_NOCLOSE);
     if (s_nbio_test) {
@@ -2981,7 +2988,7 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
     SSL_set_bio(con, sbio, sbio);
     SSL_set_accept_state(con);
 
-    /* SSL_set_fd(con,s); */
+    /* No need to free |con| after this. Done by BIO_free(ssl_bio) */
     BIO_set_ssl(ssl_bio, con, BIO_CLOSE);
     BIO_push(io, ssl_bio);
 #ifdef CHARSET_EBCDIC
@@ -3337,6 +3344,7 @@ static int rev_body(int s, int stype, int prot, unsigned char *context)
     if (context != NULL
         && !SSL_set_session_id_context(con, context,
                                        strlen((char *)context))) {
+        SSL_free(con);
         ERR_print_errors(bio_err);
         goto err;
     }
@@ -3345,6 +3353,7 @@ static int rev_body(int s, int stype, int prot, unsigned char *context)
     SSL_set_bio(con, sbio, sbio);
     SSL_set_accept_state(con);
 
+    /* No need to free |con| after this. Done by BIO_free(ssl_bio) */
     BIO_set_ssl(ssl_bio, con, BIO_CLOSE);
     BIO_push(io, ssl_bio);
 #ifdef CHARSET_EBCDIC

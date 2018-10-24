@@ -7,7 +7,88 @@
  https://github.com/openssl/openssl/commits/ and pick the appropriate
  release branch.
 
- Changes between 1.1.0h and 1.1.1 [xx XXX xxxx]
+ Changes between 1.1.1 and 1.1.2 [xx XXX xxxx]
+
+  *) AES-XTS mode now enforces that its two keys are different to mitigate
+     the attacked described in "Efficient Instantiations of Tweakable
+     Blockciphers and Refinements to Modes OCB and PMAC" by Phillip Rogaway.
+     Details of this attack can be obtained from:
+     http://web.cs.ucdavis.edu/%7Erogaway/papers/offsets.pdf
+     [Paul Dale]
+
+  *) Rename the object files, i.e. give them other names than in previous
+     versions.  Their names now include the name of the final product, as
+     well as its type mnemonic (bin, lib, shlib).
+     [Richard Levitte]
+
+  *) Added new option for 'openssl list', '-objects', which will display the
+     list of built in objects, i.e. OIDs with names.
+     [Richard Levitte]
+
+ Changes between 1.1.0i and 1.1.1 [11 Sep 2018]
+
+  *) Add a new ClientHello callback. Provides a callback interface that gives
+     the application the ability to adjust the nascent SSL object at the
+     earliest stage of ClientHello processing, immediately after extensions have
+     been collected but before they have been processed. In particular, this
+     callback can adjust the supported TLS versions in response to the contents
+     of the ClientHello
+     [Benjamin Kaduk]
+
+  *) Add SM2 base algorithm support.
+     [Jack Lloyd]
+
+  *) s390x assembly pack: add (improved) hardware-support for the following
+     cryptographic primitives: sha3, shake, aes-gcm, aes-ccm, aes-ctr, aes-ofb,
+     aes-cfb/cfb8, aes-ecb.
+     [Patrick Steuer]
+
+  *) Make EVP_PKEY_asn1_new() a bit stricter about its input.  A NULL pem_str
+     parameter is no longer accepted, as it leads to a corrupt table.  NULL
+     pem_str is reserved for alias entries only.
+     [Richard Levitte]
+
+  *) Use the new ec_scalar_mul_ladder scaffold to implement a specialized ladder
+     step for prime curves. The new implementation is based on formulae from
+     differential addition-and-doubling in homogeneous projective coordinates
+     from Izu-Takagi "A fast parallel elliptic curve multiplication resistant
+     against side channel attacks" and Brier-Joye "Weierstrass Elliptic Curves
+     and Side-Channel Attacks" Eq. (8) for y-coordinate recovery, modified
+     to work in projective coordinates.
+     [Billy Bob Brumley, Nicola Tuveri]
+
+  *) Change generating and checking of primes so that the error rate of not
+     being prime depends on the intended use based on the size of the input.
+     For larger primes this will result in more rounds of Miller-Rabin.
+     The maximal error rate for primes with more than 1080 bits is lowered
+     to 2^-128.
+     [Kurt Roeckx, Annie Yousar]
+
+  *) Increase the number of Miller-Rabin rounds for DSA key generating to 64.
+     [Kurt Roeckx]
+
+  *) The 'tsget' script is renamed to 'tsget.pl', to avoid confusion when
+     moving between systems, and to avoid confusion when a Windows build is
+     done with mingw vs with MSVC.  For POSIX installs, there's still a
+     symlink or copy named 'tsget' to avoid that confusion as well.
+     [Richard Levitte]
+
+  *) Revert blinding in ECDSA sign and instead make problematic addition
+     length-invariant. Switch even to fixed-length Montgomery multiplication.
+     [Andy Polyakov]
+
+  *) Use the new ec_scalar_mul_ladder scaffold to implement a specialized ladder
+     step for binary curves. The new implementation is based on formulae from
+     differential addition-and-doubling in mixed Lopez-Dahab projective
+     coordinates, modified to independently blind the operands.
+     [Billy Bob Brumley, Sohaib ul Hassan, Nicola Tuveri]
+
+  *) Add a scaffold to optionally enhance the Montgomery ladder implementation
+     for `ec_scalar_mul_ladder` (formerly `ec_mul_consttime`) allowing
+     EC_METHODs to implement their own specialized "ladder step", to take
+     advantage of more favorable coordinate systems or more efficient
+     differential addition-and-doubling algorithms.
+     [Billy Bob Brumley, Sohaib ul Hassan, Nicola Tuveri]
 
   *) Modified the random device based seed sources to keep the relevant
      file descriptors open rather than reopening them on each access.
@@ -173,16 +254,7 @@
   *) Support for TLSv1.3 added. Note that users upgrading from an earlier
      version of OpenSSL should review their configuration settings to ensure
      that they are still appropriate for TLSv1.3. For further information see:
-     https://www.openssl.org/blog/blog/2018/02/08/tlsv1.3/
-
-     NOTE: In this pre-release of OpenSSL a draft version of the
-     TLSv1.3 standard has been implemented. Implementations of different draft
-     versions of the standard do not inter-operate, and this version will not
-     inter-operate with an implementation of the final standard when it is
-     eventually published. Different pre-release versions may implement
-     different versions of the draft. The final version of OpenSSL 1.1.1 will
-     implement the final version of the standard.
-     TODO(TLS1.3): Remove the above note before final release
+     https://wiki.openssl.org/index.php/TLS1.3
      [Matt Caswell]
 
   *) Grand redesign of the OpenSSL random generator
@@ -412,6 +484,62 @@
 
 
  Changes between 1.1.0h and 1.1.0i [xx XXX xxxx]
+
+  *) Client DoS due to large DH parameter
+
+     During key agreement in a TLS handshake using a DH(E) based ciphersuite a
+     malicious server can send a very large prime value to the client. This will
+     cause the client to spend an unreasonably long period of time generating a
+     key for this prime resulting in a hang until the client has finished. This
+     could be exploited in a Denial Of Service attack.
+
+     This issue was reported to OpenSSL on 5th June 2018 by Guido Vranken
+     (CVE-2018-0732)
+     [Guido Vranken]
+
+  *) Cache timing vulnerability in RSA Key Generation
+
+     The OpenSSL RSA Key generation algorithm has been shown to be vulnerable to
+     a cache timing side channel attack. An attacker with sufficient access to
+     mount cache timing attacks during the RSA key generation process could
+     recover the private key.
+
+     This issue was reported to OpenSSL on 4th April 2018 by Alejandro Cabrera
+     Aldaya, Billy Brumley, Cesar Pereida Garcia and Luis Manuel Alvarez Tapia.
+     (CVE-2018-0737)
+     [Billy Brumley]
+
+  *) Make EVP_PKEY_asn1_new() a bit stricter about its input.  A NULL pem_str
+     parameter is no longer accepted, as it leads to a corrupt table.  NULL
+     pem_str is reserved for alias entries only.
+     [Richard Levitte]
+
+  *) Revert blinding in ECDSA sign and instead make problematic addition
+     length-invariant. Switch even to fixed-length Montgomery multiplication.
+     [Andy Polyakov]
+
+  *) Change generating and checking of primes so that the error rate of not
+     being prime depends on the intended use based on the size of the input.
+     For larger primes this will result in more rounds of Miller-Rabin.
+     The maximal error rate for primes with more than 1080 bits is lowered
+     to 2^-128.
+     [Kurt Roeckx, Annie Yousar]
+
+  *) Increase the number of Miller-Rabin rounds for DSA key generating to 64.
+     [Kurt Roeckx]
+
+  *) Add blinding to ECDSA and DSA signatures to protect against side channel
+     attacks discovered by Keegan Ryan (NCC Group).
+     [Matt Caswell]
+
+  *) When unlocking a pass phrase protected PEM file or PKCS#8 container, we
+     now allow empty (zero character) pass phrases.
+     [Richard Levitte]
+
+  *) Certificate time validation (X509_cmp_time) enforces stricter
+     compliance with RFC 5280. Fractional seconds and timezone offsets
+     are no longer allowed.
+     [Emilia Käsper]
 
   *) Fixed a text canonicalisation bug in CMS
 

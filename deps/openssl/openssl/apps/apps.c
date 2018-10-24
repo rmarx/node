@@ -1188,16 +1188,15 @@ void print_bignum_var(BIO *out, const BIGNUM *in, const char *var,
 {
     BIO_printf(out, "    static unsigned char %s_%d[] = {", var, len);
     if (BN_is_zero(in)) {
-        BIO_printf(out, "\n\t0x00");
+        BIO_printf(out, "\n        0x00");
     } else {
         int i, l;
 
         l = BN_bn2bin(in, buffer);
         for (i = 0; i < l; i++) {
-            if ((i % 10) == 0)
-                BIO_printf(out, "\n\t");
+            BIO_printf(out, (i % 10) == 0 ? "\n        " : " ");
             if (i < l - 1)
-                BIO_printf(out, "0x%02X, ", buffer[i]);
+                BIO_printf(out, "0x%02X,", buffer[i]);
             else
                 BIO_printf(out, "0x%02X", buffer[i]);
         }
@@ -1769,8 +1768,14 @@ X509_NAME *parse_name(const char *cp, long chtype, int canmulti)
     char *work;
     X509_NAME *n;
 
-    if (*cp++ != '/')
+    if (*cp++ != '/') {
+        BIO_printf(bio_err,
+                   "name is expected to be in the format "
+                   "/type0=value0/type1=value1/type2=... where characters may "
+                   "be escaped by \\. This name is not in that format: '%s'\n",
+                   --cp);
         return NULL;
+    }
 
     n = X509_NAME_new();
     if (n == NULL)
@@ -1824,6 +1829,12 @@ X509_NAME *parse_name(const char *cp, long chtype, int canmulti)
         if (nid == NID_undef) {
             BIO_printf(bio_err, "%s: Skipping unknown attribute \"%s\"\n",
                       opt_getprog(), typestr);
+            continue;
+        }
+        if (*valstr == '\0') {
+            BIO_printf(bio_err,
+                       "%s: No value provided for Subject Attribute %s, skipped\n",
+                       opt_getprog(), typestr);
             continue;
         }
         if (!X509_NAME_add_entry_by_NID(n, nid, chtype,

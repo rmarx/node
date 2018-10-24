@@ -23,8 +23,6 @@
 #include "internal/cryptlib.h"
 #include "internal/refcount.h"
 
-const char SSL_version_str[] = OPENSSL_VERSION_TEXT;
-
 static int ssl_undefined_function_1(SSL *ssl, SSL3_RECORD *r, size_t s, int t)
 {
     (void)r;
@@ -654,6 +652,10 @@ int SSL_CTX_set_ssl_version(SSL_CTX *ctx, const SSL_METHOD *meth)
 
     ctx->method = meth;
 
+    if (!SSL_CTX_set_ciphersuites(ctx, TLS_DEFAULT_CIPHERSUITES)) {
+        SSLerr(SSL_F_SSL_CTX_SET_SSL_VERSION, SSL_R_SSL_LIBRARY_HAS_NO_CIPHERS);
+        return 0;
+    }
     sk = ssl_create_cipher_list(ctx->method,
                                 ctx->tls13_ciphersuites,
                                 &(ctx->cipher_list),
@@ -702,6 +704,7 @@ SSL *SSL_new(SSL_CTX *ctx)
     s->max_early_data = ctx->max_early_data;
     s->recv_max_early_data = ctx->recv_max_early_data;
     s->num_tickets = ctx->num_tickets;
+    s->pha_enabled = ctx->pha_enabled;
 
     /* Shallow copy of the ciphersuites stack */
     s->tls13_ciphersuites = sk_SSL_CIPHER_dup(ctx->tls13_ciphersuites);
@@ -1801,6 +1804,12 @@ int SSL_read_early_data(SSL *s, void *buf, size_t num, size_t *readbytes)
         ret = SSL_accept(s);
         if (ret <= 0) {
             /* NBIO or error */
+            if ((s->mode & SSL_MODE_QUIC_HACK)
+                && s->ext.early_data == SSL_EARLY_DATA_ACCEPTED) {
+                *readbytes = 0;
+                return SSL_READ_EARLY_DATA_FINISH;
+            }
+
             s->early_data_state = SSL_EARLY_DATA_ACCEPT_RETRY;
             return SSL_READ_EARLY_DATA_ERROR;
         }
@@ -2264,7 +2273,6 @@ LHASH_OF(SSL_SESSION) *SSL_CTX_sessions(SSL_CTX *ctx)
 long SSL_CTX_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
 {
     long l;
-    int i;
     /* For some cases with ctx == NULL perform syntax checks */
     if (ctx == NULL) {
         switch (cmd) {
@@ -2319,40 +2327,27 @@ long SSL_CTX_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
     case SSL_CTRL_SESS_NUMBER:
         return lh_SSL_SESSION_num_items(ctx->sessions);
     case SSL_CTRL_SESS_CONNECT:
-        return CRYPTO_atomic_read(&ctx->stats.sess_connect, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_connect);
     case SSL_CTRL_SESS_CONNECT_GOOD:
-        return CRYPTO_atomic_read(&ctx->stats.sess_connect_good, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_connect_good);
     case SSL_CTRL_SESS_CONNECT_RENEGOTIATE:
-        return CRYPTO_atomic_read(&ctx->stats.sess_connect_renegotiate, &i,
-                                  ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_connect_renegotiate);
     case SSL_CTRL_SESS_ACCEPT:
-        return CRYPTO_atomic_read(&ctx->stats.sess_accept, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_accept);
     case SSL_CTRL_SESS_ACCEPT_GOOD:
-        return CRYPTO_atomic_read(&ctx->stats.sess_accept_good, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_accept_good);
     case SSL_CTRL_SESS_ACCEPT_RENEGOTIATE:
-        return CRYPTO_atomic_read(&ctx->stats.sess_accept_renegotiate, &i,
-                                  ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_accept_renegotiate);
     case SSL_CTRL_SESS_HIT:
-        return CRYPTO_atomic_read(&ctx->stats.sess_hit, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_hit);
     case SSL_CTRL_SESS_CB_HIT:
-        return CRYPTO_atomic_read(&ctx->stats.sess_cb_hit, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_cb_hit);
     case SSL_CTRL_SESS_MISSES:
-        return CRYPTO_atomic_read(&ctx->stats.sess_miss, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_miss);
     case SSL_CTRL_SESS_TIMEOUTS:
-        return CRYPTO_atomic_read(&ctx->stats.sess_timeout, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_timeout);
     case SSL_CTRL_SESS_CACHE_FULL:
-        return CRYPTO_atomic_read(&ctx->stats.sess_cache_full, &i, ctx->lock)
-                ? i : 0;
+        return tsan_load(&ctx->stats.sess_cache_full);
     case SSL_CTRL_MODE:
         return (ctx->mode |= larg);
     case SSL_CTRL_CLEAR_MODE:
@@ -2612,8 +2607,15 @@ const char *SSL_get_servername(const SSL *s, const int type)
     if (type != TLSEXT_NAMETYPE_host_name)
         return NULL;
 
-    return s->session && !s->ext.hostname ?
-        s->session->ext.hostname : s->ext.hostname;
+    /*
+     * SNI is not negotiated in pre-TLS-1.3 resumption flows, so fake up an
+     * SNI value to return if we are resuming/resumed.  N.B. that we still
+     * call the relevant callbacks for such resumption flows, and callbacks
+     * might error out if there is not a SNI value available.
+     */
+    if (s->hit)
+        return s->session->ext.hostname;
+    return s->ext.hostname;
 }
 
 int SSL_get_servername_type(const SSL *s)
@@ -3415,13 +3417,12 @@ void ssl_update_cache(SSL *s, int mode)
 
     /* auto flush every 255 connections */
     if ((!(i & SSL_SESS_CACHE_NO_AUTO_CLEAR)) && ((i & mode) == mode)) {
-        int *stat, val;
+        TSAN_QUALIFIER int *stat;
         if (mode & SSL_SESS_CACHE_CLIENT)
             stat = &s->session_ctx->stats.sess_connect_good;
         else
             stat = &s->session_ctx->stats.sess_accept_good;
-        if (CRYPTO_atomic_read(stat, &val, s->session_ctx->lock)
-            && (val & 0xff) == 0xff)
+        if ((tsan_load(stat) & 0xff) == 0xff)
             SSL_CTX_flush_sessions(s->session_ctx, (unsigned long)time(NULL));
     }
 }
@@ -3565,12 +3566,6 @@ int SSL_do_handshake(SSL *s)
     ossl_statem_check_finish_init(s, -1);
 
     s->method->ssl_renegotiate_check(s, 0);
-
-    if (SSL_is_server(s)) {
-        /* clear SNI settings at server-side */
-        OPENSSL_free(s->ext.hostname);
-        s->ext.hostname = NULL;
-    }
 
     if (SSL_in_init(s) || SSL_in_before(s)) {
         if ((s->mode & SSL_MODE_ASYNC) && ASYNC_get_current_job() == NULL) {
@@ -5471,9 +5466,14 @@ int SSL_stateless(SSL *s)
     return -1;
 }
 
-void SSL_force_post_handshake_auth(SSL *ssl)
+void SSL_CTX_set_post_handshake_auth(SSL_CTX *ctx, int val)
 {
-    ssl->pha_forced = 1;
+    ctx->pha_enabled = val;
+}
+
+void SSL_set_post_handshake_auth(SSL *ssl, int val)
+{
+    ssl->pha_enabled = val;
 }
 
 int SSL_verify_client_post_handshake(SSL *ssl)

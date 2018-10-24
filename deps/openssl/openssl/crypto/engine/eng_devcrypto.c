@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2017-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -69,7 +69,7 @@ static const struct cipher_data_st {
     { NID_aes_192_cbc, 16, 192 / 8, 16, EVP_CIPH_CBC_MODE, CRYPTO_AES_CBC },
     { NID_aes_256_cbc, 16, 256 / 8, 16, EVP_CIPH_CBC_MODE, CRYPTO_AES_CBC },
 #ifndef OPENSSL_NO_RC4
-    { NID_rc4, 1, 16, 0, CRYPTO_ARC4 },
+    { NID_rc4, 1, 16, 0, EVP_CIPH_STREAM_CIPHER, CRYPTO_ARC4 },
 #endif
 #if !defined(CHECK_BSD_STYLE_MACROS) || defined(CRYPTO_AES_CTR)
     { NID_aes_128_ctr, 16, 128 / 8, 16, EVP_CIPH_CTR_MODE, CRYPTO_AES_CTR },
@@ -212,7 +212,7 @@ static int cipher_cleanup(EVP_CIPHER_CTX *ctx)
     struct cipher_ctx *cipher_ctx =
         (struct cipher_ctx *)EVP_CIPHER_CTX_get_cipher_data(ctx);
 
-    if (ioctl(cipher_ctx->cfd, CIOCFSESSION, &cipher_ctx->sess) < 0) {
+    if (ioctl(cipher_ctx->cfd, CIOCFSESSION, &cipher_ctx->sess.ses) < 0) {
         SYSerr(SYS_F_IOCTL, errno);
         return 0;
     }
@@ -255,7 +255,7 @@ static void prepare_cipher_methods()
         sess.cipher = cipher_data[i].devcryptoid;
         sess.keylen = cipher_data[i].keylen;
         if (ioctl(cfd, CIOCGSESSION, &sess) < 0
-            || ioctl(cfd, CIOCFSESSION, &sess) < 0)
+            || ioctl(cfd, CIOCFSESSION, &sess.ses) < 0)
             continue;
 
         if ((known_cipher_methods[i] =
@@ -472,7 +472,7 @@ static int digest_final(EVP_MD_CTX *ctx, unsigned char *md)
         SYSerr(SYS_F_IOCTL, errno);
         return 0;
     }
-    if (ioctl(digest_ctx->cfd, CIOCFSESSION, &digest_ctx->sess) < 0) {
+    if (ioctl(digest_ctx->cfd, CIOCFSESSION, &digest_ctx->sess.ses) < 0) {
         SYSerr(SYS_F_IOCTL, errno);
         return 0;
     }
@@ -522,7 +522,7 @@ static void prepare_digest_methods()
          */
         sess.mac = digest_data[i].devcryptoid;
         if (ioctl(cfd, CIOCGSESSION, &sess) < 0
-            || ioctl(cfd, CIOCFSESSION, &sess) < 0)
+            || ioctl(cfd, CIOCFSESSION, &sess.ses) < 0)
             continue;
 
         if ((known_digest_methods[i] = EVP_MD_meth_new(digest_data[i].nid,

@@ -43,7 +43,7 @@
  * If unistd.h defines _POSIX_VERSION, we conclude that we are on a POSIX
  * system and have sigaction and termios.
  */
-#  if defined(_POSIX_VERSION)
+#  if defined(_POSIX_VERSION) && _POSIX_VERSION>=199309L
 
 #   define SIGACTION
 #   if !defined(TERMIOS) && !defined(TERMIO) && !defined(SGTTY)
@@ -412,6 +412,24 @@ static int open_console(UI *ui)
              * This should be ok
              */
         if (errno == EINVAL)
+            is_a_tty = 0;
+        else
+#  endif
+#  ifdef ENXIO
+            /*
+             * Solaris can return ENXIO.
+             * This should be ok
+             */
+        if (errno == ENXIO)
+            is_a_tty = 0;
+        else
+#  endif
+#  ifdef EIO
+            /*
+             * Linux can return EIO.
+             * This should be ok
+             */
+        if (errno == EIO)
             is_a_tty = 0;
         else
 #  endif
