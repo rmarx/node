@@ -23,32 +23,26 @@ COPY ./scripts/ /scripts/
 RUN   chmod 600 /scripts/github_key_file && \
       echo "IdentityFile /scripts/github_key_file\n" >> /etc/ssh/ssh_config && \
       echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config && \
-      git clone --depth 1 -b add_quicker_support git@github.com:kevin-kp/node.git /node
+      git clone --depth 1 -b add_quicker_support-draft-15 git@github.com:kevin-kp/node.git /node
 
 ############################################
-# run only when you have to upgrade openssl
-# START upgrade
-#
-# go to openssl folder
-
-#WORKDIR /node/deps/openssl/config
-
-#run makefile
-
-#RUN \
-#	make
-
-##################
-# END upgrade
-###
+## run only when you have to upgrade openssl (e.g., from a new version from tatsuhiro)
+## START upgrade
+# WORKDIR /node
+# git clone --depth 1 -b quic-draft-15 https://github.com/tatsuhiro-t/openssl /node/deps/openssl/ # this overwrites the old openSSL with the new 
+# WORKDIR /node/deps/openssl/config
+# make # this will update files in /node/deps/openssl/config/archs/ which we need to build openssl for Node
+## END upgrade
+############################################
 
 # go to node folder
 WORKDIR /node
 
 # build and install node
+# asm-mode (better perf) currently doesn't seem to work, no idea yet why... 
 RUN 				\
-	./configure 	\
-	&& make -j2 	\
+	./configure --openssl-no-asm	\
+	&& make -j$(nproc) 	\
 	&& make install
 
 CMD ["./scripts/rebuild.sh"]
