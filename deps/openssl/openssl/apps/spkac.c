@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,6 +12,7 @@
 #include <string.h>
 #include <time.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
@@ -97,7 +98,7 @@ int spkac_main(int argc, char **argv)
         case OPT_KEYFORM:
             if (!opt_format(opt_arg(), OPT_FMT_ANY, &keyformat))
                 goto opthelp;
-	    break;
+            break;
         case OPT_CHALLENGE:
             challenge = opt_arg();
             break;
@@ -197,5 +198,5 @@ int spkac_main(int argc, char **argv)
     EVP_PKEY_free(pkey);
     release_engine(e);
     OPENSSL_free(passin);
-    return (ret);
+    return ret;
 }

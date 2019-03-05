@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -27,7 +27,7 @@ sub verify {
     run(app([@args]));
 }
 
-plan tests => 132;
+plan tests => 134;
 
 # Canonical success
 ok(verify("ee-cert", "sslserver", ["root-cert"], ["ca-cert"]),
@@ -300,6 +300,12 @@ ok(verify("alt2-cert", "sslserver", ["root-cert"], ["ncca2-cert"], ),
 ok(verify("alt3-cert", "sslserver", ["root-cert"], ["ncca1-cert", "ncca3-cert"], ),
    "Name Constraints nested test all permitted");
 
+ok(verify("goodcn1-cert", "sslserver", ["root-cert"], ["ncca1-cert"], ),
+   "Name Constraints CNs permitted");
+
+ok(!verify("badcn1-cert", "sslserver", ["root-cert"], ["ncca1-cert"], ),
+   "Name Constraints CNs not permitted");
+
 ok(!verify("badalt1-cert", "sslserver", ["root-cert"], ["ncca1-cert"], ),
    "Name Constraints hostname not permitted");
 
@@ -322,13 +328,13 @@ ok(!verify("badalt7-cert", "sslserver", ["root-cert"], ["ncca1-cert"], ),
    "Name Constraints CN BMPSTRING hostname not permitted");
 
 ok(!verify("badalt8-cert", "sslserver", ["root-cert"], ["ncca1-cert", "ncca3-cert"], ),
-   "Name constaints nested DNS name not permitted 1");
+   "Name constraints nested DNS name not permitted 1");
 
 ok(!verify("badalt9-cert", "sslserver", ["root-cert"], ["ncca1-cert", "ncca3-cert"], ),
-   "Name constaints nested DNS name not permitted 2");
+   "Name constraints nested DNS name not permitted 2");
 
 ok(!verify("badalt10-cert", "sslserver", ["root-cert"], ["ncca1-cert", "ncca3-cert"], ),
-   "Name constaints nested DNS name excluded");
+   "Name constraints nested DNS name excluded");
 
 ok(verify("ee-pss-sha1-cert", "sslserver", ["root-cert"], ["ca-cert"], ),
     "Certificate PSS signature using SHA1");

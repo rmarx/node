@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,6 +17,7 @@ NON_EMPTY_TRANSLATION_UNIT
 # include <sys/types.h>
 # include <sys/stat.h>
 # include "apps.h"
+# include "progs.h"
 # include <openssl/bio.h>
 # include <openssl/err.h>
 # include <openssl/bn.h>
@@ -27,13 +28,14 @@ NON_EMPTY_TRANSLATION_UNIT
 # include <openssl/rand.h>
 
 # define DEFBITS 2048
+# define DEFPRIMES 2
 
 static int genrsa_cb(int p, int n, BN_GENCB *cb);
 
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_3, OPT_F4, OPT_ENGINE,
-    OPT_OUT, OPT_PASSOUT, OPT_CIPHER,
+    OPT_OUT, OPT_PASSOUT, OPT_CIPHER, OPT_PRIMES,
     OPT_R_ENUM
 } OPTION_CHOICE;
 
@@ -42,13 +44,14 @@ const OPTIONS genrsa_options[] = {
     {"3", OPT_3, '-', "Use 3 for the E value"},
     {"F4", OPT_F4, '-', "Use F4 (0x10001) for the E value"},
     {"f4", OPT_F4, '-', "Use F4 (0x10001) for the E value"},
-    {"out", OPT_OUT, 's', "Output the key to specified file"},
+    {"out", OPT_OUT, '>', "Output the key to specified file"},
     OPT_R_OPTIONS,
     {"passout", OPT_PASSOUT, 's', "Output file pass phrase source"},
     {"", OPT_CIPHER, '-', "Encrypt the output with any supported cipher"},
 # ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 # endif
+    {"primes", OPT_PRIMES, 'p', "Specify number of primes"},
     {NULL}
 };
 
@@ -62,7 +65,7 @@ int genrsa_main(int argc, char **argv)
     const BIGNUM *e;
     RSA *rsa = NULL;
     const EVP_CIPHER *enc = NULL;
-    int ret = 1, num = DEFBITS, private = 0;
+    int ret = 1, num = DEFBITS, private = 0, primes = DEFPRIMES;
     unsigned long f4 = RSA_F4;
     char *outfile = NULL, *passoutarg = NULL, *passout = NULL;
     char *prog, *hexe, *dece;
@@ -108,6 +111,10 @@ opthelp:
             if (!opt_cipher(opt_unknown(), &enc))
                 goto end;
             break;
+        case OPT_PRIMES:
+            if (!opt_int(opt_arg(), &primes))
+                goto end;
+            break;
         }
     }
     argc = opt_num_rest();
@@ -116,6 +123,11 @@ opthelp:
     if (argc == 1) {
         if (!opt_int(argv[0], &num) || num <= 0)
             goto end;
+        if (num > OPENSSL_RSA_MAX_MODULUS_BITS)
+            BIO_printf(bio_err,
+                       "Warning: It is not recommended to use more than %d bit for RSA keys.\n"
+                       "         Your key size is %d! Larger key size may behave not as expected.\n",
+                       OPENSSL_RSA_MAX_MODULUS_BITS, num);
     } else if (argc > 0) {
         BIO_printf(bio_err, "Extra arguments given.\n");
         goto opthelp;
@@ -131,13 +143,14 @@ opthelp:
     if (out == NULL)
         goto end;
 
-    BIO_printf(bio_err, "Generating RSA private key, %d bit long modulus\n",
-               num);
+    BIO_printf(bio_err, "Generating RSA private key, %d bit long modulus (%d primes)\n",
+               num, primes);
     rsa = eng ? RSA_new_method(eng) : RSA_new();
     if (rsa == NULL)
         goto end;
 
-    if (!BN_set_word(bn, f4) || !RSA_generate_key_ex(rsa, num, bn, cb))
+    if (!BN_set_word(bn, f4)
+        || !RSA_generate_multi_prime_key(rsa, num, primes, bn, cb))
         goto end;
 
     RSA_get0_key(rsa, NULL, &e, NULL);
@@ -166,7 +179,7 @@ opthelp:
     OPENSSL_free(passout);
     if (ret != 0)
         ERR_print_errors(bio_err);
-    return (ret);
+    return ret;
 }
 
 static int genrsa_cb(int p, int n, BN_GENCB *cb)

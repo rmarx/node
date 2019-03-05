@@ -18,7 +18,7 @@ started or end of file is reached. A section name can consist of
 alphanumeric characters and underscores.
 
 The first section of a configuration file is special and is referred
-to as the B<default> section this is usually unnamed and is from the
+to as the B<default> section. This section is usually unnamed and spans from the
 start of file until the first named section. When a name is being looked up
 it is first looked up in a named section (if any) and then the
 default section.
@@ -26,6 +26,21 @@ default section.
 The environment is mapped onto a section called B<ENV>.
 
 Comments can be included by preceding them with the B<#> character
+
+Other files can be included using the B<.include> directive followed
+by a path. If the path points to a directory all files with
+names ending with B<.cnf> or B<.conf> are included from the directory.
+Recursive inclusion of directories from files in such directory is not
+supported. That means the files in the included directory can also contain
+B<.include> directives but only inclusion of regular files is supported
+there. The inclusion of directories is not supported on systems without
+POSIX IO support.
+
+It is strongly recommended to use absolute paths with the B<.include>
+directive. Relative paths are evaluated based on the application current
+working directory so unless the configuration file containing the
+B<.include> directive is application specific the inclusion will not
+work as expected.
 
 Each section in a configuration file consists of a number of name and
 value pairs of the form B<name=value>
@@ -52,6 +67,9 @@ or the B<\> character. By making the last character of a line a B<\>
 a B<value> string can be spread across multiple lines. In addition
 the sequences B<\n>, B<\r>, B<\b> and B<\t> are recognized.
 
+All expansion and escape rules as described above that apply to B<value>
+also apply to the path of the B<.include> directive.
+
 =head1 OPENSSL LIBRARY CONFIGURATION
 
 Applications can automatically configure certain
@@ -70,9 +88,9 @@ of the configuration file.
 
 The configuration section should consist of a set of name value pairs which
 contain specific module configuration information. The B<name> represents
-the name of the I<configuration module> the meaning of the B<value> is
+the name of the I<configuration module>. The meaning of the B<value> is
 module specific: it may, for example, represent a further configuration
-section containing configuration module specific information. E.g.
+section containing configuration module specific information. E.g.:
 
  # This must be in the default section
  openssl_conf = openssl_init
@@ -229,6 +247,22 @@ For example:
  ECDSA.Certificate = server-ecdsa.pem
  Ciphers = ALL:!RC4
 
+The system default configuration with name B<system_default> if present will
+be applied during any creation of the B<SSL_CTX> structure.
+
+Example of a configuration with the system default:
+
+ ssl_conf = ssl_sect
+
+ [ssl_sect]
+
+ system_default = system_default_sect
+
+ [system_default_sect]
+
+ MinProtocol = TLSv1.2
+
+
 =head1 NOTES
 
 If a configuration file attempts to expand a variable that doesn't exist
@@ -350,6 +384,22 @@ will output:
 
 showing that the OID "newoid1" has been added as "1.2.3.4.1".
 
+=head1 ENVIRONMENT
+
+=over 4
+
+=item B<OPENSSL_CONF>
+
+The path to the config file.
+Ignored in set-user-ID and set-group-ID programs.
+
+=item B<OPENSSL_ENGINES>
+
+The path to the engines directory.
+Ignored in set-user-ID and set-group-ID programs.
+
+=back
+
 =head1 BUGS
 
 Currently there is no way to include characters using the octal B<\nnn>
@@ -369,7 +419,7 @@ L<x509(1)>, L<req(1)>, L<ca(1)>
 
 =head1 COPYRIGHT
 
-Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2000-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

@@ -41,10 +41,9 @@ end products.  There are variants for them with '_NO_INST' as suffix
 (PROGRAM_NO_INST etc) to specify end products that shouldn't get
 installed.
 
-The variables SOURCE, DEPEND, INCLUDE and ORDINALS are indexed by a
-produced file, and their values are the source used to produce that
-particular produced file, extra dependencies, include directories
-needed, and ordinal files (explained further below.
+The variables SOURCE, DEPEND and INCLUDE are indexed by a produced
+file, and their values are the source used to produce that particular
+produced file, extra dependencies, and include directories needed.
 
 All their values in all the build.info throughout the source tree are
 collected together and form a set of programs, libraries, engines and
@@ -57,18 +56,15 @@ dependencies.
 
     # build.info
     LIBS=libcrypto libssl
-    ORDINALS[libcrypto]=crypto
-    ORDINALS[libssl]=ssl
     INCLUDE[libcrypto]=include
     INCLUDE[libssl]=include
     DEPEND[libssl]=libcrypto
 
 This is the top directory build.info file, and it tells us that two
-libraries are to be built, there are some ordinals to be used to
-declare what symbols in those libraries are seen as public, the
-include directory 'include/' shall be used throughout when building
-anything that will end up in each library, and that the library
-'libssl' depend on the library 'libcrypto' to function properly.
+libraries are to be built, the include directory 'include/' shall be
+used throughout when building anything that will end up in each
+library, and that the library 'libssl' depend on the library
+'libcrypto' to function properly.
 
     # apps/build.info
     PROGRAMS=openssl
@@ -150,11 +146,9 @@ When Configure digests these build.info files, the accumulated
 information comes down to this:
 
     LIBS=libcrypto libssl
-    ORDINALS[libcrypto]=crypto
     SOURCE[libcrypto]=crypto/aes.c crypto/evp.c crypto/cversion.c
     DEPEND[crypto/cversion.o]=crypto/buildinf.h
     INCLUDE[libcrypto]=include
-    ORDINALS[libssl]=ssl
     SOURCE[libssl]=ssl/tls.c
     INCLUDE[libssl]=include
     DEPEND[libssl]=libcrypto
@@ -187,9 +181,9 @@ PROGRAMS may be used to declare programs only.
 
 ENGINES may be used to declare engines only.
 
-The indexes for SOURCE and ORDINALS must only be end product files,
-such as libraries, programs or engines.  The values of SOURCE
-variables must only be source files (possibly generated)
+The indexes for SOURCE must only be end product files, such as
+libraries, programs or engines.  The values of SOURCE variables must
+only be source files (possibly generated).
 
 INCLUDE and DEPEND shows a relationship between different files
 (usually produced files) or between files and directories, such as a
@@ -235,12 +229,6 @@ indexes:
 
   libraries => a list of libraries.  These are directly inferred from
                the LIBS variable in build.info files.
-
-  ordinals  => a hash table containing 'file' => [ 'word', 'ordfile' ]
-               pairs.  'file' and 'word' are directly inferred from
-               the ORDINALS variables in build.info files, while the
-               file 'ofile' comes from internal knowledge in
-               Configure.
 
   programs  => a list of programs.  These are directly inferred from
                the PROGRAMS variable in build.info files.
@@ -359,19 +347,6 @@ section above would be digested into a %unified_info table:
                 "libcrypto",
                 "libssl",
             ],
-        "ordinals" =>
-            {
-                "libcrypto" =>
-                    [
-                        "crypto",
-                        "util/libcrypto.num",
-                    ],
-                "libssl" =>
-                    [
-                        "ssl",
-                        "util/libssl.num",
-                    ],
-            },
         "programs" =>
             [
                 "apps/openssl",
@@ -496,8 +471,9 @@ etc.
                                 incs => [ "INCL/PATH", ... ]
                                 intent => one of "lib", "dso", "bin" );
 
-                  'obj' has the intended object file *without*
-                  extension, src2obj() is expected to add that.
+                  'obj' has the intended object file with '.o'
+                  extension, src2obj() is expected to change it to
+                  something more suitable for the platform.
                   'srcs' has the list of source files to build the
                   object file, with the first item being the source
                   file that directly corresponds to the object file.
@@ -517,56 +493,50 @@ etc.
 
                   'lib' has the intended library file name *without*
                   extension, obj2lib is expected to add that.  'objs'
-                  has the list of object files (also *without*
-                  extension) to build this library.
+                  has the list of object files to build this library.
 
-    libobj2shlib - function that produces build file lines to build a
+    libobj2shlib - backward compatibility function that's used the
+                  same way as obj2shlib (described next), and was
+                  expected to build the shared library from the
+                  corresponding static library when that was suitable.
+                  NOTE: building a shared library from a static
+                  library is now DEPRECATED, as they no longer share
+                  object files.  Attempting to do this will fail.
+
+    obj2shlib   - function that produces build file lines to build a
                   shareable object library file ("libfoo.so" in Unix
-                  terms) from the corresponding static library file
-                  or object files.
+                  terms) from the corresponding object files.
 
                   called like this:
 
-                        libobj2shlib(shlib => "PATH/TO/shlibfile",
-                                     lib => "PATH/TO/libfile",
-                                     objs => [ "PATH/TO/objectfile", ... ],
-                                     deps => [ "PATH/TO/otherlibfile", ... ],
-                                     ordinals => [ "word", "/PATH/TO/ordfile" ]);
+                        obj2shlib(shlib => "PATH/TO/shlibfile",
+                                  lib => "PATH/TO/libfile",
+                                  objs => [ "PATH/TO/objectfile", ... ],
+                                  deps => [ "PATH/TO/otherlibfile", ... ]);
 
-                  'lib' has the intended library file name *without*
-                  extension, libobj2shlib is expected to add that.
+                  'lib' has the base (static) library file name
+                  *without* extension.  This is useful in case
+                  supporting files are needed (such as import
+                  libraries on Windows).
                   'shlib' has the corresponding shared library name
                   *without* extension.  'deps' has the list of other
                   libraries (also *without* extension) this library
                   needs to be linked with.  'objs' has the list of
-                  object files (also *without* extension) to build
-                  this library.  'ordinals' MAY be present, and when
-                  it is, its value is an array where the word is
-                  "crypto" or "ssl" and the file is one of the ordinal
-                  files util/libcrypto.num or util/libssl.num in the
-                  source directory.
+                  object files to build this library.
 
-                  This function has a choice; it can use the
-                  corresponding static library as input to make the
-                  shared library, or the list of object files.
-
-    obj2dynlib  - function that produces build file lines to build a
-                  dynamically loadable library file ("libfoo.so" on
-                  Unix) from object files.
+    obj2dso     - function that produces build file lines to build a
+                  dynamic shared object file from object files.
 
                   called like this:
 
-                        obj2dynlib(lib => "PATH/TO/libfile",
-                                   objs => [ "PATH/TO/objectfile", ... ],
-                                   deps => [ "PATH/TO/otherlibfile",
-                                   ... ]);
+                        obj2dso(lib => "PATH/TO/libfile",
+                                objs => [ "PATH/TO/objectfile", ... ],
+                                deps => [ "PATH/TO/otherlibfile",
+                                ... ]);
 
-                  This is almost the same as libobj2shlib, but the
+                  This is almost the same as obj2shlib, but the
                   intent is to build a shareable library that can be
-                  loaded in runtime (a "plugin"...).  The differences
-                  are subtle, one of the most visible ones is that the
-                  resulting shareable library is produced from object
-                  files only.
+                  loaded in runtime (a "plugin"...).
 
     obj2bin     - function that produces build file lines to build an
                   executable file from object files.
@@ -579,11 +549,10 @@ etc.
 
                   'bin' has the intended executable file name
                   *without* extension, obj2bin is expected to add
-                  that.  'objs' has the list of object files (also
-                  *without* extension) to build this library.  'deps'
-                  has the list of library files (also *without*
-                  extension) that the programs needs to be linked
-                  with.
+                  that.  'objs' has the list of object files to build
+                  this library.  'deps' has the list of library files
+                  (also *without* extension) that the programs needs
+                  to be linked with.
 
     in2script   - function that produces build file lines to build a
                   script file from some input.
@@ -607,35 +576,30 @@ As an example with the smaller build.info set we've seen as an
 example, producing the rules to build 'libcrypto' would result in the
 following calls:
 
-    # Note: libobj2shlib will only be called if shared libraries are
+    # Note: obj2shlib will only be called if shared libraries are
     # to be produced.
-    # Note 2: libobj2shlib gets both the name of the static library
-    # and the names of all the object files that go into it.  It's up
-    # to the implementation to decide which to use as input.
-    # Note 3: common.tmpl peals off the ".o" extension from all object
-    # files, as the platform at hand may have a different one.
-    libobj2shlib(shlib => "libcrypto",
-                 lib => "libcrypto",
-                 objs => [ "crypto/aes", "crypto/evp", "crypto/cversion" ],
-                 deps => [  ]
-                 ordinals => [ "crypto", "util/libcrypto.num" ]);
+    # Note 2: obj2shlib must convert the '.o' extension to whatever
+    # is suitable on the local platform.
+    obj2shlib(shlib => "libcrypto",
+              objs => [ "crypto/aes.o", "crypto/evp.o", "crypto/cversion.o" ],
+              deps => [  ]);
 
     obj2lib(lib => "libcrypto"
-            objs => [ "crypto/aes", "crypto/evp", "crypto/cversion" ]);
+            objs => [ "crypto/aes.o", "crypto/evp.o", "crypto/cversion.o" ]);
 
-    src2obj(obj => "crypto/aes"
+    src2obj(obj => "crypto/aes.o"
             srcs => [ "crypto/aes.c" ],
             deps => [ ],
             incs => [ "include" ],
             intent => "lib");
 
-    src2obj(obj => "crypto/evp"
+    src2obj(obj => "crypto/evp.o"
             srcs => [ "crypto/evp.c" ],
             deps => [ ],
             incs => [ "include" ],
             intent => "lib");
 
-    src2obj(obj => "crypto/cversion"
+    src2obj(obj => "crypto/cversion.o"
             srcs => [ "crypto/cversion.c" ],
             deps => [ "crypto/buildinf.h" ],
             incs => [ "include" ],

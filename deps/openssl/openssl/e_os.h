@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -22,43 +22,16 @@
  * outside; this file e_os.h is not part of the exported interface.
  */
 
-#ifdef  __cplusplus
-extern "C" {
-#endif
-
-/*
- * Format specifier for printing size_t. Original conundrum was to
- * get it working with -Wformat [-Werror], which can be considered
- * overzealous, especially in multi-platform context, but it's
- * conscious choice...
- */
-# if defined(_WIN64)
-#  define OSSLzu  "I64u"    /* One would expect _WIN{64|32} cases after
-                             * __STDC_VERSION__, but there are corner
-                             * cases of MinGW compilers that link with
-                             * non-compliant MSVCRT.DLL... */
-# elif defined(_WIN32)
-#  define OSSLzu  "u"
-# elif defined(__VMS)
-#  define OSSLzu  "u"       /* VMS suffers from similar problem as MinGW,
-                             * i.e. C RTL falling behind compiler. Recall
-                             * that sizeof(size_t)==4 even in LP64 case. */
-# elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-#  define OSSLzu  "zu"
-# elif defined(__SIZEOF_SIZE_T__) && __SIZEOF_SIZE_T__==4
-#  define OSSLzu  "u"       /* 'lu' should have worked, but when generating
-                             * 32-bit code gcc still complains :-( */
-# else
-#  define OSSLzu  "lu"      /* To see that is works recall what does L
-                             * stand for in ILP32 and LP64 */
-# endif
-
 # ifndef DEVRANDOM
 /*
  * set this to a comma-separated list of 'random' device files to try out. By
  * default, we will try to read at least one of these files
  */
-#  define DEVRANDOM "/dev/urandom","/dev/random","/dev/srandom"
+#  if defined(__s390__)
+#   define DEVRANDOM "/dev/prandom","/dev/urandom","/dev/hwrng","/dev/random"
+#  else
+#   define DEVRANDOM "/dev/urandom","/dev/random","/dev/srandom"
+#  endif
 # endif
 # if !defined(OPENSSL_NO_EGD) && !defined(DEVRANDOM_EGD)
 /*
@@ -272,7 +245,7 @@ extern FILE *_imp___iob;
 
      Finally, we add the VMS C facility code 0x35a000, because there are some
      programs, such as Perl, that will reinterpret the code back to something
-     POSIXly.  'man perlvms' explains it further.
+     POSIX.  'man perlvms' explains it further.
 
      NOTE: the perlvms manual wants to turn all codes 2 to 255 into success
      codes (status type = 1).  I couldn't disagree more.  Fortunately, the
@@ -344,12 +317,15 @@ struct servent *getservbyname(const char *name, const char *proto);
 # endif
 /* end vxworks */
 
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-# define CRYPTO_memcmp memcmp
-#endif
+# ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#  define CRYPTO_memcmp memcmp
+# endif
 
-#ifdef  __cplusplus
-}
-#endif
-
+/* unistd.h defines _POSIX_VERSION */
+# if !defined(OPENSSL_NO_SECURE_MEMORY) && defined(OPENSSL_SYS_UNIX) \
+     && ( (defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L)      \
+          || defined(__sun) || defined(__hpux) || defined(__sgi)      \
+          || defined(__osf__) )
+#  define OPENSSL_SECURE_MEMORY  /* secure memory is implemented */
+# endif
 #endif

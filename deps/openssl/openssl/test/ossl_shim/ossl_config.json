@@ -248,7 +248,12 @@
         "DTLS-Retransmit-Server-12":"Test failure - reason unknown",
         "DTLS-Retransmit-Fudge":"Test failure - reason unknown",
         "DTLS-Retransmit-Fragmented":"Test failure - reason unknown",
-        "TrailingMessageData-ClientHello-DTLS":"Test failure - reason unknown"
+        "TrailingMessageData-ClientHello-DTLS":"Test failure - reason unknown",
+        "SendFallbackSCSV":"Current runner version uses old draft TLSv1.3",
+        "VersionNegotiationExtension-TLS11":"Current runner version uses old draft TLSv1.3",
+        "VersionNegotiationExtension-TLS1":"Current runner version uses old draft TLSv1.3",
+        "VersionNegotiationExtension-SSL3":"Current runner version uses old draft TLSv1.3",
+        "ConflictingVersionNegotiation":"Current runner version uses old draft TLSv1.3"
     },
     "ErrorMap" : {
         ":UNEXPECTED_MESSAGE:":"unexpected message",
@@ -277,7 +282,7 @@
         ":BAD_DH_P_LENGTH:":"dh key too small",
         ":PEER_DID_NOT_RETURN_A_CERTIFICATE:":"peer did not return a certificate",
         ":UNSUPPORTED_PROTOCOL:":"unsupported protocol",
-        ":PARSE_TLSEXT:":"parse tlsext",
+        ":PARSE_TLSEXT:":"bad extension",
         ":BAD_SRTP_PROTECTION_PROFILE_LIST:":"bad srtp protection profile list",
         ":OLD_SESSION_VERSION_NOT_RETURNED:":"ssl session version mismatch",
         ":RESUMED_EMS_SESSION_WITHOUT_EMS_EXTENSION:":"inconsistent extms",

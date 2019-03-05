@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -227,7 +227,6 @@ void ssl_cert_free(CERT *c)
 
     if (c == NULL)
         return;
-
     CRYPTO_DOWN_REF(&c->references, &i, c->lock);
     REF_PRINT_COUNT("CERT", c);
     if (i > 0)
@@ -463,13 +462,9 @@ STACK_OF(X509_NAME) *SSL_dup_CA_list(const STACK_OF(X509_NAME) *sk)
     STACK_OF(X509_NAME) *ret;
     X509_NAME *name;
 
-    ret = sk_X509_NAME_new_null();
+    ret = sk_X509_NAME_new_reserve(NULL, num);
     if (ret == NULL) {
         SSLerr(SSL_F_SSL_DUP_CA_LIST, ERR_R_MALLOC_FAILURE);
-        return NULL;
-    }
-    if (!sk_X509_NAME_reserve(ret, num)) {
-        sk_X509_NAME_free(ret);
         return NULL;
     }
     for (i = 0; i < num; i++) {
@@ -550,16 +545,20 @@ static int add_ca_name(STACK_OF(X509_NAME) **sk, const X509 *x)
     return 1;
 }
 
-int SSL_add1_CA_list(SSL *ssl, const X509 *x)
+int SSL_add1_to_CA_list(SSL *ssl, const X509 *x)
 {
     return add_ca_name(&ssl->ca_names, x);
 }
 
-int SSL_CTX_add1_CA_list(SSL_CTX *ctx, const X509 *x)
+int SSL_CTX_add1_to_CA_list(SSL_CTX *ctx, const X509 *x)
 {
     return add_ca_name(&ctx->ca_names, x);
 }
 
+/*
+ * The following two are older names are to be replaced with
+ * SSL(_CTX)_add1_to_CA_list
+ */
 int SSL_add_client_CA(SSL *ssl, X509 *x)
 {
     return add_ca_name(&ssl->ca_names, x);
@@ -570,14 +569,33 @@ int SSL_CTX_add_client_CA(SSL_CTX *ctx, X509 *x)
     return add_ca_name(&ctx->ca_names, x);
 }
 
-static int xname_sk_cmp(const X509_NAME *const *a, const X509_NAME *const *b)
-{
-    return (X509_NAME_cmp(*a, *b));
-}
-
 static int xname_cmp(const X509_NAME *a, const X509_NAME *b)
 {
-    return X509_NAME_cmp(a, b);
+    unsigned char *abuf = NULL, *bbuf = NULL;
+    int alen, blen, ret;
+
+    /* X509_NAME_cmp() itself casts away constness in this way, so
+     * assume it's safe:
+     */
+    alen = i2d_X509_NAME((X509_NAME *)a, &abuf);
+    blen = i2d_X509_NAME((X509_NAME *)b, &bbuf);
+
+    if (alen < 0 || blen < 0)
+        ret = -2;
+    else if (alen != blen)
+        ret = alen - blen;
+    else /* alen == blen */
+        ret = memcmp(abuf, bbuf, alen);
+
+    OPENSSL_free(abuf);
+    OPENSSL_free(bbuf);
+
+    return ret;
+}
+
+static int xname_sk_cmp(const X509_NAME *const *a, const X509_NAME *const *b)
+{
+    return xname_cmp(*a, *b);
 }
 
 static unsigned long xname_hash(const X509_NAME *a)
@@ -647,7 +665,7 @@ STACK_OF(X509_NAME) *SSL_load_client_CA_file(const char *file)
     lh_X509_NAME_free(name_hash);
     if (ret != NULL)
         ERR_clear_error();
-    return (ret);
+    return ret;
 }
 
 /**
@@ -733,15 +751,15 @@ int SSL_add_dir_cert_subjects_to_stack(STACK_OF(X509_NAME) *stack,
         char buf[1024];
         int r;
 
-        if (strlen(dir) + strlen(filename) + 2 > sizeof buf) {
+        if (strlen(dir) + strlen(filename) + 2 > sizeof(buf)) {
             SSLerr(SSL_F_SSL_ADD_DIR_CERT_SUBJECTS_TO_STACK,
                    SSL_R_PATH_TOO_LONG);
             goto err;
         }
 #ifdef OPENSSL_SYS_VMS
-        r = BIO_snprintf(buf, sizeof buf, "%s%s", dir, filename);
+        r = BIO_snprintf(buf, sizeof(buf), "%s%s", dir, filename);
 #else
-        r = BIO_snprintf(buf, sizeof buf, "%s/%s", dir, filename);
+        r = BIO_snprintf(buf, sizeof(buf), "%s/%s", dir, filename);
 #endif
         if (r <= 0 || r >= (int)sizeof(buf))
             goto err;
@@ -933,7 +951,8 @@ static int ssl_security_default_callback(const SSL *s, const SSL_CTX *ctx,
             if (level >= 2 && c->algorithm_enc == SSL_RC4)
                 return 0;
             /* Level 3: forward secure ciphersuites only */
-            if (level >= 3 && !(c->algorithm_mkey & (SSL_kEDH | SSL_kEECDH)))
+            if (level >= 3 && (c->min_tls != TLS1_3_VERSION ||
+                               !(c->algorithm_mkey & (SSL_kEDH | SSL_kEECDH))))
                 return 0;
             break;
         }
@@ -981,27 +1000,40 @@ int ssl_ctx_security(const SSL_CTX *ctx, int op, int bits, int nid, void *other)
                              ctx->cert->sec_ex);
 }
 
+int ssl_cert_lookup_by_nid(int nid, size_t *pidx)
+{
+    size_t i;
+
+    for (i = 0; i < OSSL_NELEM(ssl_cert_info); i++) {
+        if (ssl_cert_info[i].nid == nid) {
+            *pidx = i;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 const SSL_CERT_LOOKUP *ssl_cert_lookup_by_pkey(const EVP_PKEY *pk, size_t *pidx)
 {
     int nid = EVP_PKEY_id(pk);
-    size_t i;
+    size_t tmpidx;
 
     if (nid == NID_undef)
         return NULL;
 
-    for (i = 0; i < OSSL_NELEM(ssl_cert_info); i++) {
-        if (ssl_cert_info[i].nid == nid) {
-            if (pidx != NULL)
-                *pidx = i;
-            return &ssl_cert_info[i];
-        }
-    }
-    return NULL;
+    if (!ssl_cert_lookup_by_nid(nid, &tmpidx))
+        return NULL;
+
+    if (pidx != NULL)
+        *pidx = tmpidx;
+
+    return &ssl_cert_info[tmpidx];
 }
 
 const SSL_CERT_LOOKUP *ssl_cert_lookup_by_idx(size_t idx)
 {
     if (idx >= OSSL_NELEM(ssl_cert_info))
-        return 0;
+        return NULL;
     return &ssl_cert_info[idx];
 }

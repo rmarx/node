@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2017-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,16 +12,14 @@
    SipHash reference C implementation
 
    Copyright (c) 2012-2016 Jean-Philippe Aumasson
-   <jeanphilippe.aumasson@gmail.com>
-   Copyright (c) 2012-2014 Daniel J. Bernstein <djb@cr.yp.to>
+   Copyright (c) 2012-2014 Daniel J. Bernstein
 
    To the extent possible under law, the author(s) have dedicated all copyright
    and related and neighboring rights to this software to the public domain
    worldwide. This software is distributed without any warranty.
 
    You should have received a copy of the CC0 Public Domain Dedication along
-   with
-   this software. If not, see
+   with this software. If not, see
    <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
 
@@ -82,17 +80,32 @@ size_t SipHash_hash_size(SIPHASH *ctx)
     return ctx->hash_size;
 }
 
+static size_t siphash_adjust_hash_size(size_t hash_size)
+{
+    if (hash_size == 0)
+        hash_size = SIPHASH_MAX_DIGEST_SIZE;
+    return hash_size;
+}
+
+int SipHash_set_hash_size(SIPHASH *ctx, size_t hash_size)
+{
+    hash_size = siphash_adjust_hash_size(hash_size);
+    if (hash_size != SIPHASH_MIN_DIGEST_SIZE
+        && hash_size != SIPHASH_MAX_DIGEST_SIZE)
+        return 0;
+
+    ctx->hash_size = hash_size;
+    return 1;
+}
+
 /* hash_size = crounds = drounds = 0 means SipHash24 with 16-byte output */
-int SipHash_Init(SIPHASH *ctx, const unsigned char *k, int hash_size, int crounds, int drounds)
+int SipHash_Init(SIPHASH *ctx, const unsigned char *k, int crounds, int drounds)
 {
     uint64_t k0 = U8TO64_LE(k);
     uint64_t k1 = U8TO64_LE(k + 8);
 
-    if (hash_size == 0)
-        hash_size = SIPHASH_MAX_DIGEST_SIZE;
-    else if (hash_size != SIPHASH_MIN_DIGEST_SIZE &&
-             hash_size != SIPHASH_MAX_DIGEST_SIZE)
-        return 0;
+    /* If the hash size wasn't set, i.e. is zero */
+    ctx->hash_size = siphash_adjust_hash_size(ctx->hash_size);
 
     if (drounds == 0)
         drounds = SIPHASH_D_ROUNDS;
@@ -101,7 +114,6 @@ int SipHash_Init(SIPHASH *ctx, const unsigned char *k, int hash_size, int cround
 
     ctx->crounds = crounds;
     ctx->drounds = drounds;
-    ctx->hash_size = hash_size;
 
     ctx->len = 0;
     ctx->total_inlen = 0;

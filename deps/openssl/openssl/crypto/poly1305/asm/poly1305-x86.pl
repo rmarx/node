@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -71,7 +71,7 @@ if ($sse2) {
 	$avx = ($1>=2.09) + ($1>=2.10);
 	}
 
-	if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/) {
+	if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|based on LLVM) ([3-9]\.[0-9]+)/) {
 		$avx = ($2>=3.0) + ($2>3.0);
 	}
 }
@@ -730,7 +730,7 @@ my $extra = shift;
 
 	&movdqa		($T0,$T1);			# -> base 2^26 ...
 	&pand		($T1,$MASK);
-	&paddd		($D0,$T1);			# ... and accumuate
+	&paddd		($D0,$T1);			# ... and accumulate
 
 	&movdqa		($T1,$T0);
 	&psrlq		($T0,26);

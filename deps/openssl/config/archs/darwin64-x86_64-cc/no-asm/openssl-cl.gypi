@@ -1,22 +1,15 @@
 {
   'variables': {
     'openssl_defines_darwin64-x86_64-cc': [
-      'DSO_DLFCN',
-      'HAVE_DLFCN_H',
       'NDEBUG',
-      'OPENSSL_THREADS',
-      'OPENSSL_NO_DYNAMIC_ENGINE',
-      'OPENSSL_PIC',
     ],
     'openssl_cflags_darwin64-x86_64-cc': [
-      '-O3 -D_REENTRANT -arch x86_64 -DL_ENDIAN -Wall',
+      '-arch x86_64',
     ],
     'openssl_ex_libs_darwin64-x86_64-cc': [
       '',
     ],
     'openssl_cli_srcs_darwin64-x86_64-cc': [
-      'openssl/apps/app_rand.c',
-      'openssl/apps/apps.c',
       'openssl/apps/asn1pars.c',
       'openssl/apps/ca.c',
       'openssl/apps/ciphers.c',
@@ -38,7 +31,6 @@
       'openssl/apps/nseq.c',
       'openssl/apps/ocsp.c',
       'openssl/apps/openssl.c',
-      'openssl/apps/opt.c',
       'openssl/apps/passwd.c',
       'openssl/apps/pkcs12.c',
       'openssl/apps/pkcs7.c',
@@ -52,10 +44,8 @@
       'openssl/apps/req.c',
       'openssl/apps/rsa.c',
       'openssl/apps/rsautl.c',
-      'openssl/apps/s_cb.c',
       'openssl/apps/s_client.c',
       'openssl/apps/s_server.c',
-      'openssl/apps/s_socket.c',
       'openssl/apps/s_time.c',
       'openssl/apps/sess_id.c',
       'openssl/apps/smime.c',

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -79,22 +79,23 @@ static struct testdata tbl_testdata_pos[] = {
 
 /* ASSUMES SIGNED TIME_T */
 static struct testdata tbl_testdata_neg[] = {
-    { "19011213204552Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1, -2147483648, -1, 0, },
+    { "19011213204552Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1,     INT_MIN, -1, 0, },
     { "691006121456Z",     V_ASN1_UTCTIME,         V_ASN1_UTCTIME,         1,    -7472704, -1, 1, },
     { "19691006121456Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_UTCTIME,         1,    -7472704, -1, 1, },
 };
 
+/* explicit casts to time_t short warnings on systems with 32-bit time_t */
 static struct testdata tbl_testdata_pos_64bit[] = {
-    { "20380119031408Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_UTCTIME,         1,  0x80000000,  1, 1, },
-    { "20380119031409Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_UTCTIME,         1,  0x80000001,  1, 1, },
-    { "380119031408Z",     V_ASN1_UTCTIME,         V_ASN1_UTCTIME,         1,  0x80000000,  1, 1, },
-    { "20500101120000Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1,  2524651200,  1, 0, },
+    { "20380119031408Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_UTCTIME,         1,  (time_t)0x80000000,  1, 1, },
+    { "20380119031409Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_UTCTIME,         1,  (time_t)0x80000001,  1, 1, },
+    { "380119031408Z",     V_ASN1_UTCTIME,         V_ASN1_UTCTIME,         1,  (time_t)0x80000000,  1, 1, },
+    { "20500101120000Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1,  (time_t)0x967b1ec0,  1, 0, },
 };
 
 /* ASSUMES SIGNED TIME_T */
 static struct testdata tbl_testdata_neg_64bit[] = {
-    { "19011213204551Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1, -2147483649, -1, 0, },
-    { "19000101120000Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1, -2208945600, -1, 0, },
+    { "19011213204551Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1, (time_t)-2147483649LL, -1, 0, },
+    { "19000101120000Z",   V_ASN1_GENERALIZEDTIME, V_ASN1_GENERALIZEDTIME, 1, (time_t)-2208945600LL, -1, 0, },
 };
 
 /* A baseline time to compare to */
@@ -345,10 +346,12 @@ int setup_tests(void)
     if (sizeof(time_t) > sizeof(uint32_t)) {
         TEST_info("Adding 64-bit time_t tests");
         ADD_ALL_TESTS(test_table_pos_64bit, OSSL_NELEM(tbl_testdata_pos_64bit));
+#ifndef __hpux
         if (!(t > 0) && ptm != NULL) {
             TEST_info("Adding negative-sign 64-bit time_t tests");
             ADD_ALL_TESTS(test_table_neg_64bit, OSSL_NELEM(tbl_testdata_neg_64bit));
         }
+#endif
     }
     ADD_ALL_TESTS(test_table_compare, OSSL_NELEM(tbl_compare_testdata));
     return 1;

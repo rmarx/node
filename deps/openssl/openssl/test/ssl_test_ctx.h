@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -73,7 +73,8 @@ typedef enum {
     SSL_TEST_HANDSHAKE_RENEG_SERVER,
     SSL_TEST_HANDSHAKE_RENEG_CLIENT,
     SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER,
-    SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT
+    SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT,
+    SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH
 } ssl_handshake_mode_t;
 
 typedef enum {
@@ -97,6 +98,8 @@ typedef struct {
     ssl_verify_callback_t verify_callback;
     /* One of a number of predefined server names use by the client */
     ssl_servername_t servername;
+    /* Maximum Fragment Length extension mode */
+    int max_fragment_len_mode;
     /* Supported NPN and ALPN protocols. A comma-separated list. */
     char *npn_protocols;
     char *alpn_protocols;
@@ -105,6 +108,8 @@ typedef struct {
     char *reneg_ciphers;
     char *srp_user;
     char *srp_password;
+    /* PHA enabled */
+    int enable_pha;
 } SSL_TEST_CLIENT_CONF;
 
 typedef struct {
@@ -120,6 +125,9 @@ typedef struct {
     /* An SRP user known to the server. */
     char *srp_user;
     char *srp_password;
+    /* Forced PHA */
+    int force_pha;
+    char *session_ticket_app_data;
 } SSL_TEST_SERVER_CONF;
 
 typedef struct {
@@ -208,6 +216,9 @@ typedef struct {
     int use_sctp;
     /* Whether to expect a session id from the server */
     ssl_session_id_t session_id_expected;
+    char *expected_cipher;
+    /* Expected Session Ticket Application Data */
+    char *expected_session_ticket_app_data;
 } SSL_TEST_CTX;
 
 const char *ssl_test_result_name(ssl_test_result_t result);
@@ -223,6 +234,7 @@ const char *ssl_test_method_name(ssl_test_method_t method);
 const char *ssl_handshake_mode_name(ssl_handshake_mode_t mode);
 const char *ssl_ct_validation_name(ssl_ct_validation_t mode);
 const char *ssl_certstatus_name(ssl_cert_status_t cert_status);
+const char *ssl_max_fragment_len_name(int MFL_mode);
 
 /*
  * Load the test case context from |conf|.

@@ -1,15 +1,10 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
- */
-
-/*
- * The DSS routines are based on patches supplied by
- * Steven Schoch <schoch@sheba.arc.nasa.gov>.
  */
 
 #ifndef HEADER_DSA_H
@@ -25,7 +20,6 @@ extern "C" {
 # include <openssl/bio.h>
 # include <openssl/crypto.h>
 # include <openssl/ossl_typ.h>
-# include <openssl/opensslconf.h>
 # include <openssl/bn.h>
 # if OPENSSL_API_COMPAT < 0x10100000L
 #  include <openssl/dh.h>
@@ -105,7 +99,7 @@ int DSA_size(const DSA *);
 int DSA_bits(const DSA *d);
 int DSA_security_bits(const DSA *d);
         /* next 4 return -1 on error */
-int DSA_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp, BIGNUM **rp);
+DEPRECATEDIN_1_2_0(int DSA_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp, BIGNUM **rp))
 int DSA_sign(int type, const unsigned char *dgst, int dlen,
              unsigned char *sig, unsigned int *siglen, DSA *dsa);
 int DSA_verify(int type, const unsigned char *dgst, int dgst_len,
@@ -147,10 +141,12 @@ int DSAparams_print_fp(FILE *fp, const DSA *x);
 int DSA_print_fp(FILE *bp, const DSA *x, int off);
 # endif
 
-# define DSS_prime_checks 50
+# define DSS_prime_checks 64
 /*
- * Primality test according to FIPS PUB 186[-1], Appendix 2.1: 50 rounds of
- * Rabin-Miller
+ * Primality test according to FIPS PUB 186-4, Appendix C.3. Since we only
+ * have one value here we set the number of checks to 64 which is the 128 bit
+ * security level that is the highest level and valid for creating a 3072 bit
+ * DSA key.
  */
 # define DSA_is_prime(n, callback, cb_arg) \
         BN_is_prime(n, DSS_prime_checks, callback, NULL, cb_arg)
@@ -177,6 +173,11 @@ int DSA_set0_pqg(DSA *d, BIGNUM *p, BIGNUM *q, BIGNUM *g);
 void DSA_get0_key(const DSA *d,
                   const BIGNUM **pub_key, const BIGNUM **priv_key);
 int DSA_set0_key(DSA *d, BIGNUM *pub_key, BIGNUM *priv_key);
+const BIGNUM *DSA_get0_p(const DSA *d);
+const BIGNUM *DSA_get0_q(const DSA *d);
+const BIGNUM *DSA_get0_g(const DSA *d);
+const BIGNUM *DSA_get0_pub_key(const DSA *d);
+const BIGNUM *DSA_get0_priv_key(const DSA *d);
 void DSA_clear_flags(DSA *d, int flags);
 int DSA_test_flags(const DSA *d, int flags);
 void DSA_set_flags(DSA *d, int flags);
@@ -187,7 +188,7 @@ void DSA_meth_free(DSA_METHOD *dsam);
 DSA_METHOD *DSA_meth_dup(const DSA_METHOD *dsam);
 const char *DSA_meth_get0_name(const DSA_METHOD *dsam);
 int DSA_meth_set1_name(DSA_METHOD *dsam, const char *name);
-int DSA_meth_get_flags(DSA_METHOD *dsam);
+int DSA_meth_get_flags(const DSA_METHOD *dsam);
 int DSA_meth_set_flags(DSA_METHOD *dsam, int flags);
 void *DSA_meth_get0_app_data(const DSA_METHOD *dsam);
 int DSA_meth_set0_app_data(DSA_METHOD *dsam, void *app_data);
@@ -229,7 +230,6 @@ int DSA_meth_set_paramgen(DSA_METHOD *dsam,
 int (*DSA_meth_get_keygen(const DSA_METHOD *dsam)) (DSA *);
 int DSA_meth_set_keygen(DSA_METHOD *dsam, int (*keygen) (DSA *));
 
-int ERR_load_DSA_strings(void);
 
 #  ifdef  __cplusplus
 }

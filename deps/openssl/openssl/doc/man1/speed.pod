@@ -2,6 +2,7 @@
 
 =head1 NAME
 
+openssl-speed,
 speed - test library performance
 
 =head1 SYNOPSIS
@@ -11,9 +12,13 @@ B<openssl speed>
 [B<-engine id>]
 [B<-elapsed>]
 [B<-evp algo>]
+[B<-hmac algo>]
 [B<-decrypt>]
 [B<-rand file...>]
 [B<-writerand file>]
+[B<-primes num>]
+[B<-seconds num>]
+[B<-bytes num>]
 [B<algorithm...>]
 
 =head1 DESCRIPTION
@@ -40,12 +45,20 @@ for all available algorithms.
 
 =item B<-elapsed>
 
-Measure time in real time instead of CPU time. It can be useful when testing
-speed of hardware engines.
+When calculating operations- or bytes-per-second, use wall-clock time
+instead of CPU user time as divisor. It can be useful when testing speed
+of hardware engines.
 
 =item B<-evp algo>
 
 Use the specified cipher or message digest algorithm via the EVP interface.
+If B<algo> is an AEAD cipher, then you can pass <-aead> to benchmark a
+TLS-like sequence. And if B<algo> is a multi-buffer capable cipher, e.g.
+aes-128-cbc-hmac-sha1, then B<-mb> will time multi-buffer operation.
+
+=item B<-hmac digest>
+
+Time the HMAC algorithm using the specified message digest.
 
 =item B<-decrypt>
 
@@ -64,16 +77,29 @@ all others.
 Writes random data to the specified I<file> upon exit.
 This can be used with a subsequent B<-rand> flag.
 
+=item B<-primes num>
+
+Generate a B<num>-prime RSA key and use it to run the benchmarks. This option
+is only effective if RSA algorithm is specified to test.
+
+=item B<-seconds num>
+
+Run benchmarks for B<num> seconds.
+
+=item B<-bytes num>
+
+Run benchmarks on B<num>-byte buffers. Affects ciphers, digests and the CSPRNG.
+
 =item B<[zero or more test algorithms]>
 
-If any options are given, B<speed> tests those algorithms, otherwise all of
-the above are tested.
+If any options are given, B<speed> tests those algorithms, otherwise a
+pre-compiled grand selection is tested.
 
 =back
 
 =head1 COPYRIGHT
 
-Copyright 2000-2017 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2000-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

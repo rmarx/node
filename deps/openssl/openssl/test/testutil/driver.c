@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,12 +17,16 @@
 #include "internal/nelem.h"
 #include <openssl/bio.h>
 
+#ifdef _WIN32
+# define strdup _strdup
+#endif
+
 /*
  * Declares the structures needed to register each test case function.
  */
 typedef struct test_info {
     const char *test_case_name;
-    int (*test_fn) ();
+    int (*test_fn) (void);
     int (*param_test_fn)(int idx);
     int num;
 
@@ -70,7 +74,7 @@ int subtest_level(void)
 }
 
 #ifndef OPENSSL_NO_CRYPTO_MDEBUG
-static int should_report_leaks()
+static int should_report_leaks(void)
 {
     /*
      * When compiled with enable-crypto-mdebug, OPENSSL_DEBUG_MEMORY=0
@@ -266,5 +270,30 @@ int run_tests(const char *test_prog_name)
     if (num_failed != 0)
         return EXIT_FAILURE;
     return EXIT_SUCCESS;
+}
+
+/*
+ * Glue an array of strings together and return it as an allocated string.
+ * Optionally return the whole length of this string in |out_len|
+ */
+char *glue_strings(const char *list[], size_t *out_len)
+{
+    size_t len = 0;
+    char *p, *ret;
+    int i;
+
+    for (i = 0; list[i] != NULL; i++)
+        len += strlen(list[i]);
+
+    if (out_len != NULL)
+        *out_len = len;
+
+    if (!TEST_ptr(ret = p = OPENSSL_malloc(len + 1)))
+        return NULL;
+
+    for (i = 0; list[i] != NULL; i++)
+        p += strlen(strcpy(p, list[i]));
+
+    return ret;
 }
 

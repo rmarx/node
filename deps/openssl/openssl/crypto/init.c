@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -24,25 +24,34 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "internal/thread_once.h"
+#include "internal/dso_conf.h"
 #include "internal/dso.h"
 #include "internal/store.h"
 
-
-typedef struct global_lock_st {
-    CRYPTO_RWLOCK *lock;
-    const char *name;
-    struct global_lock_st *next;
-} GLOBAL_LOCK;
-
-static GLOBAL_LOCK *global_locks;
-
 static int stopped = 0;
+
+/*
+ * Since per-thread-specific-data destructors are not universally
+ * available, i.e. not on Windows, only below CRYPTO_THREAD_LOCAL key
+ * is assumed to have destructor associated. And then an effort is made
+ * to call this single destructor on non-pthread platform[s].
+ *
+ * Initial value is "impossible". It is used as guard value to shortcut
+ * destructor for threads terminating before libcrypto is initialized or
+ * after it's de-initialized. Access to the key doesn't have to be
+ * serialized for the said threads, because they didn't use libcrypto
+ * and it doesn't matter if they pick "impossible" or derefernce real
+ * key value and pull NULL past initialization in the first thread that
+ * intends to use libcrypto.
+ */
+static union {
+    long sane;
+    CRYPTO_THREAD_LOCAL value;
+} destructor_key = { -1 };
 
 static void ossl_init_thread_stop(struct thread_local_inits_st *locals);
 
-static CRYPTO_THREAD_LOCAL threadstopkey;
-
-static void ossl_init_thread_stop_wrap(void *local)
+static void ossl_init_thread_destructor(void *local)
 {
     ossl_init_thread_stop((struct thread_local_inits_st *)local);
 }
@@ -50,17 +59,17 @@ static void ossl_init_thread_stop_wrap(void *local)
 static struct thread_local_inits_st *ossl_init_get_thread_local(int alloc)
 {
     struct thread_local_inits_st *local =
-        CRYPTO_THREAD_get_local(&threadstopkey);
+        CRYPTO_THREAD_get_local(&destructor_key.value);
 
-    if (local == NULL && alloc) {
-        local = OPENSSL_zalloc(sizeof *local);
-        if (local != NULL && !CRYPTO_THREAD_set_local(&threadstopkey, local)) {
+    if (alloc) {
+        if (local == NULL
+            && (local = OPENSSL_zalloc(sizeof(*local))) != NULL
+            && !CRYPTO_THREAD_set_local(&destructor_key.value, local)) {
             OPENSSL_free(local);
             return NULL;
         }
-    }
-    if (!alloc) {
-        CRYPTO_THREAD_set_local(&threadstopkey, NULL);
+    } else {
+        CRYPTO_THREAD_set_local(&destructor_key.value, NULL);
     }
 
     return local;
@@ -72,9 +81,6 @@ struct ossl_init_stop_st {
     OPENSSL_INIT_STOP *next;
 };
 
-static CRYPTO_RWLOCK *glock_lock = NULL;
-static CRYPTO_ONCE glock_once = CRYPTO_ONCE_STATIC_INIT;
-
 static OPENSSL_INIT_STOP *stop_handlers = NULL;
 static CRYPTO_RWLOCK *init_lock = NULL;
 
@@ -82,33 +88,45 @@ static CRYPTO_ONCE base = CRYPTO_ONCE_STATIC_INIT;
 static int base_inited = 0;
 DEFINE_RUN_ONCE_STATIC(ossl_init_base)
 {
+    CRYPTO_THREAD_LOCAL key;
+
 #ifdef OPENSSL_INIT_DEBUG
     fprintf(stderr, "OPENSSL_INIT: ossl_init_base: Setting up stop handlers\n");
 #endif
 #ifndef OPENSSL_NO_CRYPTO_MDEBUG
     ossl_malloc_setup_failures();
 #endif
-    /*
-     * We use a dummy thread local key here. We use the destructor to detect
-     * when the thread is going to stop (where that feature is available)
-     */
-    CRYPTO_THREAD_init_local(&threadstopkey, ossl_init_thread_stop_wrap);
-#ifndef OPENSSL_SYS_UEFI
-    atexit(OPENSSL_cleanup);
-#endif
-    /* Do not change this to glock's! */
-    if ((init_lock = CRYPTO_THREAD_lock_new()) == NULL)
+    if (!CRYPTO_THREAD_init_local(&key, ossl_init_thread_destructor))
         return 0;
+    if ((init_lock = CRYPTO_THREAD_lock_new()) == NULL)
+        goto err;
+#ifndef OPENSSL_SYS_UEFI
+    if (atexit(OPENSSL_cleanup) != 0)
+        goto err;
+#endif
     OPENSSL_cpuid_setup();
 
-    /*
-     * BIG FAT WARNING!
-     * Everything needed to be initialized in this function before threads
-     * come along MUST happen before base_inited is set to 1, or we will
-     * see race conditions.
-     */
+    destructor_key.value = key;
     base_inited = 1;
+    return 1;
 
+err:
+#ifdef OPENSSL_INIT_DEBUG
+    fprintf(stderr, "OPENSSL_INIT: ossl_init_base not ok!\n");
+#endif
+    CRYPTO_THREAD_lock_free(init_lock);
+    init_lock = NULL;
+
+    CRYPTO_THREAD_cleanup_local(&key);
+    return 0;
+}
+
+static CRYPTO_ONCE load_crypto_nodelete = CRYPTO_ONCE_STATIC_INIT;
+DEFINE_RUN_ONCE_STATIC(ossl_init_load_crypto_nodelete)
+{
+#ifdef OPENSSL_INIT_DEBUG
+    fprintf(stderr, "OPENSSL_INIT: ossl_init_load_crypto_nodelete()\n");
+#endif
 #if !defined(OPENSSL_NO_DSO) && !defined(OPENSSL_USE_NODELETE)
 # ifdef DSO_WIN32
     {
@@ -120,6 +138,10 @@ DEFINE_RUN_ONCE_STATIC(ossl_init_base)
                                 | GET_MODULE_HANDLE_EX_FLAG_PIN,
                                 (void *)&base_inited, &handle);
 
+#  ifdef OPENSSL_INIT_DEBUG
+        fprintf(stderr, "OPENSSL_INIT: obtained DSO reference? %s\n",
+                (ret == TRUE ? "No!" : "Yes."));
+#  endif
         return (ret == TRUE) ? 1 : 0;
     }
 # else
@@ -128,12 +150,24 @@ DEFINE_RUN_ONCE_STATIC(ossl_init_base)
      * to remain loaded until the atexit() handler is run at process exit.
      */
     {
-        DSO *dso = NULL;
+        DSO *dso;
+        void *err;
 
-        ERR_set_mark();
+        if (!err_shelve_state(&err))
+            return 0;
+
         dso = DSO_dsobyaddr(&base_inited, DSO_FLAG_NO_UNLOAD_ON_FREE);
+#  ifdef OPENSSL_INIT_DEBUG
+        fprintf(stderr, "OPENSSL_INIT: obtained DSO reference? %s\n",
+                (dso == NULL ? "No!" : "Yes."));
+        /*
+         * In case of No!, it is uncertain our exit()-handlers can still be
+         * called. After dlclose() the whole library might have been unloaded
+         * already.
+         */
+#  endif
         DSO_free(dso);
-        ERR_pop_to_mark();
+        err_unshelve_state(err);
     }
 # endif
 #endif
@@ -352,9 +386,9 @@ static void ossl_init_thread_stop(struct thread_local_inits_st *locals)
     if (locals->async) {
 #ifdef OPENSSL_INIT_DEBUG
         fprintf(stderr, "OPENSSL_INIT: ossl_init_thread_stop: "
-                        "ASYNC_cleanup_thread()\n");
+                        "async_delete_thread_state()\n");
 #endif
-        ASYNC_cleanup_thread();
+        async_delete_thread_state();
     }
 
     if (locals->err_state) {
@@ -365,13 +399,21 @@ static void ossl_init_thread_stop(struct thread_local_inits_st *locals)
         err_delete_thread_state();
     }
 
+    if (locals->rand) {
+#ifdef OPENSSL_INIT_DEBUG
+        fprintf(stderr, "OPENSSL_INIT: ossl_init_thread_stop: "
+                        "drbg_delete_thread_state()\n");
+#endif
+        drbg_delete_thread_state();
+    }
+
     OPENSSL_free(locals);
 }
 
 void OPENSSL_thread_stop(void)
 {
-    ossl_init_thread_stop(
-        (struct thread_local_inits_st *)ossl_init_get_thread_local(0));
+    if (destructor_key.sane != -1)
+        ossl_init_thread_stop(ossl_init_get_thread_local(0));
 }
 
 int ossl_init_thread_start(uint64_t opts)
@@ -402,12 +444,21 @@ int ossl_init_thread_start(uint64_t opts)
         locals->err_state = 1;
     }
 
+    if (opts & OPENSSL_INIT_THREAD_RAND) {
+#ifdef OPENSSL_INIT_DEBUG
+        fprintf(stderr, "OPENSSL_INIT: ossl_init_thread_start: "
+                        "marking thread for rand\n");
+#endif
+        locals->rand = 1;
+    }
+
     return 1;
 }
 
 void OPENSSL_cleanup(void)
 {
     OPENSSL_INIT_STOP *currhandler, *lasthandler;
+    CRYPTO_THREAD_LOCAL key;
 
     /* If we've not been inited then no need to deinit */
     if (!base_inited)
@@ -467,7 +518,9 @@ void OPENSSL_cleanup(void)
         err_free_strings_int();
     }
 
-    CRYPTO_THREAD_cleanup_local(&threadstopkey);
+    key = destructor_key.value;
+    destructor_key.sane = -1;
+    CRYPTO_THREAD_cleanup_local(&key);
 
 #ifdef OPENSSL_INIT_DEBUG
     fprintf(stderr, "OPENSSL_INIT: OPENSSL_cleanup: "
@@ -503,7 +556,7 @@ void OPENSSL_cleanup(void)
      * obj_cleanup_int() must be called last
      */
     rand_cleanup_int();
-    rand_cleanup_drbg_int();
+    rand_drbg_cleanup_int();
     conf_modules_free_int();
 #ifndef OPENSSL_NO_ENGINE
     engine_cleanup_int();
@@ -515,15 +568,7 @@ void OPENSSL_cleanup(void)
     obj_cleanup_int();
     err_cleanup();
 
-    /* Free list of global locks. */
-    while (global_locks != NULL) {
-        GLOBAL_LOCK *next = global_locks->next;
-
-        free(global_locks);
-        global_locks = next;
-    }
-    CRYPTO_THREAD_lock_free(glock_lock);
-    glock_lock = NULL;
+    CRYPTO_secure_malloc_done();
 
     base_inited = 0;
 }
@@ -535,22 +580,18 @@ void OPENSSL_cleanup(void)
  */
 int OPENSSL_init_crypto(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings)
 {
-    static int stoperrset = 0;
-
     if (stopped) {
-        if (!stoperrset) {
-            /*
-             * We only ever set this once to avoid getting into an infinite
-             * loop where the error system keeps trying to init and fails so
-             * sets an error etc
-             */
-            stoperrset = 1;
+        if (!(opts & OPENSSL_INIT_BASE_ONLY))
             CRYPTOerr(CRYPTO_F_OPENSSL_INIT_CRYPTO, ERR_R_INIT_FAIL);
-        }
         return 0;
     }
 
-    if (!base_inited && !RUN_ONCE(&base, ossl_init_base))
+    if (!RUN_ONCE(&base, ossl_init_base))
+        return 0;
+
+    if (!(opts & OPENSSL_INIT_BASE_ONLY)
+            && !RUN_ONCE(&load_crypto_nodelete,
+                         ossl_init_load_crypto_nodelete))
         return 0;
 
     if ((opts & OPENSSL_INIT_NO_LOAD_CRYPTO_STRINGS)
@@ -690,6 +731,12 @@ int OPENSSL_atexit(void (*handler)(void))
 
             ERR_set_mark();
             dso = DSO_dsobyaddr(handlersym.sym, DSO_FLAG_NO_UNLOAD_ON_FREE);
+#  ifdef OPENSSL_INIT_DEBUG
+            fprintf(stderr,
+                    "OPENSSL_INIT: OPENSSL_atexit: obtained DSO reference? %s\n",
+                    (dso == NULL ? "No!" : "Yes."));
+            /* See same code above in ossl_init_base() for an explanation. */
+#  endif
             DSO_free(dso);
             ERR_pop_to_mark();
         }
@@ -697,9 +744,10 @@ int OPENSSL_atexit(void (*handler)(void))
     }
 #endif
 
-    newhand = OPENSSL_malloc(sizeof(*newhand));
-    if (newhand == NULL)
+    if ((newhand = OPENSSL_malloc(sizeof(*newhand))) == NULL) {
+        CRYPTOerr(CRYPTO_F_OPENSSL_ATEXIT, ERR_R_MALLOC_FAILURE);
         return 0;
+    }
 
     newhand->handler = handler;
     newhand->next = stop_handlers;
@@ -708,55 +756,7 @@ int OPENSSL_atexit(void (*handler)(void))
     return 1;
 }
 
-#ifndef OPENSSL_SYS_UNIX
-CRYPTO_RWLOCK *CRYPTO_THREAD_glock_new(const char *name)
-{
-    return CRYPTO_THREAD_lock_new();
-}
-
-#else
-DEFINE_RUN_ONCE_STATIC(glock_init)
-{
-    glock_lock = CRYPTO_THREAD_lock_new();
-    return glock_lock != NULL;
-}
-
-/*
- * Create a new global lock, return NULL on error.
- */
-CRYPTO_RWLOCK *CRYPTO_THREAD_glock_new(const char *name)
-{
-    GLOBAL_LOCK *newlock;
-
-    if (glock_lock == NULL && !RUN_ONCE(&glock_once, glock_init))
-        return NULL;
-    if ((newlock = malloc(sizeof(*newlock))) == NULL)
-        return NULL;
-    if ((newlock->lock = CRYPTO_THREAD_lock_new()) == NULL) {
-        free(newlock);
-        return NULL;
-    }
-    newlock->name = name;
-    CRYPTO_THREAD_write_lock(glock_lock);
-    newlock->next = global_locks;
-    global_locks = newlock;
-    CRYPTO_THREAD_unlock(glock_lock);
-    return newlock->lock;
-}
-
-/*
- * Unlock all global locks.
- */
-static void unlock_all(void)
-{
-    GLOBAL_LOCK *lp;
-
-    CRYPTO_THREAD_write_lock(glock_lock);
-    for (lp = global_locks; lp != NULL; lp = lp->next)
-        CRYPTO_THREAD_unlock(lp->lock);
-    CRYPTO_THREAD_unlock(glock_lock);
-}
-
+#ifdef OPENSSL_SYS_UNIX
 /*
  * The following three functions are for OpenSSL developers.  This is
  * where we set/reset state across fork (called via pthread_atfork when
@@ -770,22 +770,14 @@ static void unlock_all(void)
 
 void OPENSSL_fork_prepare(void)
 {
-    GLOBAL_LOCK *lp;
-
-    CRYPTO_THREAD_write_lock(glock_lock);
-    for (lp = global_locks; lp != NULL; lp = lp->next)
-        CRYPTO_THREAD_write_lock(lp->lock);
-    CRYPTO_THREAD_unlock(glock_lock);
 }
 
 void OPENSSL_fork_parent(void)
 {
-    unlock_all();
 }
 
 void OPENSSL_fork_child(void)
 {
-    unlock_all();
     rand_fork();
 }
 #endif

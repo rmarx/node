@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,9 +18,6 @@
 #include "../crypto/siphash/siphash_local.h"
 #include "internal/nelem.h"
 
-static BIO* b_stderr = NULL;
-static BIO* b_stdout = NULL;
-
 typedef struct {
     size_t size;
     unsigned char data[64];
@@ -36,47 +33,6 @@ typedef struct {
  * Test of siphash internal functions
  *
  ***/
-
-static int benchmark_siphash(void)
-{
-# ifdef OPENSSL_CPUID_OBJ
-    SIPHASH siphash;
-    unsigned char key[SIPHASH_KEY_SIZE];
-    unsigned char buf[8192];
-    unsigned long long stopwatch;
-    unsigned long long OPENSSL_rdtsc();
-    unsigned int i;
-
-    memset (buf,0x55,sizeof(buf));
-    memset (key,0xAA,sizeof(key));
-
-    (void)SipHash_Init(&siphash, key, 0, 0, 0);
-
-    for (i=0;i<100000;i++)
-        SipHash_Update(&siphash, buf, sizeof(buf));
-
-    stopwatch = OPENSSL_rdtsc();
-    for (i=0;i<10000;i++)
-        SipHash_Update(&siphash, buf, sizeof(buf));
-    stopwatch = OPENSSL_rdtsc() - stopwatch;
-
-    BIO_printf(b_stdout, "%g\n",stopwatch/(double)(i*sizeof(buf)));
-
-    stopwatch = OPENSSL_rdtsc();
-    for (i=0;i<10000;i++) {
-        (void)SipHash_Init(&siphash, key, 0, 0, 0);
-        SipHash_Update(&siphash, buf, 16);
-        (void)SipHash_Final(&siphash, buf, SIPHASH_MAX_DIGEST_SIZE);
-    }
-    stopwatch = OPENSSL_rdtsc() - stopwatch;
-
-    BIO_printf(b_stdout, "%g\n",stopwatch/(double)(i));
-# else
-    BIO_printf(b_stderr,
-               "Benchmarking of siphash isn't available on this platform\n");
-# endif
-    return 1;
-}
 
 /* From C reference: https://131002.net/siphash/ */
 
@@ -235,12 +191,13 @@ static int test_siphash(int idx)
 
     /* key and in data are 00 01 02 ... */
     for (i = 0; i < sizeof(key); i++)
-        key[i] = i;
+        key[i] = (unsigned char)i;
 
     for (i = 0; i < inlen; i++)
-        in[i] = i;
+        in[i] = (unsigned char)i;
 
-    if (!TEST_true(SipHash_Init(&siphash, key, expectedlen, 0, 0)))
+    if (!TEST_true(SipHash_set_hash_size(&siphash, expectedlen))
+        || !TEST_true(SipHash_Init(&siphash, key, 0, 0)))
         return 0;
     SipHash_Update(&siphash, in, inlen);
     if (!TEST_true(SipHash_Final(&siphash, out, expectedlen))
@@ -248,7 +205,8 @@ static int test_siphash(int idx)
         return 0;
 
     if (inlen > 16) {
-        if (!TEST_true(SipHash_Init(&siphash, key, expectedlen, 0, 0)))
+        if (!TEST_true(SipHash_set_hash_size(&siphash, expectedlen))
+            || !TEST_true(SipHash_Init(&siphash, key, 0, 0)))
             return 0;
         SipHash_Update(&siphash, in, 1);
         SipHash_Update(&siphash, in+1, inlen-1);
@@ -264,7 +222,8 @@ static int test_siphash(int idx)
     if (inlen > 32) {
         size_t half = inlen / 2;
 
-        if (!TEST_true(SipHash_Init(&siphash, key, expectedlen, 0, 0)))
+        if (!TEST_true(SipHash_set_hash_size(&siphash, expectedlen))
+            || !TEST_true(SipHash_Init(&siphash, key, 0, 0)))
             return 0;
         SipHash_Update(&siphash, in, half);
         SipHash_Update(&siphash, in+half, inlen-half);
@@ -277,7 +236,8 @@ static int test_siphash(int idx)
         }
 
         for (half = 16; half < inlen; half += 16) {
-            if (!TEST_true(SipHash_Init(&siphash, key, expectedlen, 0, 0)))
+            if (!TEST_true(SipHash_set_hash_size(&siphash, expectedlen))
+                || !TEST_true(SipHash_Init(&siphash, key, 0, 0)))
                 return 0;
             SipHash_Update(&siphash, in, half);
             SipHash_Update(&siphash, in+half, inlen-half);
@@ -302,47 +262,29 @@ static int test_siphash_basic(void)
     unsigned char output[SIPHASH_MAX_DIGEST_SIZE];
 
     /* Use invalid hash size */
-    return TEST_int_eq(SipHash_Init(&siphash, key, 4, 0, 0), 0)
+    return TEST_int_eq(SipHash_set_hash_size(&siphash, 4), 0)
            /* Use hash size = 8 */
-           && TEST_true(SipHash_Init(&siphash, key, 8, 0, 0))
+           && TEST_true(SipHash_set_hash_size(&siphash, 8))
+           && TEST_true(SipHash_Init(&siphash, key, 0, 0))
            && TEST_true(SipHash_Final(&siphash, output, 8))
            && TEST_int_eq(SipHash_Final(&siphash, output, 16), 0)
 
            /* Use hash size = 16 */
-           && TEST_true(SipHash_Init(&siphash, key, 16, 0, 0))
+           && TEST_true(SipHash_set_hash_size(&siphash, 16))
+           && TEST_true(SipHash_Init(&siphash, key, 0, 0))
            && TEST_int_eq(SipHash_Final(&siphash, output, 8), 0)
            && TEST_true(SipHash_Final(&siphash, output, 16))
 
            /* Use hash size = 0 (default = 16) */
-           && TEST_true(SipHash_Init(&siphash, key, 0, 0, 0))
+           && TEST_true(SipHash_set_hash_size(&siphash, 0))
+           && TEST_true(SipHash_Init(&siphash, key, 0, 0))
            && TEST_int_eq(SipHash_Final(&siphash, output, 8), 0)
            && TEST_true(SipHash_Final(&siphash, output, 16));
 }
 
 int setup_tests(void)
 {
-    if (test_has_option("-h")) {
-        BIO_printf(bio_out, "-h\tThis help\n");
-        BIO_printf(bio_out, "-b\tBenchmark in addition to the tests\n");
-        return 1;
-    }
-
-    b_stderr = BIO_new_fp(stderr, BIO_NOCLOSE | BIO_FP_TEXT);
-    b_stdout = BIO_new_fp(stdout, BIO_NOCLOSE | BIO_FP_TEXT);
-#ifdef OPENSSL_SYS_VMS
-    b_stderr = BIO_push(BIO_new(BIO_f_linebuffer()), b_stderr);
-    b_stdout = BIO_push(BIO_new(BIO_f_linebuffer()), b_stdout);
-#endif
-
     ADD_TEST(test_siphash_basic);
     ADD_ALL_TESTS(test_siphash, OSSL_NELEM(tests));
-    if (test_has_option("-b"))
-        ADD_TEST(benchmark_siphash);
     return 1;
-}
-
-void cleanup_tests(void)
-{
-    BIO_free(b_stdout);
-    BIO_free(b_stderr);
 }

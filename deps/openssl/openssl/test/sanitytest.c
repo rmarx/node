@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,9 +8,8 @@
  */
 
 #include <string.h>
-#include "internal/numbers.h"
-
 #include "testutil.h"
+#include "internal/numbers.h"
 
 static int test_sanity_null_zero(void)
 {
@@ -19,7 +18,7 @@ static int test_sanity_null_zero(void)
 
     /* Is NULL equivalent to all-bytes-zero? */
     p = NULL;
-    memset(bytes, 0, sizeof bytes);
+    memset(bytes, 0, sizeof(bytes));
     return TEST_mem_eq(&p, sizeof(p), bytes, sizeof(bytes));
 }
 
@@ -66,7 +65,7 @@ static int test_sanity_sign(void)
     return 1;
 }
 
-static int test_sanity_unsigned_convertion(void)
+static int test_sanity_unsigned_conversion(void)
 {
     /* Check that unsigned-to-signed conversions preserve bit patterns */
     if (!TEST_int_eq((int)((unsigned int)INT_MAX + 1), INT_MIN)
@@ -85,14 +84,20 @@ static int test_sanity_range(void)
     return 1;
 }
 
+static int test_sanity_memcmp(void)
+{
+    return CRYPTO_memcmp("ab","cd",2);
+}
+
 int setup_tests(void)
 {
     ADD_TEST(test_sanity_null_zero);
     ADD_TEST(test_sanity_enum_size);
     ADD_TEST(test_sanity_twos_complement);
     ADD_TEST(test_sanity_sign);
-    ADD_TEST(test_sanity_unsigned_convertion);
+    ADD_TEST(test_sanity_unsigned_conversion);
     ADD_TEST(test_sanity_range);
+    ADD_TEST(test_sanity_memcmp);
     return 1;
 }
 

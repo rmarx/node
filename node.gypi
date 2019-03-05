@@ -109,7 +109,9 @@
         'src/node_crypto_bio.h',
         'src/node_crypto_clienthello.h',
         'src/tls_wrap.cc',
-        'src/tls_wrap.h'
+        'src/tls_wrap.h',
+        'src/qtls_wrap.cc',
+        'src/qtls_wrap.h'
       ],
       'conditions': [
         ['openssl_fips != ""', {
@@ -120,7 +122,7 @@
             './deps/openssl/openssl.gyp:openssl',
 
             # For tests
-            './deps/openssl/openssl.gyp:openssl-cli',
+            #'./deps/openssl/openssl.gyp:openssl-cli',
           ],
           # Do not let unused OpenSSL symbols to slip away
           'conditions': [

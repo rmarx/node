@@ -108,7 +108,8 @@ class ClientHelloParser {
   enum ExtensionType {
     kServerName = 0,
     kStatusRequest = 5,
-    kTLSSessionTicket = 35
+    kTLSSessionTicket = 35,
+    kKeyShare = 40 // only availabe in TLSv1.3
   };
 
   bool ParseRecordHeader(const uint8_t* data, size_t avail);
@@ -132,6 +133,9 @@ class ClientHelloParser {
   uint8_t ocsp_request_;
   uint16_t tls_ticket_size_;
   const uint8_t* tls_ticket_;
+  // check if necessary in nodejs otherwise comment this
+  uint16_t key_share_size_;
+  const uint8_t* key_share_;
 };
 
 }  // namespace crypto

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2008-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -425,6 +425,7 @@ ASN1_VALUE *SMIME_read_ASN1(BIO *bio, BIO **bcont, const ASN1_ITEM *it)
             || hdr->value == NULL) {
             sk_MIME_HEADER_pop_free(headers, mime_hdr_free);
             ASN1err(ASN1_F_SMIME_READ_ASN1, ASN1_R_NO_SIG_CONTENT_TYPE);
+            sk_BIO_pop_free(parts, BIO_vfree);
             return NULL;
         }
 
@@ -859,7 +860,7 @@ static int mime_hdr_cmp(const MIME_HEADER *const *a,
     if (!(*a)->name || !(*b)->name)
         return ! !(*a)->name - ! !(*b)->name;
 
-    return (strcmp((*a)->name, (*b)->name));
+    return strcmp((*a)->name, (*b)->name);
 }
 
 static int mime_param_cmp(const MIME_PARAM *const *a,
@@ -867,7 +868,7 @@ static int mime_param_cmp(const MIME_PARAM *const *a,
 {
     if (!(*a)->param_name || !(*b)->param_name)
         return ! !(*a)->param_name - ! !(*b)->param_name;
-    return (strcmp((*a)->param_name, (*b)->param_name));
+    return strcmp((*a)->param_name, (*b)->param_name);
 }
 
 /* Find a header with a given name (if possible) */
@@ -882,8 +883,6 @@ static MIME_HEADER *mime_hdr_find(STACK_OF(MIME_HEADER) *hdrs, const char *name)
     htmp.params = NULL;
 
     idx = sk_MIME_HEADER_find(hdrs, &htmp);
-    if (idx < 0)
-        return NULL;
     return sk_MIME_HEADER_value(hdrs, idx);
 }
 
@@ -895,8 +894,6 @@ static MIME_PARAM *mime_param_find(MIME_HEADER *hdr, const char *name)
     param.param_name = (char *)name;
     param.param_value = NULL;
     idx = sk_MIME_PARAM_find(hdr->params, &param);
-    if (idx < 0)
-        return NULL;
     return sk_MIME_PARAM_value(hdr->params, idx);
 }
 
@@ -949,15 +946,17 @@ static int strip_eol(char *linebuf, int *plen, int flags)
     int len = *plen;
     char *p, c;
     int is_eol = 0;
-    p = linebuf + len - 1;
+
     for (p = linebuf + len - 1; len > 0; len--, p--) {
         c = *p;
-        if (c == '\n')
+        if (c == '\n') {
             is_eol = 1;
-        else if (is_eol && flags & SMIME_ASCIICRLF && c < 33)
+        } else if (is_eol && flags & SMIME_ASCIICRLF && c == 32) {
+            /* Strip trailing space on a line; 32 == ASCII for ' ' */
             continue;
-        else if (c != '\r')
+        } else if (c != '\r') {
             break;
+        }
     }
     *plen = len;
     return is_eol;

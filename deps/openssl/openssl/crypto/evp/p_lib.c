@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,6 +18,7 @@
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
 #include <openssl/dh.h>
+#include <openssl/cmac.h>
 #include <openssl/engine.h>
 
 #include "internal/asn1_int.h"
@@ -56,7 +57,7 @@ int EVP_PKEY_save_parameters(EVP_PKEY *pkey, int mode)
 
         if (mode >= 0)
             pkey->save_parameters = mode;
-        return (ret);
+        return ret;
     }
 #endif
 #ifndef OPENSSL_NO_EC
@@ -65,10 +66,10 @@ int EVP_PKEY_save_parameters(EVP_PKEY *pkey, int mode)
 
         if (mode >= 0)
             pkey->save_parameters = mode;
-        return (ret);
+        return ret;
     }
 #endif
-    return (0);
+    return 0;
 }
 
 int EVP_PKEY_copy_parameters(EVP_PKEY *to, const EVP_PKEY *from)
@@ -174,10 +175,12 @@ int EVP_PKEY_up_ref(EVP_PKEY *pkey)
  * is NULL just return 1 or 0 if the algorithm exists.
  */
 
-static int pkey_set_type(EVP_PKEY *pkey, int type, const char *str, int len)
+static int pkey_set_type(EVP_PKEY *pkey, ENGINE *e, int type, const char *str,
+                         int len)
 {
     const EVP_PKEY_ASN1_METHOD *ameth;
-    ENGINE *e = NULL;
+    ENGINE **eptr = (e == NULL) ? &e :  NULL;
+
     if (pkey) {
         if (pkey->pkey.ptr)
             EVP_PKEY_free_it(pkey);
@@ -196,11 +199,11 @@ static int pkey_set_type(EVP_PKEY *pkey, int type, const char *str, int len)
 #endif
     }
     if (str)
-        ameth = EVP_PKEY_asn1_find_str(&e, str, len);
+        ameth = EVP_PKEY_asn1_find_str(eptr, str, len);
     else
-        ameth = EVP_PKEY_asn1_find(&e, type);
+        ameth = EVP_PKEY_asn1_find(eptr, type);
 #ifndef OPENSSL_NO_ENGINE
-    if (pkey == NULL)
+    if (pkey == NULL && eptr != NULL)
         ENGINE_finish(e);
 #endif
     if (ameth == NULL) {
@@ -217,15 +220,162 @@ static int pkey_set_type(EVP_PKEY *pkey, int type, const char *str, int len)
     return 1;
 }
 
+EVP_PKEY *EVP_PKEY_new_raw_private_key(int type, ENGINE *e,
+                                       const unsigned char *priv,
+                                       size_t len)
+{
+    EVP_PKEY *ret = EVP_PKEY_new();
+
+    if (ret == NULL
+            || !pkey_set_type(ret, e, type, NULL, -1)) {
+        /* EVPerr already called */
+        goto err;
+    }
+
+    if (ret->ameth->set_priv_key == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_NEW_RAW_PRIVATE_KEY,
+               EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
+        goto err;
+    }
+
+    if (!ret->ameth->set_priv_key(ret, priv, len)) {
+        EVPerr(EVP_F_EVP_PKEY_NEW_RAW_PRIVATE_KEY, EVP_R_KEY_SETUP_FAILED);
+        goto err;
+    }
+
+    return ret;
+
+ err:
+    EVP_PKEY_free(ret);
+    return NULL;
+}
+
+EVP_PKEY *EVP_PKEY_new_raw_public_key(int type, ENGINE *e,
+                                      const unsigned char *pub,
+                                      size_t len)
+{
+    EVP_PKEY *ret = EVP_PKEY_new();
+
+    if (ret == NULL
+            || !pkey_set_type(ret, e, type, NULL, -1)) {
+        /* EVPerr already called */
+        goto err;
+    }
+
+    if (ret->ameth->set_pub_key == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_NEW_RAW_PUBLIC_KEY,
+               EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
+        goto err;
+    }
+
+    if (!ret->ameth->set_pub_key(ret, pub, len)) {
+        EVPerr(EVP_F_EVP_PKEY_NEW_RAW_PUBLIC_KEY, EVP_R_KEY_SETUP_FAILED);
+        goto err;
+    }
+
+    return ret;
+
+ err:
+    EVP_PKEY_free(ret);
+    return NULL;
+}
+
+int EVP_PKEY_get_raw_private_key(const EVP_PKEY *pkey, unsigned char *priv,
+                                 size_t *len)
+{
+     if (pkey->ameth->get_priv_key == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_GET_RAW_PRIVATE_KEY,
+               EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
+        return 0;
+    }
+
+    if (!pkey->ameth->get_priv_key(pkey, priv, len)) {
+        EVPerr(EVP_F_EVP_PKEY_GET_RAW_PRIVATE_KEY, EVP_R_GET_RAW_KEY_FAILED);
+        return 0;
+    }
+
+    return 1;
+}
+
+int EVP_PKEY_get_raw_public_key(const EVP_PKEY *pkey, unsigned char *pub,
+                                size_t *len)
+{
+     if (pkey->ameth->get_pub_key == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_GET_RAW_PUBLIC_KEY,
+               EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
+        return 0;
+    }
+
+    if (!pkey->ameth->get_pub_key(pkey, pub, len)) {
+        EVPerr(EVP_F_EVP_PKEY_GET_RAW_PUBLIC_KEY, EVP_R_GET_RAW_KEY_FAILED);
+        return 0;
+    }
+
+    return 1;
+}
+
+EVP_PKEY *EVP_PKEY_new_CMAC_key(ENGINE *e, const unsigned char *priv,
+                                size_t len, const EVP_CIPHER *cipher)
+{
+#ifndef OPENSSL_NO_CMAC
+    EVP_PKEY *ret = EVP_PKEY_new();
+    CMAC_CTX *cmctx = CMAC_CTX_new();
+
+    if (ret == NULL
+            || cmctx == NULL
+            || !pkey_set_type(ret, e, EVP_PKEY_CMAC, NULL, -1)) {
+        /* EVPerr already called */
+        goto err;
+    }
+
+    if (!CMAC_Init(cmctx, priv, len, cipher, e)) {
+        EVPerr(EVP_F_EVP_PKEY_NEW_CMAC_KEY, EVP_R_KEY_SETUP_FAILED);
+        goto err;
+    }
+
+    ret->pkey.ptr = cmctx;
+    return ret;
+
+ err:
+    EVP_PKEY_free(ret);
+    CMAC_CTX_free(cmctx);
+    return NULL;
+#else
+    EVPerr(EVP_F_EVP_PKEY_NEW_CMAC_KEY,
+           EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
+    return NULL;
+#endif
+}
+
 int EVP_PKEY_set_type(EVP_PKEY *pkey, int type)
 {
-    return pkey_set_type(pkey, type, NULL, -1);
+    return pkey_set_type(pkey, NULL, type, NULL, -1);
 }
 
 int EVP_PKEY_set_type_str(EVP_PKEY *pkey, const char *str, int len)
 {
-    return pkey_set_type(pkey, EVP_PKEY_NONE, str, len);
+    return pkey_set_type(pkey, NULL, EVP_PKEY_NONE, str, len);
 }
+
+int EVP_PKEY_set_alias_type(EVP_PKEY *pkey, int type)
+{
+    if (pkey->type == type) {
+        return 1; /* it already is that type */
+    }
+
+    /*
+     * The application is requesting to alias this to a different pkey type,
+     * but not one that resolves to the base type.
+     */
+    if (EVP_PKEY_type(type) != EVP_PKEY_base_id(pkey)) {
+        EVPerr(EVP_F_EVP_PKEY_SET_ALIAS_TYPE, EVP_R_UNSUPPORTED_ALGORITHM);
+        return 0;
+    }
+
+    pkey->type = type;
+    return 1;
+}
+
 #ifndef OPENSSL_NO_ENGINE
 int EVP_PKEY_set1_engine(EVP_PKEY *pkey, ENGINE *e)
 {

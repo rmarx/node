@@ -1,4 +1,4 @@
-// Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+// Copyright 2014-2018 The OpenSSL Project Authors. All Rights Reserved.
 //
 // Licensed under the OpenSSL license (the "License").  You may not use
 // this file except in compliance with the License.  You can obtain a copy
@@ -26,6 +26,7 @@
 // Denver	2.01		10.5 (+26%)	6.70 (+8%)
 // X-Gene			20.0 (+100%)	12.8 (+300%(***))
 // Mongoose	2.36		13.0 (+50%)	8.36 (+33%)
+// Kryo		1.92		17.4 (+30%)	11.2 (+8%)
 //
 // (*)	Software SHA256 results are of lesser relevance, presented
 //	mostly for informational purposes.
@@ -34,7 +35,7 @@
 //	on Cortex-A53 (or by 4 cycles per round).
 // (***)	Super-impressive coefficients over gcc-generated code are
 //	indication of some compiler "pathology", most notably code
-//	generated with -mgeneral-regs-only is significanty faster
+//	generated with -mgeneral-regs-only is significantly faster
 //	and the gap is only 40-90%.
 //
 // October 2016.

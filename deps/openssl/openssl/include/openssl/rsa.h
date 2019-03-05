@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -44,6 +44,12 @@ extern "C" {
 
 # define RSA_3   0x3L
 # define RSA_F4  0x10001L
+
+/* based on RFC 8017 appendix A.1.2 */
+# define RSA_ASN1_VERSION_DEFAULT        0
+# define RSA_ASN1_VERSION_MULTI          1
+
+# define RSA_DEFAULT_PRIME_NUM           2
 
 # define RSA_METHOD_FLAG_NO_CHECK        0x0001/* don't check pub/private
                                                 * match */
@@ -120,6 +126,10 @@ extern "C" {
         RSA_pkey_ctx_ctrl(ctx, EVP_PKEY_OP_KEYGEN, \
                           EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0, pubexp)
 
+# define EVP_PKEY_CTX_set_rsa_keygen_primes(ctx, primes) \
+        RSA_pkey_ctx_ctrl(ctx, EVP_PKEY_OP_KEYGEN, \
+                          EVP_PKEY_CTRL_RSA_KEYGEN_PRIMES, primes, NULL)
+
 # define  EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md) \
         RSA_pkey_ctx_ctrl(ctx, EVP_PKEY_OP_TYPE_SIG | EVP_PKEY_OP_TYPE_CRYPT, \
                           EVP_PKEY_CTRL_RSA_MGF1_MD, 0, (void *)(md))
@@ -150,7 +160,7 @@ extern "C" {
 
 # define  EVP_PKEY_CTX_set_rsa_pss_keygen_md(ctx, md) \
         EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA_PSS,  \
-                          EVP_PKEY_OP_TYPE_KEYGEN, EVP_PKEY_CTRL_MD,  \
+                          EVP_PKEY_OP_KEYGEN, EVP_PKEY_CTRL_MD,  \
                           0, (void *)(md))
 
 # define EVP_PKEY_CTRL_RSA_PADDING       (EVP_PKEY_ALG_CTRL + 1)
@@ -169,6 +179,8 @@ extern "C" {
 
 # define EVP_PKEY_CTRL_GET_RSA_OAEP_MD   (EVP_PKEY_ALG_CTRL + 11)
 # define EVP_PKEY_CTRL_GET_RSA_OAEP_LABEL (EVP_PKEY_ALG_CTRL + 12)
+
+# define EVP_PKEY_CTRL_RSA_KEYGEN_PRIMES  (EVP_PKEY_ALG_CTRL + 13)
 
 # define RSA_PKCS1_PADDING       1
 # define RSA_SSLV23_PADDING      2
@@ -192,15 +204,30 @@ int RSA_security_bits(const RSA *rsa);
 int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d);
 int RSA_set0_factors(RSA *r, BIGNUM *p, BIGNUM *q);
 int RSA_set0_crt_params(RSA *r,BIGNUM *dmp1, BIGNUM *dmq1, BIGNUM *iqmp);
+int RSA_set0_multi_prime_params(RSA *r, BIGNUM *primes[], BIGNUM *exps[],
+                                BIGNUM *coeffs[], int pnum);
 void RSA_get0_key(const RSA *r,
                   const BIGNUM **n, const BIGNUM **e, const BIGNUM **d);
 void RSA_get0_factors(const RSA *r, const BIGNUM **p, const BIGNUM **q);
+int RSA_get_multi_prime_extra_count(const RSA *r);
+int RSA_get0_multi_prime_factors(const RSA *r, const BIGNUM *primes[]);
 void RSA_get0_crt_params(const RSA *r,
                          const BIGNUM **dmp1, const BIGNUM **dmq1,
                          const BIGNUM **iqmp);
+int RSA_get0_multi_prime_crt_params(const RSA *r, const BIGNUM *exps[],
+                                    const BIGNUM *coeffs[]);
+const BIGNUM *RSA_get0_n(const RSA *d);
+const BIGNUM *RSA_get0_e(const RSA *d);
+const BIGNUM *RSA_get0_d(const RSA *d);
+const BIGNUM *RSA_get0_p(const RSA *d);
+const BIGNUM *RSA_get0_q(const RSA *d);
+const BIGNUM *RSA_get0_dmp1(const RSA *r);
+const BIGNUM *RSA_get0_dmq1(const RSA *r);
+const BIGNUM *RSA_get0_iqmp(const RSA *r);
 void RSA_clear_flags(RSA *r, int flags);
 int RSA_test_flags(const RSA *r, int flags);
 void RSA_set_flags(RSA *r, int flags);
+int RSA_get_version(RSA *r);
 ENGINE *RSA_get0_engine(const RSA *r);
 
 /* Deprecated version */
@@ -210,6 +237,9 @@ DEPRECATEDIN_0_9_8(RSA *RSA_generate_key(int bits, unsigned long e, void
 
 /* New version */
 int RSA_generate_key_ex(RSA *rsa, int bits, BIGNUM *e, BN_GENCB *cb);
+/* Multi-prime version */
+int RSA_generate_multi_prime_key(RSA *rsa, int bits, int primes,
+                                 BIGNUM *e, BN_GENCB *cb);
 
 int RSA_X931_derive_ex(RSA *rsa, BIGNUM *p1, BIGNUM *p2, BIGNUM *q1,
                        BIGNUM *q2, const BIGNUM *Xp1, const BIGNUM *Xp2,
@@ -393,7 +423,7 @@ void RSA_meth_free(RSA_METHOD *meth);
 RSA_METHOD *RSA_meth_dup(const RSA_METHOD *meth);
 const char *RSA_meth_get0_name(const RSA_METHOD *meth);
 int RSA_meth_set1_name(RSA_METHOD *meth, const char *name);
-int RSA_meth_get_flags(RSA_METHOD *meth);
+int RSA_meth_get_flags(const RSA_METHOD *meth);
 int RSA_meth_set_flags(RSA_METHOD *meth, int flags);
 void *RSA_meth_get0_app_data(const RSA_METHOD *meth);
 int RSA_meth_set0_app_data(RSA_METHOD *meth, void *app_data);
@@ -426,9 +456,9 @@ int RSA_meth_set_priv_dec(RSA_METHOD *rsa,
                                            unsigned char *to, RSA *rsa,
                                            int padding));
 int (*RSA_meth_get_mod_exp(const RSA_METHOD *meth))
-    (BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx);
+    (BIGNUM *r0, const BIGNUM *i, RSA *rsa, BN_CTX *ctx);
 int RSA_meth_set_mod_exp(RSA_METHOD *rsa,
-                         int (*mod_exp) (BIGNUM *r0, const BIGNUM *I, RSA *rsa,
+                         int (*mod_exp) (BIGNUM *r0, const BIGNUM *i, RSA *rsa,
                                          BN_CTX *ctx));
 int (*RSA_meth_get_bn_mod_exp(const RSA_METHOD *meth))
     (BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
@@ -468,7 +498,12 @@ int (*RSA_meth_get_keygen(const RSA_METHOD *meth))
 int RSA_meth_set_keygen(RSA_METHOD *rsa,
                         int (*keygen) (RSA *rsa, int bits, BIGNUM *e,
                                        BN_GENCB *cb));
-int ERR_load_RSA_strings(void);
+int (*RSA_meth_get_multi_prime_keygen(const RSA_METHOD *meth))
+    (RSA *rsa, int bits, int primes, BIGNUM *e, BN_GENCB *cb);
+int RSA_meth_set_multi_prime_keygen(RSA_METHOD *meth,
+                                    int (*keygen) (RSA *rsa, int bits,
+                                                   int primes, BIGNUM *e,
+                                                   BN_GENCB *cb));
 
 #  ifdef  __cplusplus
 }

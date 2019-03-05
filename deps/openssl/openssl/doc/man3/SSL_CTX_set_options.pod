@@ -145,11 +145,39 @@ DTLS connections.
 
 =item SSL_OP_NO_TICKET
 
-Normally clients and servers will, where possible, transparently make use
-of RFC4507bis tickets for stateless session resumption.
+SSL/TLS supports two mechanisms for resuming sessions: session ids and stateless
+session tickets.
 
-If this option is set this functionality is disabled and tickets will
-not be used by clients or servers.
+When using session ids a copy of the session information is
+cached on the server and a unique id is sent to the client. When the client
+wishes to resume it provides the unique id so that the server can retrieve the
+session information from its cache.
+
+When using stateless session tickets the server uses a session ticket encryption
+key to encrypt the session information. This encrypted data is sent to the
+client as a "ticket". When the client wishes to resume it sends the encrypted
+data back to the server. The server uses its key to decrypt the data and resume
+the session. In this way the server can operate statelessly - no session
+information needs to be cached locally.
+
+The TLSv1.3 protocol only supports tickets and does not directly support session
+ids. However OpenSSL allows two modes of ticket operation in TLSv1.3: stateful
+and stateless. Stateless tickets work the same way as in TLSv1.2 and below.
+Stateful tickets mimic the session id behaviour available in TLSv1.2 and below.
+The session information is cached on the server and the session id is wrapped up
+in a ticket and sent back to the client. When the client wishes to resume, it
+presents a ticket in the same way as for stateless tickets. The server can then
+extract the session id from the ticket and retrieve the session information from
+its cache.
+
+By default OpenSSL will use stateless tickets. The SSL_OP_NO_TICKET option will
+cause stateless tickets to not be issued. In TLSv1.2 and below this means no
+ticket gets sent to the client at all. In TLSv1.3 a stateful ticket will be
+sent. This is a server-side option only.
+
+In TLSv1.3 it is possible to suppress all tickets (stateful and stateless) from
+being sent by calling L<SSL_CTX_set_num_tickets(3)> or
+L<SSL_set_num_tickets(3)>.
 
 =item SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
 
@@ -179,6 +207,35 @@ messages, and ignore renegotiation requests via ClientHello.
 
 In TLSv1.3 allow a non-(ec)dhe based key exchange mode on resumption. This means
 that there will be no forward secrecy for the resumed session.
+
+=item SSL_OP_PRIORITIZE_CHACHA
+
+When SSL_OP_CIPHER_SERVER_PREFERENCE is set, temporarily reprioritize
+ChaCha20-Poly1305 ciphers to the top of the server cipher list if a
+ChaCha20-Poly1305 cipher is at the top of the client cipher list. This helps
+those clients (e.g. mobile) use ChaCha20-Poly1305 if that cipher is anywhere
+in the server cipher list; but still allows other clients to use AES and other
+ciphers. Requires B<SSL_OP_CIPHER_SERVER_PREFERENCE>.
+
+=item SSL_OP_ENABLE_MIDDLEBOX_COMPAT
+
+If set then dummy Change Cipher Spec (CCS) messages are sent in TLSv1.3. This
+has the effect of making TLSv1.3 look more like TLSv1.2 so that middleboxes that
+do not understand TLSv1.3 will not drop the connection. Regardless of whether
+this option is set or not CCS messages received from the peer will always be
+ignored in TLSv1.3. This option is set by default. To switch it off use
+SSL_clear_options(). A future version of OpenSSL may not set this by default.
+
+=item SSL_OP_NO_ANTI_REPLAY
+
+By default, when a server is configured for early data (i.e., max_early_data > 0),
+OpenSSL will switch on replay protection. See L<SSL_read_early_data(3)> for a
+description of the replay protection feature. Anti-replay measures are required
+to comply with the TLSv1.3 specification. Some applications may be able to
+mitigate the replay risks in other ways and in such cases the built in OpenSSL
+functionality is not required. Those applications can turn this feature off by
+setting this option. This is a server-side opton only. It is ignored by
+clients.
 
 =back
 
@@ -306,9 +363,12 @@ L<dhparam(1)>
 The attempt to always try to use secure renegotiation was added in
 Openssl 0.9.8m.
 
+B<SSL_OP_PRIORITIZE_CHACHA> and B<SSL_OP_NO_RENEGOTIATION> were added in
+OpenSSL 1.1.1.
+
 =head1 COPYRIGHT
 
-Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2001-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

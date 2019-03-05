@@ -30,13 +30,18 @@ such as Linux that have both functions will normally not need to call these
 functions as the OpenSSL library will do so automatically.
 
 L<OPENSSL_init_crypto(3)> will register these functions with the appropriate
-hander, when the B<OPENSSL_INIT_ATFORK> flag is used. For other
+handler, when the B<OPENSSL_INIT_ATFORK> flag is used. For other
 applications, these functions can be called directly. They should be used
 according to the calling sequence described by the pthreads_atfork(3)
 documentation, which is summarized here.  OPENSSL_fork_prepare() should
 be called before a fork() is done.  After the fork() returns, the parent
 process should call OPENSSL_fork_parent() and the child process should
 call OPENSSL_fork_child().
+
+=head1 RETURN VALUES
+
+OPENSSL_fork_prepare(), OPENSSL_fork_parent() and OPENSSL_fork_child() do not
+return values.
 
 =head1 SEE ALSO
 
@@ -48,7 +53,7 @@ These functions were added in OpenSSL 1.1.1.
 
 =head1 COPYRIGHT
 
-Copyright 2017 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2017-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

@@ -4713,21 +4713,21 @@ Loop_ord_sqr:
 
 Loop_scatter_w7:
 	ldu	0,8(4)
-	stb	0,64*0-1(3)
+	stb	0,64*0(3)
 	srdi	0,0,8
-	stb	0,64*1-1(3)
+	stb	0,64*1(3)
 	srdi	0,0,8
-	stb	0,64*2-1(3)
+	stb	0,64*2(3)
 	srdi	0,0,8
-	stb	0,64*3-1(3)
+	stb	0,64*3(3)
 	srdi	0,0,8
-	stb	0,64*4-1(3)
+	stb	0,64*4(3)
 	srdi	0,0,8
-	stb	0,64*5-1(3)
+	stb	0,64*5(3)
 	srdi	0,0,8
-	stb	0,64*6-1(3)
+	stb	0,64*6(3)
 	srdi	0,0,8
-	stb	0,64*7-1(3)
+	stb	0,64*7(3)
 	addi	3,3,64*8
 	bc	16,0,Loop_scatter_w7
 

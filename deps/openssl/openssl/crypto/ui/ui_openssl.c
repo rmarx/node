@@ -1,5 +1,5 @@
 /*
- * Copyright 2001-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2001-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -43,7 +43,7 @@
  * If unistd.h defines _POSIX_VERSION, we conclude that we are on a POSIX
  * system and have sigaction and termios.
  */
-#  if defined(_POSIX_VERSION)
+#  if defined(_POSIX_VERSION) && _POSIX_VERSION>=199309L
 
 #   define SIGACTION
 #   if !defined(TERMIOS) && !defined(TERMIO) && !defined(SGTTY)
@@ -53,7 +53,6 @@
 #  endif
 # endif
 
-/* 06-Apr-92 Luke Brennan    Support for VMS */
 # include "ui_locl.h"
 # include "internal/cryptlib.h"
 
@@ -409,10 +408,28 @@ static int open_console(UI *ui)
 #  endif
 #  ifdef EINVAL
             /*
-             * Ariel Glenn ariel@columbia.edu reports that solaris can return
-             * EINVAL instead.  This should be ok
+             * Ariel Glenn reports that solaris can return EINVAL instead.
+             * This should be ok
              */
         if (errno == EINVAL)
+            is_a_tty = 0;
+        else
+#  endif
+#  ifdef ENXIO
+            /*
+             * Solaris can return ENXIO.
+             * This should be ok
+             */
+        if (errno == ENXIO)
+            is_a_tty = 0;
+        else
+#  endif
+#  ifdef EIO
+            /*
+             * Linux can return EIO.
+             * This should be ok
+             */
+        if (errno == EIO)
             is_a_tty = 0;
         else
 #  endif
@@ -504,17 +521,13 @@ static int echo_console(UI *ui)
 {
 # if defined(TTY_set) && !defined(OPENSSL_SYS_VMS)
     memcpy(&(tty_new), &(tty_orig), sizeof(tty_orig));
-    tty_new.TTY_FLAGS |= ECHO;
-# endif
-
-# if defined(TTY_set) && !defined(OPENSSL_SYS_VMS)
     if (is_a_tty && (TTY_set(fileno(tty_in), &tty_new) == -1))
         return 0;
 # endif
 # ifdef OPENSSL_SYS_VMS
     if (is_a_tty) {
         tty_new[0] = tty_orig[0];
-        tty_new[1] = tty_orig[1] & ~TT$M_NOECHO;
+        tty_new[1] = tty_orig[1];
         tty_new[2] = tty_orig[2];
         status = sys$qiow(0, channel, IO$_SETMODE, &iosb, 0, 0, tty_new, 12,
                           0, 0, 0, 0);
@@ -535,7 +548,6 @@ static int echo_console(UI *ui)
 # if defined(_WIN32) && !defined(_WIN32_WCE)
     if (is_a_tty) {
         tty_new = tty_orig;
-        tty_new |= ENABLE_ECHO_INPUT;
         SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), tty_new);
     }
 # endif
@@ -687,7 +699,7 @@ static int noecho_fgets(char *buf, int size, FILE *tty)
         FlushConsoleInputBuffer(inh);
     }
 #  endif
-    return (strlen(buf));
+    return strlen(buf);
 }
 # endif
 

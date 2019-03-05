@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -67,15 +67,12 @@ typedef struct {
 typedef void CRYPTO_RWLOCK;
 
 CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void);
-CRYPTO_RWLOCK *CRYPTO_THREAD_glock_new(const char *name);
 int CRYPTO_THREAD_read_lock(CRYPTO_RWLOCK *lock);
 int CRYPTO_THREAD_write_lock(CRYPTO_RWLOCK *lock);
 int CRYPTO_THREAD_unlock(CRYPTO_RWLOCK *lock);
 void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock);
 
 int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock);
-int CRYPTO_atomic_read(int *val, int *ret, CRYPTO_RWLOCK *lock);
-int CRYPTO_atomic_write(int *val, int n, CRYPTO_RWLOCK *lock);
 
 /*
  * The following can be used to detect memory leaks in the library. If
@@ -377,8 +374,9 @@ int CRYPTO_memcmp(const void * in_a, const void * in_b, size_t len);
 # define OPENSSL_INIT_ENGINE_CAPI            0x00002000L
 # define OPENSSL_INIT_ENGINE_PADLOCK         0x00004000L
 # define OPENSSL_INIT_ENGINE_AFALG           0x00008000L
-# define OPENSSL_INIT_reserved_internal      0x00010000L
+/* OPENSSL_INIT_ZLIB                         0x00010000L */
 # define OPENSSL_INIT_ATFORK                 0x00020000L
+/* OPENSSL_INIT_BASE_ONLY                    0x00040000L */
 /* OPENSSL_INIT flag range 0xfff00000 reserved for OPENSSL_init_ssl() */
 /* Max OPENSSL_INIT flag value is 0x80000000 */
 
@@ -440,7 +438,6 @@ int CRYPTO_THREAD_cleanup_local(CRYPTO_THREAD_LOCAL *key);
 CRYPTO_THREAD_ID CRYPTO_THREAD_get_current_id(void);
 int CRYPTO_THREAD_compare_id(CRYPTO_THREAD_ID a, CRYPTO_THREAD_ID b);
 
-int ERR_load_CRYPTO_strings(void);
 
 # ifdef  __cplusplus
 }

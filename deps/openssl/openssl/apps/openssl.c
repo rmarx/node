@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -27,8 +27,9 @@
 #ifdef OPENSSL_SYS_VMS
 # include <unixio.h>
 #endif
-#define INCLUDE_FUNCTION_TABLE
 #include "apps.h"
+#define INCLUDE_FUNCTION_TABLE
+#include "progs.h"
 
 /* Structure to hold the number of columns to be displayed and the
  * field width used to display them.
@@ -73,15 +74,15 @@ static void calculate_columns(DISPLAY_COLUMNS *dc)
     dc->columns = (80 - 1) / dc->width;
 }
 
-static int apps_startup()
+static int apps_startup(void)
 {
 #ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
 #endif
 
     /* Set non-default library initialisation settings */
-    if (!OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_ALL_BUILTIN
-                             | OPENSSL_INIT_LOAD_CONFIG, NULL))
+    if (!OPENSSL_init_ssl(OPENSSL_INIT_ENGINE_ALL_BUILTIN
+                          | OPENSSL_INIT_LOAD_CONFIG, NULL))
         return 0;
 
     setup_ui_method();
@@ -89,12 +90,13 @@ static int apps_startup()
     return 1;
 }
 
-static void apps_shutdown()
+static void apps_shutdown(void)
 {
     destroy_ui_method();
+    destroy_prefix_method();
 }
 
-static char *make_config_name()
+static char *make_config_name(void)
 {
     const char *t;
     size_t len;
@@ -188,7 +190,7 @@ int main(int argc, char *argv[])
     for (;;) {
         ret = 0;
         /* Read a line, continue reading if line ends with \ */
-        for (p = buf, n = sizeof buf, i = 0, first = 1; n > 0; first = 0) {
+        for (p = buf, n = sizeof(buf), i = 0, first = 1; n > 0; first = 0) {
             prompt = first ? "OpenSSL> " : "> ";
             p[0] = '\0';
 #ifndef READLINE
@@ -314,6 +316,56 @@ static void list_missing_help(void)
     }
 }
 
+static void list_objects(void)
+{
+    int max_nid = OBJ_new_nid(0);
+    int i;
+    char *oid_buf = NULL;
+    int oid_size = 0;
+
+    /* Skip 0, since that's NID_undef */
+    for (i = 1; i < max_nid; i++) {
+        const ASN1_OBJECT *obj = OBJ_nid2obj(i);
+        const char *sn = OBJ_nid2sn(i);
+        const char *ln = OBJ_nid2ln(i);
+        int n = 0;
+
+        /*
+         * If one of the retrieved objects somehow generated an error,
+         * we ignore it.  The check for NID_undef below will detect the
+         * error and simply skip to the next NID.
+         */
+        ERR_clear_error();
+
+        if (OBJ_obj2nid(obj) == NID_undef)
+            continue;
+
+        if ((n = OBJ_obj2txt(NULL, 0, obj, 1)) == 0) {
+            BIO_printf(bio_out, "# None-OID object: %s, %s\n", sn, ln);
+            continue;
+        }
+        if (n < 0)
+            break;               /* Error */
+
+        if (n > oid_size) {
+            oid_buf = OPENSSL_realloc(oid_buf, n + 1);
+            if (oid_buf == NULL) {
+                BIO_printf(bio_err, "ERROR: Memory allocation\n");
+                break;           /* Error */
+            }
+            oid_size = n + 1;
+        }
+        if (OBJ_obj2txt(oid_buf, oid_size, obj, 1) < 0)
+            break;               /* Error */
+        if (ln == NULL || strcmp(sn, ln) == 0)
+            BIO_printf(bio_out, "%s = %s\n", sn, oid_buf);
+        else
+            BIO_printf(bio_out, "%s = %s, %s\n", sn, ln, oid_buf);
+    }
+
+    OPENSSL_free(oid_buf);
+}
+
 static void list_options_for_command(const char *command)
 {
     const FUNCTION *fp;
@@ -346,7 +398,8 @@ typedef enum HELPLIST_CHOICE {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP, OPT_ONE,
     OPT_COMMANDS, OPT_DIGEST_COMMANDS, OPT_OPTIONS,
     OPT_DIGEST_ALGORITHMS, OPT_CIPHER_COMMANDS, OPT_CIPHER_ALGORITHMS,
-    OPT_PK_ALGORITHMS, OPT_PK_METHOD, OPT_DISABLED, OPT_MISSING_HELP
+    OPT_PK_ALGORITHMS, OPT_PK_METHOD, OPT_DISABLED, OPT_MISSING_HELP,
+    OPT_OBJECTS
 } HELPLIST_CHOICE;
 
 const OPTIONS list_options[] = {
@@ -370,6 +423,8 @@ const OPTIONS list_options[] = {
      "List missing detailed help strings"},
     {"options", OPT_OPTIONS, 's',
      "List options for specified command"},
+    {"objects", OPT_OBJECTS, '-',
+     "List built in objects (OID<->name mappings)"},
     {NULL}
 };
 
@@ -420,6 +475,9 @@ opthelp:
         case OPT_MISSING_HELP:
             list_missing_help();
             break;
+        case OPT_OBJECTS:
+            list_objects();
+            break;
         case OPT_OPTIONS:
             list_options_for_command(opt_arg());
             break;
@@ -442,6 +500,8 @@ typedef enum HELP_CHOICE {
 } HELP_CHOICE;
 
 const OPTIONS help_options[] = {
+    {OPT_HELP_STR, 1, '-', "Usage: help [options]\n"},
+    {OPT_HELP_STR, 1, '-', "       help [command]\n"},
     {"help", OPT_hHELP, '-', "Display this summary"},
     {NULL}
 };
@@ -469,6 +529,14 @@ int help_main(int argc, char **argv)
         }
     }
 
+    if (opt_num_rest() == 1) {
+        char *new_argv[3];
+
+        new_argv[0] = opt_rest()[0];
+        new_argv[1] = "--help";
+        new_argv[2] = NULL;
+        return do_cmd(prog_init(), 2, new_argv);
+    }
     if (opt_num_rest() != 0) {
         BIO_printf(bio_err, "Usage: %s\n", prog);
         return 1;
@@ -508,7 +576,7 @@ static void list_type(FUNC_TYPE ft, int one)
 {
     FUNCTION *fp;
     int i = 0;
-    DISPLAY_COLUMNS dc;
+    DISPLAY_COLUMNS dc = {0};
 
     if (!one)
         calculate_columns(&dc);
@@ -534,7 +602,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
     FUNCTION f, *fp;
 
     if (argc <= 0 || argv[0] == NULL)
-        return (0);
+        return 0;
     f.name = argv[0];
     fp = lh_FUNCTION_retrieve(prog, &f);
     if (fp == NULL) {
@@ -549,7 +617,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
         }
     }
     if (fp != NULL) {
-        return (fp->func(argc, argv));
+        return fp->func(argc, argv);
     }
     if ((strncmp(argv[0], "no-", 3)) == 0) {
         /*
@@ -559,7 +627,7 @@ static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[])
         f.name = argv[0] + 3;
         if (lh_FUNCTION_retrieve(prog, &f) == NULL) {
             BIO_printf(bio_out, "%s\n", argv[0]);
-            return (0);
+            return 0;
         }
         BIO_printf(bio_out, "%s\n", argv[0] + 3);
         return 1;
@@ -750,6 +818,15 @@ static void list_disabled(void)
 #ifdef OPENSSL_NO_SEED
     BIO_puts(bio_out, "SEED\n");
 #endif
+#ifdef OPENSSL_NO_SM2
+    BIO_puts(bio_out, "SM2\n");
+#endif
+#ifdef OPENSSL_NO_SM3
+    BIO_puts(bio_out, "SM3\n");
+#endif
+#ifdef OPENSSL_NO_SM4
+    BIO_puts(bio_out, "SM4\n");
+#endif
 #ifdef OPENSSL_NO_SOCK
     BIO_puts(bio_out, "SOCK\n");
 #endif
@@ -781,16 +858,23 @@ static void list_disabled(void)
 
 static LHASH_OF(FUNCTION) *prog_init(void)
 {
-    LHASH_OF(FUNCTION) *ret;
+    static LHASH_OF(FUNCTION) *ret = NULL;
+    static int prog_inited = 0;
     FUNCTION *f;
     size_t i;
 
+    if (prog_inited)
+        return ret;
+
+    prog_inited = 1;
+
     /* Sort alphabetically within category. For nicer help displays. */
-    for (i = 0, f = functions; f->name != NULL; ++f, ++i) ;
+    for (i = 0, f = functions; f->name != NULL; ++f, ++i)
+        ;
     qsort(functions, i, sizeof(*functions), SortFnByName);
 
     if ((ret = lh_FUNCTION_new(function_hash, function_cmp)) == NULL)
-        return (NULL);
+        return NULL;
 
     for (f = functions; f->name != NULL; f++)
         (void)lh_FUNCTION_insert(ret, f);

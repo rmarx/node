@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/x509.h>
@@ -224,6 +225,7 @@ static int check(X509_STORE *ctx, const char *file,
 
     X509_STORE_set_flags(ctx, vflags);
     if (!X509_STORE_CTX_init(csc, ctx, x, uchain)) {
+        X509_STORE_CTX_free(csc);
         printf("error %s: X.509 store context initialization failed\n",
                (file == NULL) ? "stdin" : file);
         goto end;
@@ -313,5 +315,5 @@ static int cb(int ok, X509_STORE_CTX *ctx)
         policies_print(ctx);
     if (!v_verbose)
         ERR_clear_error();
-    return (ok);
+    return ok;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -16,12 +16,13 @@
 #include <openssl/srp.h>
 #endif
 
+#include "../ssl/ssl_locl.h"
 #include "internal/sockets.h"
 #include "internal/nelem.h"
 #include "handshake_helper.h"
 #include "testutil.h"
 
-HANDSHAKE_RESULT *HANDSHAKE_RESULT_new()
+HANDSHAKE_RESULT *HANDSHAKE_RESULT_new(void)
 {
     HANDSHAKE_RESULT *ret;
 
@@ -37,8 +38,10 @@ void HANDSHAKE_RESULT_free(HANDSHAKE_RESULT *result)
     OPENSSL_free(result->server_npn_negotiated);
     OPENSSL_free(result->client_alpn_negotiated);
     OPENSSL_free(result->server_alpn_negotiated);
+    OPENSSL_free(result->result_session_ticket_app_data);
     sk_X509_NAME_pop_free(result->server_ca_names, X509_NAME_free);
     sk_X509_NAME_pop_free(result->client_ca_names, X509_NAME_free);
+    OPENSSL_free(result->cipher);
     OPENSSL_free(result);
 }
 
@@ -62,6 +65,7 @@ typedef struct ctx_data_st {
     size_t alpn_protocols_len;
     char *srp_user;
     char *srp_password;
+    char *session_ticket_app_data;
 } CTX_DATA;
 
 /* |ctx_data| itself is stack-allocated. */
@@ -75,6 +79,8 @@ static void ctx_data_free_data(CTX_DATA *ctx_data)
     ctx_data->srp_user = NULL;
     OPENSSL_free(ctx_data->srp_password);
     ctx_data->srp_password = NULL;
+    OPENSSL_free(ctx_data->session_ticket_app_data);
+    ctx_data->session_ticket_app_data = NULL;
 }
 
 static int ex_data_idx;
@@ -350,14 +356,14 @@ static int parse_protos(const char *protos, unsigned char **out, size_t *outlen)
         if ((*out)[i] == ',') {
             if (!TEST_int_gt(i - 1, prefix))
                 goto err;
-            (*out)[prefix] = i - 1 - prefix;
+            (*out)[prefix] = (unsigned char)(i - 1 - prefix);
             prefix = i;
         }
         i++;
     }
     if (!TEST_int_gt(len, prefix))
         goto err;
-    (*out)[prefix] = len - prefix;
+    (*out)[prefix] = (unsigned char)(len - prefix);
     return 1;
 
 err:
@@ -451,6 +457,38 @@ static int server_srp_cb(SSL *s, int *ad, void *arg)
 }
 #endif  /* !OPENSSL_NO_SRP */
 
+static int generate_session_ticket_cb(SSL *s, void *arg)
+{
+    CTX_DATA *server_ctx_data = arg;
+    SSL_SESSION *ss = SSL_get_session(s);
+    char *app_data = server_ctx_data->session_ticket_app_data;
+
+    if (ss == NULL || app_data == NULL)
+        return 0;
+
+    return SSL_SESSION_set1_ticket_appdata(ss, app_data, strlen(app_data));
+}
+
+static int decrypt_session_ticket_cb(SSL *s, SSL_SESSION *ss,
+                                     const unsigned char *keyname,
+                                     size_t keyname_len,
+                                     SSL_TICKET_STATUS status,
+                                     void *arg)
+{
+    switch (status) {
+    case SSL_TICKET_EMPTY:
+    case SSL_TICKET_NO_DECRYPT:
+        return SSL_TICKET_RETURN_IGNORE_RENEW;
+    case SSL_TICKET_SUCCESS:
+        return SSL_TICKET_RETURN_USE;
+    case SSL_TICKET_SUCCESS_RENEW:
+        return SSL_TICKET_RETURN_USE_RENEW;
+    default:
+        break;
+    }
+    return SSL_TICKET_RETURN_ABORT;
+}
+
 /*
  * Configure callbacks and other properties that can't be set directly
  * in the server/client CONF.
@@ -487,6 +525,17 @@ static int configure_handshake_ctx(SSL_CTX *server_ctx, SSL_CTX *server2_ctx,
         SSL_CTX_set_cert_verify_callback(client_ctx, &verify_reject_cb, NULL);
         break;
     case SSL_TEST_VERIFY_NONE:
+        break;
+    }
+
+    switch (extra->client.max_fragment_len_mode) {
+    case TLSEXT_max_fragment_length_512:
+    case TLSEXT_max_fragment_length_1024:
+    case TLSEXT_max_fragment_length_2048:
+    case TLSEXT_max_fragment_length_4096:
+    case TLSEXT_max_fragment_length_DISABLED:
+        SSL_CTX_set_tlsext_max_fragment_length(
+              client_ctx, extra->client.max_fragment_len_mode);
         break;
     }
 
@@ -594,6 +643,21 @@ static int configure_handshake_ctx(SSL_CTX *server_ctx, SSL_CTX *server2_ctx,
         OPENSSL_free(alpn_protos);
     }
 
+    if (extra->server.session_ticket_app_data != NULL) {
+        server_ctx_data->session_ticket_app_data =
+            OPENSSL_strdup(extra->server.session_ticket_app_data);
+        SSL_CTX_set_session_ticket_cb(server_ctx, generate_session_ticket_cb,
+                                      decrypt_session_ticket_cb, server_ctx_data);
+    }
+    if (extra->server2.session_ticket_app_data != NULL) {
+        if (!TEST_ptr(server2_ctx))
+            goto err;
+        server2_ctx_data->session_ticket_app_data =
+            OPENSSL_strdup(extra->server2.session_ticket_app_data);
+        SSL_CTX_set_session_ticket_cb(server2_ctx, NULL,
+                                      decrypt_session_ticket_cb, server2_ctx_data);
+    }
+
     /*
      * Use fixed session ticket keys so that we can decrypt a ticket created with
      * one CTX in another CTX. Don't address server2 for the moment.
@@ -662,6 +726,8 @@ static void configure_handshake_ssl(SSL *server, SSL *client,
     if (extra->client.servername != SSL_TEST_SERVERNAME_NONE)
         SSL_set_tlsext_host_name(client,
                                  ssl_servername_name(extra->client.servername));
+    if (extra->client.enable_pha)
+        SSL_set_post_handshake_auth(client, 1);
 }
 
 /* The status for each connection phase. */
@@ -836,7 +902,9 @@ static void do_reneg_setup_step(const SSL_TEST_CTX *test_ctx, PEER *peer)
                           || test_ctx->handshake_mode
                               == SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER
                           || test_ctx->handshake_mode
-                              == SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT)) {
+                              == SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT
+                          || test_ctx->handshake_mode
+                              == SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH)) {
         peer->status = PEER_TEST_FAILURE;
         return;
     }
@@ -908,6 +976,25 @@ static void do_reneg_setup_step(const SSL_TEST_CTX *test_ctx, PEER *peer)
         if (!ret) {
             peer->status = PEER_ERROR;
             return;
+        }
+        do_handshake_step(peer);
+        /*
+         * This is a one step handshake. We shouldn't get anything other than
+         * PEER_SUCCESS
+         */
+        if (peer->status != PEER_SUCCESS)
+            peer->status = PEER_ERROR;
+        return;
+    } else if (test_ctx->handshake_mode == SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH) {
+        if (SSL_is_server(peer->ssl)) {
+            /* Make the server believe it's received the extension */
+            if (test_ctx->extra.server.force_pha)
+                peer->ssl->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
+            ret = SSL_verify_client_post_handshake(peer->ssl);
+            if (!ret) {
+                peer->status = PEER_ERROR;
+                return;
+            }
         }
         do_handshake_step(peer);
         /*
@@ -992,25 +1079,41 @@ typedef enum {
     CONNECTION_DONE
 } connect_phase_t;
 
+
+static int renegotiate_op(const SSL_TEST_CTX *test_ctx)
+{
+    switch (test_ctx->handshake_mode) {
+    case SSL_TEST_HANDSHAKE_RENEG_SERVER:
+    case SSL_TEST_HANDSHAKE_RENEG_CLIENT:
+        return 1;
+    default:
+        return 0;
+    }
+}
+static int post_handshake_op(const SSL_TEST_CTX *test_ctx)
+{
+    switch (test_ctx->handshake_mode) {
+    case SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT:
+    case SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER:
+    case SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static connect_phase_t next_phase(const SSL_TEST_CTX *test_ctx,
                                   connect_phase_t phase)
 {
     switch (phase) {
     case HANDSHAKE:
-        if (test_ctx->handshake_mode == SSL_TEST_HANDSHAKE_RENEG_SERVER
-                || test_ctx->handshake_mode == SSL_TEST_HANDSHAKE_RENEG_CLIENT
-                || test_ctx->handshake_mode
-                   == SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT
-                || test_ctx->handshake_mode
-                   == SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER)
+        if (renegotiate_op(test_ctx) || post_handshake_op(test_ctx))
             return RENEG_APPLICATION_DATA;
         return APPLICATION_DATA;
     case RENEG_APPLICATION_DATA:
         return RENEG_SETUP;
     case RENEG_SETUP:
-        if (test_ctx->handshake_mode == SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER
-                || test_ctx->handshake_mode
-                   == SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT)
+        if (post_handshake_op(test_ctx))
             return APPLICATION_DATA;
         return RENEG_HANDSHAKE;
     case RENEG_HANDSHAKE:
@@ -1103,6 +1206,7 @@ static handshake_status_t handshake_status(peer_status_t last_status,
              */
             return INTERNAL_ERROR;
         }
+        break;
 
     case PEER_RETRY:
         return HANDSHAKE_RETRY;
@@ -1292,14 +1396,15 @@ static int create_sctp_socks(int *ssock, int *csock)
 static HANDSHAKE_RESULT *do_handshake_internal(
     SSL_CTX *server_ctx, SSL_CTX *server2_ctx, SSL_CTX *client_ctx,
     const SSL_TEST_CTX *test_ctx, const SSL_TEST_EXTRA_CONF *extra,
-    SSL_SESSION *session_in, SSL_SESSION **session_out)
+    SSL_SESSION *session_in, SSL_SESSION *serv_sess_in,
+    SSL_SESSION **session_out, SSL_SESSION **serv_sess_out)
 {
     PEER server, client;
     BIO *client_to_server = NULL, *server_to_client = NULL;
     HANDSHAKE_EX_DATA server_ex_data, client_ex_data;
     CTX_DATA client_ctx_data, server_ctx_data, server2_ctx_data;
     HANDSHAKE_RESULT *ret = HANDSHAKE_RESULT_new();
-    int client_turn = 1, client_turn_count = 0;
+    int client_turn = 1, client_turn_count = 0, client_wait_count = 0;
     connect_phase_t phase = HANDSHAKE;
     handshake_status_t status = HANDSHAKE_RETRY;
     const unsigned char* tick = NULL;
@@ -1313,6 +1418,7 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     EVP_PKEY *tmp_key;
     const STACK_OF(X509_NAME) *names;
     time_t start;
+    const char* cipher;
 
     if (ret == NULL)
         return NULL;
@@ -1347,10 +1453,14 @@ static HANDSHAKE_RESULT *do_handshake_internal(
 
     configure_handshake_ssl(server.ssl, client.ssl, extra);
     if (session_in != NULL) {
+        SSL_SESSION_get_id(serv_sess_in, &sess_id_len);
         /* In case we're testing resumption without tickets. */
-        if (!TEST_true(SSL_CTX_add_session(server_ctx, session_in))
+        if ((sess_id_len > 0
+                    && !TEST_true(SSL_CTX_add_session(server_ctx,
+                                                      serv_sess_in)))
                 || !TEST_true(SSL_set_session(client.ssl, session_in)))
             goto err;
+        sess_id_len = 0;
     }
 
     ret->result = SSL_TEST_INTERNAL_ERROR;
@@ -1481,9 +1591,19 @@ static HANDSHAKE_RESULT *do_handshake_internal(
                     ret->result = SSL_TEST_INTERNAL_ERROR;
                     goto err;
                 }
-
-                /* Continue. */
-                client_turn ^= 1;
+                if (client_turn && server.status == PEER_SUCCESS) {
+                    /*
+                     * The server may finish before the client because the
+                     * client spends some turns processing NewSessionTickets.
+                     */
+                    if (client_wait_count++ >= 2) {
+                        ret->result = SSL_TEST_INTERNAL_ERROR;
+                        goto err;
+                    }
+                } else {
+                    /* Continue. */
+                    client_turn ^= 1;
+                }
             }
             break;
         }
@@ -1529,11 +1649,29 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     SSL_get0_alpn_selected(server.ssl, &proto, &proto_len);
     ret->server_alpn_negotiated = dup_str(proto, proto_len);
 
+    if ((sess = SSL_get0_session(server.ssl)) != NULL) {
+        SSL_SESSION_get0_ticket_appdata(sess, (void**)&tick, &tick_len);
+        ret->result_session_ticket_app_data = OPENSSL_strndup((const char*)tick, tick_len);
+    }
+
     ret->client_resumed = SSL_session_reused(client.ssl);
     ret->server_resumed = SSL_session_reused(server.ssl);
 
+    cipher = SSL_CIPHER_get_name(SSL_get_current_cipher(client.ssl));
+    ret->cipher = dup_str((const unsigned char*)cipher, strlen(cipher));
+
     if (session_out != NULL)
         *session_out = SSL_get1_session(client.ssl);
+    if (serv_sess_out != NULL) {
+        SSL_SESSION *tmp = SSL_get_session(server.ssl);
+
+        /*
+         * We create a fresh copy that is not in the server session ctx linked
+         * list.
+         */
+        if (tmp != NULL)
+            *serv_sess_out = SSL_SESSION_dup(tmp);
+    }
 
     if (SSL_get_server_tmp_key(client.ssl, &tmp_key)) {
         ret->tmp_key_type = pkey_type(tmp_key);
@@ -1576,11 +1714,11 @@ HANDSHAKE_RESULT *do_handshake(SSL_CTX *server_ctx, SSL_CTX *server2_ctx,
                                const SSL_TEST_CTX *test_ctx)
 {
     HANDSHAKE_RESULT *result;
-    SSL_SESSION *session = NULL;
+    SSL_SESSION *session = NULL, *serv_sess = NULL;
 
     result = do_handshake_internal(server_ctx, server2_ctx, client_ctx,
                                    test_ctx, &test_ctx->extra,
-                                   NULL, &session);
+                                   NULL, NULL, &session, &serv_sess);
     if (result == NULL
             || test_ctx->handshake_mode != SSL_TEST_HANDSHAKE_RESUME
             || result->result == SSL_TEST_INTERNAL_ERROR)
@@ -1595,8 +1733,9 @@ HANDSHAKE_RESULT *do_handshake(SSL_CTX *server_ctx, SSL_CTX *server2_ctx,
     /* We don't support SNI on second handshake yet, so server2_ctx is NULL. */
     result = do_handshake_internal(resume_server_ctx, NULL, resume_client_ctx,
                                    test_ctx, &test_ctx->resume_extra,
-                                   session, NULL);
+                                   session, serv_sess, NULL, NULL);
  end:
     SSL_SESSION_free(session);
+    SSL_SESSION_free(serv_sess);
     return result;
 }

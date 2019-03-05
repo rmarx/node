@@ -2,6 +2,7 @@
 
 =head1 NAME
 
+openssl-list,
 list - list algorithms and features
 
 =head1 SYNOPSIS
@@ -78,6 +79,11 @@ without an associated ASN.1 method, for example, KDF algorithms.
 
 Display a list of disabled features, those that were compiled out
 of the installation.
+
+=item B<-objects>
+
+Display a list of built in objects, i.e. OIDs with names.  They're listed in the
+format described in L<config(5)/ASN1 Object Configuration Module>.
 
 =back
 

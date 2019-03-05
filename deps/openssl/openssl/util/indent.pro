@@ -474,7 +474,8 @@
 -T asn1_ps_func
 -T bio_dgram_data
 -T bio_info_cb
--T BIO_callack_fn
+-T BIO_info_cb
+-T BIO_callback_fn
 -T char_io
 -T conf_finish_func
 -T conf_init_func
@@ -635,3 +636,8 @@
 -T ossl_intmax_t
 -T ossl_uintmax_t
 -T ossl_uintmax_t
+-T CT_POLICY_EVAL_CTX
+-T RAND_DRBG
+-T RAND_DRBG_CTR
+-T RAND_POOL
+-T RAND_METHOD

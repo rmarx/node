@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2004-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -84,13 +84,12 @@ X509_VERIFY_PARAM *X509_VERIFY_PARAM_new(void)
     X509_VERIFY_PARAM *param;
 
     param = OPENSSL_zalloc(sizeof(*param));
-    if (param == NULL)
+    if (param == NULL) {
+        X509err(X509_F_X509_VERIFY_PARAM_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
+    }
     param->trust = X509_TRUST_DEFAULT;
-    /*
-     * param->inh_flags = X509_VP_FLAG_DEFAULT;
-     */
-    param->inh_flags = 0;
+    /* param->inh_flags = X509_VP_FLAG_DEFAULT; */
     param->depth = -1;
     param->auth_level = -1; /* -1 means unset, 0 is explicit */
     return param;
@@ -394,6 +393,11 @@ void X509_VERIFY_PARAM_set_hostflags(X509_VERIFY_PARAM *param,
     param->hostflags = flags;
 }
 
+unsigned int X509_VERIFY_PARAM_get_hostflags(const X509_VERIFY_PARAM *param)
+{
+    return param->hostflags;
+}
+
 char *X509_VERIFY_PARAM_get0_peername(X509_VERIFY_PARAM *param)
 {
     return param->peername;
@@ -551,10 +555,9 @@ int X509_VERIFY_PARAM_add0_table(X509_VERIFY_PARAM *param)
             return 0;
     } else {
         idx = sk_X509_VERIFY_PARAM_find(param_table, param);
-        if (idx != -1) {
-            ptmp = sk_X509_VERIFY_PARAM_value(param_table, idx);
+        if (idx >= 0) {
+            ptmp = sk_X509_VERIFY_PARAM_delete(param_table, idx);
             X509_VERIFY_PARAM_free(ptmp);
-            (void)sk_X509_VERIFY_PARAM_delete(param_table, idx);
         }
     }
     if (!sk_X509_VERIFY_PARAM_push(param_table, param))
@@ -584,9 +587,9 @@ const X509_VERIFY_PARAM *X509_VERIFY_PARAM_lookup(const char *name)
     X509_VERIFY_PARAM pm;
 
     pm.name = (char *)name;
-    if (param_table) {
+    if (param_table != NULL) {
         idx = sk_X509_VERIFY_PARAM_find(param_table, &pm);
-        if (idx != -1)
+        if (idx >= 0)
             return sk_X509_VERIFY_PARAM_value(param_table, idx);
     }
     return OBJ_bsearch_table(&pm, default_table, OSSL_NELEM(default_table));

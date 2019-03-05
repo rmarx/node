@@ -36,14 +36,18 @@ function onlistening() {
     .on('secureConnect', common.mustCall(onsecureConnect));
 }
 
-function onsecureConnection() {}
+function onsecureConnection() {
+  console.log("connection established");
+}
 
 function onsecureConnect() {
-  // Destroying client socket
-  this.destroy();
-
-  // Closing server
-  server.close(common.mustCall(onserverClosed));
+  setTimeout(() => {
+    // Destroying client socket
+    this.destroy();
+  
+    // Closing server
+    server.close(common.mustCall(onserverClosed));
+  }, 1000);
 }
 
 function onserverClosed() {}
@@ -69,7 +73,7 @@ function onexit() {
       { type: 'WRITEWRAP', id: 'write:2', triggerAsyncId: null },
       { type: 'WRITEWRAP', id: 'write:3', triggerAsyncId: null },
       { type: 'WRITEWRAP', id: 'write:4', triggerAsyncId: null },
-      { type: 'Immediate', id: 'immediate:1', triggerAsyncId: 'tcp:2' },
-      { type: 'Immediate', id: 'immediate:2', triggerAsyncId: 'tcp:3' } ]
+      { type: 'Immediate', id: 'immediate:1', triggerAsyncId: 'tcp:3' },
+      { type: 'Immediate', id: 'immediate:2', triggerAsyncId: 'tcp:2' } ]
   );
 }

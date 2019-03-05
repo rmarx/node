@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 1998-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 1998-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -35,10 +35,9 @@
 # P4		+85%(!)			+45%
 #
 # As you can see Pentium came out as looser:-( Yet I reckoned that
-# improvement on P4 outweights the loss and incorporate this
+# improvement on P4 outweighs the loss and incorporate this
 # re-tuned code to 0.9.7 and later.
 # ----------------------------------------------------------------
-#					<appro@fy.chalmers.se>
 
 # August 2009.
 #
@@ -145,7 +144,7 @@ $ymm=1 if ($xmm && !$ymm && $ARGV[0] eq "win32" &&
 		`ml 2>&1` =~ /Version ([0-9]+)\./ &&
 		$1>=10);	# first version supporting AVX
 
-$ymm=1 if ($xmm && !$ymm && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/ &&
+$ymm=1 if ($xmm && !$ymm && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|based on LLVM) ([3-9]\.[0-9]+)/ &&
 		$2>=3.0);	# first version supporting AVX
 
 $shaext=$xmm;	### set to zero if compiling for 1.0.1
@@ -550,7 +549,7 @@ for($i=0;$i<20-4;$i+=2) {
 # being implemented in SSSE3). Once 8 quadruples or 32 elements are
 # collected, it switches to routine proposed by Max Locktyukhin.
 #
-# Calculations inevitably require temporary reqisters, and there are
+# Calculations inevitably require temporary registers, and there are
 # no %xmm registers left to spare. For this reason part of the ring
 # buffer, X[2..4] to be specific, is offloaded to 3 quadriples ring
 # buffer on the stack. Keep in mind that X[2] is alias X[-6], X[3] -

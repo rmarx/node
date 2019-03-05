@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -14,7 +14,7 @@
 #include "internal/poly1305.h"
 #include "poly1305_local.h"
 
-size_t Poly1305_ctx_size ()
+size_t Poly1305_ctx_size(void)
 {
     return sizeof(struct poly1305_context);
 }
@@ -95,12 +95,11 @@ poly1305_blocks(void *ctx, const unsigned char *inp, size_t len, u32 padbit);
          (a ^ ((a ^ b) | ((a - b) ^ b))) >> (sizeof(a) * 8 - 1) \
          )
 
-# if !defined(PEDANTIC) && \
-     (defined(__SIZEOF_INT128__) && __SIZEOF_INT128__==16) && \
+# if (defined(__SIZEOF_INT128__) && __SIZEOF_INT128__==16) && \
      (defined(__SIZEOF_LONG__) && __SIZEOF_LONG__==8)
 
 typedef unsigned long u64;
-typedef unsigned __int128 u128;
+typedef __uint128_t u128;
 
 typedef struct {
     u64 h[3];

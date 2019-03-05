@@ -221,6 +221,15 @@ test-cov: all
 test-parallel: all
 	$(PYTHON) tools/test.py --mode=release parallel -J
 
+test-parallel-tls12: all
+	forceTLS12=true $(PYTHON) tools/test.py --mode=release parallel -J
+
+test-tls13: all
+	$(PYTHON) tools/test.py --mode=release tls13 -J
+
+test-tls12: all
+	forceTLS12=true $(PYTHON) tools/test.py --mode=release tls13 -J
+
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind sequential parallel message
 

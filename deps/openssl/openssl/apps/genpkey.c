@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/pem.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -119,6 +120,13 @@ int genpkey_main(int argc, char **argv)
             if (!opt_cipher(opt_unknown(), &cipher)
                 || do_param == 1)
                 goto opthelp;
+            if (EVP_CIPHER_mode(cipher) == EVP_CIPH_GCM_MODE ||
+                EVP_CIPHER_mode(cipher) == EVP_CIPH_CCM_MODE ||
+                EVP_CIPHER_mode(cipher) == EVP_CIPH_XTS_MODE ||
+                EVP_CIPHER_mode(cipher) == EVP_CIPH_OCB_MODE) {
+                BIO_printf(bio_err, "%s: cipher mode not supported\n", prog);
+                goto end;
+            }
         }
     }
     argc = opt_num_rest();

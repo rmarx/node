@@ -27,7 +27,7 @@ https://github.com/llvm-mirror/llvm/tree/master/lib/Fuzzer if you prefer):
     $ sudo apt-get install subversion
     $ mkdir svn-work
     $ cd svn-work
-    $ svn co http://llvm.org/svn/llvm-project/llvm/trunk/lib/Fuzzer
+    $ svn co https://llvm.org/svn/llvm-project/compiler-rt/trunk/lib/fuzzer Fuzzer
     $ cd Fuzzer
     $ clang++ -c -g -O2 -std=c++11 *.cpp
     $ ar r libFuzzer.a *.o
@@ -37,7 +37,7 @@ Configure for fuzzing:
 
     $ CC=clang ./config enable-fuzz-libfuzzer \
             --with-fuzzer-include=../../svn-work/Fuzzer \
-            --with-fuzzer-lib=../../svn-work/Fuzzer/libFuzzer \
+            --with-fuzzer-lib=../../svn-work/Fuzzer/libFuzzer.a \
             -DPEDANTIC enable-asan enable-ubsan no-shared \
             -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION \
             -fsanitize-coverage=trace-pc-guard,indirect-calls,trace-cmp \

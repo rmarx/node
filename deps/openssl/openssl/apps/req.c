@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,7 +11,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <ctype.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/conf.h>
@@ -22,6 +24,7 @@
 #include <openssl/objects.h>
 #include <openssl/pem.h>
 #include <openssl/bn.h>
+#include <openssl/lhash.h>
 #ifndef OPENSSL_NO_RSA
 # include <openssl/rsa.h>
 #endif
@@ -62,6 +65,11 @@ static int add_DN_object(X509_NAME *n, char *text, const char *def,
                          char *value, int nid, int n_min, int n_max,
                          unsigned long chtype, int mval);
 static int genpkey_cb(EVP_PKEY_CTX *ctx);
+static int build_data(char *text, const char *def,
+                      char *value, int n_min, int n_max,
+                      char *buf, const int buf_size,
+                      const char *desc1, const char *desc2
+                      );
 static int req_check_len(int len, int n_min, int n_max);
 static int check_end(const char *str, const char *end);
 static int join(char buf[], size_t buf_size, const char *name,
@@ -70,6 +78,7 @@ static EVP_PKEY_CTX *set_keygen_ctx(const char *gstr,
                                     int *pkey_type, long *pkeylen,
                                     char **palgnam, ENGINE *keygen_engine);
 static CONF *req_conf = NULL;
+static CONF *addext_conf = NULL;
 static int batch = 0;
 
 typedef enum OPTION_choice {
@@ -80,7 +89,7 @@ typedef enum OPTION_choice {
     OPT_PKEYOPT, OPT_SIGOPT, OPT_BATCH, OPT_NEWHDR, OPT_MODULUS,
     OPT_VERIFY, OPT_NODES, OPT_NOOUT, OPT_VERBOSE, OPT_UTF8,
     OPT_NAMEOPT, OPT_REQOPT, OPT_SUBJ, OPT_SUBJECT, OPT_TEXT, OPT_X509,
-    OPT_MULTIVALUE_RDN, OPT_DAYS, OPT_SET_SERIAL, OPT_EXTENSIONS,
+    OPT_MULTIVALUE_RDN, OPT_DAYS, OPT_SET_SERIAL, OPT_ADDEXT, OPT_EXTENSIONS,
     OPT_REQEXTS, OPT_PRECERT, OPT_MD,
     OPT_R_ENUM
 } OPTION_CHOICE;
@@ -124,6 +133,8 @@ const OPTIONS req_options[] = {
      "Enable support for multivalued RDNs"},
     {"days", OPT_DAYS, 'p', "Number of days cert is valid for"},
     {"set_serial", OPT_SET_SERIAL, 's', "Serial number to use"},
+    {"addext", OPT_ADDEXT, 's',
+     "Additional cert extension key=value pair (may be given more than once)"},
     {"extensions", OPT_EXTENSIONS, 's',
      "Cert extension section (override value in config file)"},
     {"reqexts", OPT_REQEXTS, 's',
@@ -138,6 +149,66 @@ const OPTIONS req_options[] = {
     {NULL}
 };
 
+
+/*
+ * An LHASH of strings, where each string is an extension name.
+ */
+static unsigned long ext_name_hash(const OPENSSL_STRING *a)
+{
+    return OPENSSL_LH_strhash((const char *)a);
+}
+
+static int ext_name_cmp(const OPENSSL_STRING *a, const OPENSSL_STRING *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+static void exts_cleanup(OPENSSL_STRING *x)
+{
+    OPENSSL_free((char *)x);
+}
+
+/*
+ * Is the |kv| key already duplicated?  This is remarkably tricky to get
+ * right.  Return 0 if unique, -1 on runtime error; 1 if found or a syntax
+ * error.
+ */
+static int duplicated(LHASH_OF(OPENSSL_STRING) *addexts, char *kv)
+{
+    char *p;
+    size_t off;
+
+    /* Check syntax. */
+    /* Skip leading whitespace, make a copy. */
+    while (*kv && isspace(*kv))
+        if (*++kv == '\0')
+            return 1;
+    if ((p = strchr(kv, '=')) == NULL)
+        return 1;
+    off = p - kv;
+    if ((kv = OPENSSL_strdup(kv)) == NULL)
+        return -1;
+
+    /* Skip trailing space before the equal sign. */
+    for (p = kv + off; p > kv; --p)
+        if (!isspace(p[-1]))
+            break;
+    if (p == kv) {
+        OPENSSL_free(kv);
+        return 1;
+    }
+    *p = '\0';
+
+    /* Finally have a clean "key"; see if it's there [by attempt to add it]. */
+    if ((p = (char *)lh_OPENSSL_STRING_insert(addexts, (OPENSSL_STRING*)kv))
+        != NULL || lh_OPENSSL_STRING_error(addexts)) {
+        OPENSSL_free(p != NULL ? p : kv);
+        return -1;
+    }
+
+    return 0;
+}
+
 int req_main(int argc, char **argv)
 {
     ASN1_INTEGER *serial = NULL;
@@ -146,10 +217,12 @@ int req_main(int argc, char **argv)
     EVP_PKEY *pkey = NULL;
     EVP_PKEY_CTX *genctx = NULL;
     STACK_OF(OPENSSL_STRING) *pkeyopts = NULL, *sigopts = NULL;
+    LHASH_OF(OPENSSL_STRING) *addexts = NULL;
     X509 *x509ss = NULL;
     X509_REQ *req = NULL;
     const EVP_CIPHER *cipher = NULL;
     const EVP_MD *md_alg = NULL, *digest = NULL;
+    BIO *addext_bio = NULL;
     char *extensions = NULL, *infile = NULL;
     char *outfile = NULL, *keyfile = NULL;
     char *keyalgstr = NULL, *p, *prog, *passargin = NULL, *passargout = NULL;
@@ -159,7 +232,7 @@ int req_main(int argc, char **argv)
     char *template = default_config_file, *keyout = NULL;
     const char *keyalg = NULL;
     OPTION_CHOICE o;
-    int ret = 1, x509 = 0, days = 30, i = 0, newreq = 0, verbose = 0;
+    int ret = 1, x509 = 0, days = 0, i = 0, newreq = 0, verbose = 0;
     int pkey_type = -1, private = 0;
     int informat = FORMAT_PEM, outformat = FORMAT_PEM, keyform = FORMAT_PEM;
     int modulus = 0, multirdn = 0, verify = 0, noout = 0, text = 0;
@@ -313,6 +386,20 @@ int req_main(int argc, char **argv)
         case OPT_MULTIVALUE_RDN:
             multirdn = 1;
             break;
+        case OPT_ADDEXT:
+            p = opt_arg();
+            if (addexts == NULL) {
+                addexts = lh_OPENSSL_STRING_new(ext_name_hash, ext_name_cmp);
+                addext_bio = BIO_new(BIO_s_mem());
+                if (addexts == NULL || addext_bio == NULL)
+                    goto end;
+            }
+            i = duplicated(addexts, p);
+            if (i == 1)
+                goto opthelp;
+            if (i < 0 || BIO_printf(addext_bio, "%s\n", opt_arg()) < 0)
+                goto end;
+            break;
         case OPT_EXTENSIONS:
             extensions = opt_arg();
             break;
@@ -333,6 +420,8 @@ int req_main(int argc, char **argv)
     if (argc != 0)
         goto opthelp;
 
+    if (days && !x509)
+        BIO_printf(bio_err, "Ignoring -days; not generating a certificate\n");
     if (x509 && infile == NULL)
         newreq = 1;
 
@@ -347,6 +436,12 @@ int req_main(int argc, char **argv)
     if (verbose)
         BIO_printf(bio_err, "Using configuration from %s\n", template);
     req_conf = app_load_config(template);
+    if (addext_bio) {
+        if (verbose)
+            BIO_printf(bio_err,
+                       "Using additional configuration from command line\n");
+        addext_conf = app_load_config_bio(addext_bio, NULL);
+    }
     if (template != default_config_file && !app_load_modules(req_conf))
         goto end;
 
@@ -396,6 +491,16 @@ int req_main(int argc, char **argv)
         if (!X509V3_EXT_add_nconf(req_conf, &ctx, extensions, NULL)) {
             BIO_printf(bio_err,
                        "Error Loading extension section %s\n", extensions);
+            goto end;
+        }
+    }
+    if (addext_conf != NULL) {
+        /* Check syntax of command line extensions */
+        X509V3_CTX ctx;
+        X509V3_set_ctx_test(&ctx);
+        X509V3_set_nconf(&ctx, addext_conf);
+        if (!X509V3_EXT_add_nconf(addext_conf, &ctx, "default", NULL)) {
+            BIO_printf(bio_err, "Error Loading command line extensions\n");
             goto end;
         }
     }
@@ -481,6 +586,20 @@ int req_main(int argc, char **argv)
             goto end;
         }
 
+        if (pkey_type == EVP_PKEY_RSA && newkey > OPENSSL_RSA_MAX_MODULUS_BITS)
+            BIO_printf(bio_err,
+                       "Warning: It is not recommended to use more than %d bit for RSA keys.\n"
+                       "         Your key size is %ld! Larger key size may behave not as expected.\n",
+                       OPENSSL_RSA_MAX_MODULUS_BITS, newkey);
+
+#ifndef OPENSSL_NO_DSA
+        if (pkey_type == EVP_PKEY_DSA && newkey > OPENSSL_DSA_MAX_MODULUS_BITS)
+            BIO_printf(bio_err,
+                       "Warning: It is not recommended to use more than %d bit for DSA keys.\n"
+                       "         Your key size is %ld! Larger key size may behave not as expected.\n",
+                       OPENSSL_DSA_MAX_MODULUS_BITS, newkey);
+#endif
+
         if (genctx == NULL) {
             genctx = set_keygen_ctx(NULL, &pkey_type, &newkey,
                                     &keyalgstr, gen_eng);
@@ -503,8 +622,7 @@ int req_main(int argc, char **argv)
         if (pkey_type == EVP_PKEY_EC) {
             BIO_printf(bio_err, "Generating an EC private key\n");
         } else {
-            BIO_printf(bio_err, "Generating a %ld bit %s private key\n",
-                       newkey, keyalgstr);
+            BIO_printf(bio_err, "Generating a %s private key\n", keyalgstr);
         }
 
         EVP_PKEY_CTX_set_cb(genctx, genpkey_cb);
@@ -603,7 +721,8 @@ int req_main(int argc, char **argv)
                 goto end;
 
             /* Set version to V3 */
-            if (extensions != NULL && !X509_set_version(x509ss, 2))
+            if ((extensions != NULL || addext_conf != NULL)
+                && !X509_set_version(x509ss, 2))
                 goto end;
             if (serial != NULL) {
                 if (!X509_set_serialNumber(x509ss, serial))
@@ -615,6 +734,10 @@ int req_main(int argc, char **argv)
 
             if (!X509_set_issuer_name(x509ss, X509_REQ_get_subject_name(req)))
                 goto end;
+            if (days == 0) {
+                /* set default days if it's not specified */
+                days = 30;
+            }
             if (!set_cert_times(x509ss, NULL, NULL, days))
                 goto end;
             if (!X509_set_subject_name
@@ -635,6 +758,12 @@ int req_main(int argc, char **argv)
                                                             x509ss)) {
                 BIO_printf(bio_err, "Error Loading extension section %s\n",
                            extensions);
+                goto end;
+            }
+            if (addext_conf != NULL
+                && !X509V3_EXT_add_nconf(addext_conf, &ext_ctx, "default",
+                                         x509ss)) {
+                BIO_printf(bio_err, "Error Loading command line extensions\n");
                 goto end;
             }
 
@@ -666,6 +795,12 @@ int req_main(int argc, char **argv)
                                              req_exts, req)) {
                 BIO_printf(bio_err, "Error Loading extension section %s\n",
                            req_exts);
+                goto end;
+            }
+            if (addext_conf != NULL
+                && !X509V3_EXT_REQ_add_nconf(addext_conf, &ext_ctx, "default",
+                                             req)) {
+                BIO_printf(bio_err, "Error Loading command line extensions\n");
                 goto end;
             }
             i = do_X509_REQ_sign(req, pkey, digest, sigopts);
@@ -811,12 +946,16 @@ int req_main(int argc, char **argv)
         ERR_print_errors(bio_err);
     }
     NCONF_free(req_conf);
+    NCONF_free(addext_conf);
+    BIO_free(addext_bio);
     BIO_free(in);
     BIO_free_all(out);
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(genctx);
     sk_OPENSSL_STRING_free(pkeyopts);
     sk_OPENSSL_STRING_free(sigopts);
+    lh_OPENSSL_STRING_doall(addexts, exts_cleanup);
+    lh_OPENSSL_STRING_free(addexts);
 #ifndef OPENSSL_NO_ENGINE
     ENGINE_free(gen_eng);
 #endif
@@ -1153,58 +1292,19 @@ static int add_DN_object(X509_NAME *n, char *text, const char *def,
                          char *value, int nid, int n_min, int n_max,
                          unsigned long chtype, int mval)
 {
-    int i, ret = 0;
+    int ret = 0;
     char buf[1024];
- start:
-    if (!batch)
-        BIO_printf(bio_err, "%s [%s]:", text, def);
-    (void)BIO_flush(bio_err);
-    if (value != NULL) {
-        if (!join(buf, sizeof(buf), value, "\n", "DN value"))
-            return 0;
-        BIO_printf(bio_err, "%s\n", value);
-    } else {
-        buf[0] = '\0';
-        if (!batch) {
-            if (!fgets(buf, sizeof buf, stdin))
-                return 0;
-        } else {
-            buf[0] = '\n';
-            buf[1] = '\0';
-        }
-    }
 
-    if (buf[0] == '\0')
-        return 0;
-    if (buf[0] == '\n') {
-        if ((def == NULL) || (def[0] == '\0'))
-            return 1;
-        if (!join(buf, sizeof(buf), def, "\n", "DN default"))
-            return 0;
-    } else if ((buf[0] == '.') && (buf[1] == '\n')) {
-        return 1;
-    }
-
-    i = strlen(buf);
-    if (buf[i - 1] != '\n') {
-        BIO_printf(bio_err, "weird input :-(\n");
-        return 0;
-    }
-    buf[--i] = '\0';
-#ifdef CHARSET_EBCDIC
-    ebcdic2ascii(buf, buf, i);
-#endif
-    if (!req_check_len(i, n_min, n_max)) {
-        if (batch || value)
-            return 0;
-        goto start;
-    }
+    ret = build_data(text, def, value, n_min, n_max, buf, sizeof(buf),
+                     "DN value", "DN default");
+    if ((ret == 0) || (ret == 1))
+        return ret;
+    ret = 1;
 
     if (!X509_NAME_add_entry_by_NID(n, nid, chtype,
                                     (unsigned char *)buf, -1, -1, mval))
-        goto err;
-    ret = 1;
- err:
+        ret = 0;
+
     return ret;
 }
 
@@ -1212,21 +1312,45 @@ static int add_attribute_object(X509_REQ *req, char *text, const char *def,
                                 char *value, int nid, int n_min,
                                 int n_max, unsigned long chtype)
 {
-    int i;
-    static char buf[1024];
+    int ret = 0;
+    char buf[1024];
 
+    ret = build_data(text, def, value, n_min, n_max, buf, sizeof(buf),
+                     "Attribute value", "Attribute default");
+    if ((ret == 0) || (ret == 1))
+        return ret;
+    ret = 1;
+
+    if (!X509_REQ_add1_attr_by_NID(req, nid, chtype,
+                                   (unsigned char *)buf, -1)) {
+        BIO_printf(bio_err, "Error adding attribute\n");
+        ERR_print_errors(bio_err);
+        ret = 0;
+    }
+
+    return ret;
+}
+
+
+static int build_data(char *text, const char *def,
+                         char *value, int n_min, int n_max,
+                         char *buf, const int buf_size,
+                         const char *desc1, const char *desc2
+                         )
+{
+    int i;
  start:
     if (!batch)
         BIO_printf(bio_err, "%s [%s]:", text, def);
     (void)BIO_flush(bio_err);
     if (value != NULL) {
-        if (!join(buf, sizeof(buf), value, "\n", "Attribute value"))
+        if (!join(buf, buf_size, value, "\n", desc1))
             return 0;
         BIO_printf(bio_err, "%s\n", value);
     } else {
         buf[0] = '\0';
         if (!batch) {
-            if (!fgets(buf, sizeof buf, stdin))
+            if (!fgets(buf, buf_size, stdin))
                 return 0;
         } else {
             buf[0] = '\n';
@@ -1239,7 +1363,7 @@ static int add_attribute_object(X509_REQ *req, char *text, const char *def,
     if (buf[0] == '\n') {
         if ((def == NULL) || (def[0] == '\0'))
             return 1;
-        if (!join(buf, sizeof(buf), def, "\n", "Attribute default"))
+        if (!join(buf, buf_size, def, "\n", desc2))
             return 0;
     } else if ((buf[0] == '.') && (buf[1] == '\n')) {
         return 1;
@@ -1259,17 +1383,7 @@ static int add_attribute_object(X509_REQ *req, char *text, const char *def,
             return 0;
         goto start;
     }
-
-    if (!X509_REQ_add1_attr_by_NID(req, nid, chtype,
-                                   (unsigned char *)buf, -1)) {
-        BIO_printf(bio_err, "Error adding attribute\n");
-        ERR_print_errors(bio_err);
-        goto err;
-    }
-
-    return 1;
- err:
-    return 0;
+    return 2;
 }
 
 static int req_check_len(int len, int n_min, int n_max)
@@ -1486,10 +1600,19 @@ static int do_sign_init(EVP_MD_CTX *ctx, EVP_PKEY *pkey,
                         const EVP_MD *md, STACK_OF(OPENSSL_STRING) *sigopts)
 {
     EVP_PKEY_CTX *pkctx = NULL;
-    int i;
+    int i, def_nid;
 
     if (ctx == NULL)
         return 0;
+    /*
+     * EVP_PKEY_get_default_digest_nid() returns 2 if the digest is mandatory
+     * for this algorithm.
+     */
+    if (EVP_PKEY_get_default_digest_nid(pkey, &def_nid) == 2
+            && def_nid == NID_undef) {
+        /* The signing algorithm requires there to be no digest */
+        md = NULL;
+    }
     if (!EVP_DigestSignInit(ctx, &pkctx, md, NULL, pkey))
         return 0;
     for (i = 0; i < sk_OPENSSL_STRING_num(sigopts); i++) {

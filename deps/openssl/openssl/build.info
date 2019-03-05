@@ -1,4 +1,6 @@
 {-
+     use File::Spec::Functions;
+
      our $sover = $config{shlib_version_number};
      our $sover_filename = $sover;
      $sover_filename =~ s|\.|_|g
@@ -9,8 +11,6 @@
      "";
 -}
 LIBS=libcrypto libssl
-ORDINALS[libcrypto]=crypto
-ORDINALS[libssl]=ssl
 INCLUDE[libcrypto]=. crypto/include include
 INCLUDE[libssl]=. include
 DEPEND[libssl]=libcrypto
@@ -26,6 +26,21 @@ GENERATE[crypto/include/internal/bn_conf.h]=crypto/include/internal/bn_conf.h.in
 DEPEND[crypto/include/internal/dso_conf.h]=configdata.pm
 GENERATE[crypto/include/internal/dso_conf.h]=crypto/include/internal/dso_conf.h.in
 
+IF[{- defined $target{shared_defflag} -}]
+  SHARED_SOURCE[libcrypto]=libcrypto.ld
+  SHARED_SOURCE[libssl]=libssl.ld
+
+  GENERATE[libcrypto.ld]=util/libcrypto.num libcrypto
+  GENERATE[libssl.ld]=util/libssl.num libssl
+ENDIF
+
+IF[{- $config{target} =~ /^(?:Cygwin|mingw|VC-)/ -}]
+  GENERATE[libcrypto.rc]=util/mkrc.pl libcrypto
+  GENERATE[libssl.rc]=util/mkrc.pl libssl
+
+  SHARED_SOURCE[libcrypto]=libcrypto.rc
+  SHARED_SOURCE[libssl]=libssl.rc
+ENDIF
 
 IF[{- $config{target} =~ /^Cygwin/ -}]
  SHARED_NAME[libcrypto]=cygcrypto-{- $sover_filename -}

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -78,9 +78,14 @@ static int generate_key(DH *dh)
     int ok = 0;
     int generate_new_key = 0;
     unsigned l;
-    BN_CTX *ctx;
+    BN_CTX *ctx = NULL;
     BN_MONT_CTX *mont = NULL;
     BIGNUM *pub_key = NULL, *priv_key = NULL;
+
+    if (BN_num_bits(dh->p) > OPENSSL_DH_MAX_MODULUS_BITS) {
+        DHerr(DH_F_GENERATE_KEY, DH_R_MODULUS_TOO_LARGE);
+        return 0;
+    }
 
     ctx = BN_CTX_new();
     if (ctx == NULL)
@@ -150,7 +155,7 @@ static int generate_key(DH *dh)
     if (priv_key != dh->priv_key)
         BN_free(priv_key);
     BN_CTX_free(ctx);
-    return (ok);
+    return ok;
 }
 
 static int compute_key(unsigned char *key, const BIGNUM *pub_key, DH *dh)
@@ -204,7 +209,7 @@ static int compute_key(unsigned char *key, const BIGNUM *pub_key, DH *dh)
         BN_CTX_end(ctx);
         BN_CTX_free(ctx);
     }
-    return (ret);
+    return ret;
 }
 
 static int dh_bn_mod_exp(const DH *dh, BIGNUM *r,

@@ -4,8 +4,8 @@
 
 CRYPTO_THREAD_run_once,
 CRYPTO_THREAD_lock_new, CRYPTO_THREAD_read_lock, CRYPTO_THREAD_write_lock,
-CRYPTO_THREAD_unlock, CRYPTO_THREAD_lock_free, CRYPTO_atomic_add,
-CRYPTO_atomic_read, CRYPTO_atomic_write - OpenSSL thread support
+CRYPTO_THREAD_unlock, CRYPTO_THREAD_lock_free,
+CRYPTO_atomic_add - OpenSSL thread support
 
 =head1 SYNOPSIS
 
@@ -21,8 +21,6 @@ CRYPTO_atomic_read, CRYPTO_atomic_write - OpenSSL thread support
  void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock);
 
  int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock);
- int CRYPTO_atomic_read(int *val, int *ret, CRYPTO_RWLOCK *lock);
- int CRYPTO_atomic_write(int *val, int n, CRYPTO_RWLOCK *lock);
 
 =head1 DESCRIPTION
 
@@ -67,7 +65,7 @@ CRYPTO_THREAD_unlock() unlocks the previously locked B<lock>.
 
 =item *
 
-CRYPTO_THREAD_lock_frees() frees the provided B<lock>.
+CRYPTO_THREAD_lock_free() frees the provided B<lock>.
 
 =item *
 
@@ -77,17 +75,6 @@ operations are supported on the specific platform. Because of this, if a
 variable is modified by CRYPTO_atomic_add() then CRYPTO_atomic_add() must
 be the only way that the variable is modified.
 
-=item *
-
-CRYPTO_atomic_read() atomically reads B<val> and returns the result of
-the operation in B<ret>. B<lock> will be locked, unless atomic operations
-are supported on the specific platform.
-
-=item *
-
-CRYPTO_atomic_write() atomically writes B<n> to B<val>. B<lock> will be
-locked, unless atomic operations are supported on the specific platform.
-
 =back
 
 =head1 RETURN VALUES
@@ -96,9 +83,9 @@ CRYPTO_THREAD_run_once() returns 1 on success, or 0 on error.
 
 CRYPTO_THREAD_lock_new() returns the allocated lock, or NULL on error.
 
-CRYPTO_THREAD_lock_frees() returns no value.
+CRYPTO_THREAD_lock_free() returns no value.
 
-The other functions return 1 on success or 0 on error.
+The other functions return 1 on success, or 0 on error.
 
 =head1 NOTES
 
@@ -174,7 +161,7 @@ L<crypto(7)>
 
 =head1 COPYRIGHT
 
-Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2000-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

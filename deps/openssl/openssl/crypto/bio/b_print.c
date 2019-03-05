@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,9 +9,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "internal/cryptlib.h"
 #include "internal/ctype.h"
 #include "internal/numbers.h"
-#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 
 /*
@@ -111,7 +111,7 @@ _dopr(char **sbuffer,
             if (ch == '%')
                 state = DP_S_FLAGS;
             else
-                if(!doapr_outch(sbuffer, buffer, &currlen, maxlen, ch))
+                if (!doapr_outch(sbuffer, buffer, &currlen, maxlen, ch))
                     return 0;
             ch = *format++;
             break;
@@ -293,8 +293,8 @@ _dopr(char **sbuffer,
                     return 0;
                 break;
             case 'c':
-                if(!doapr_outch(sbuffer, buffer, &currlen, maxlen,
-                            va_arg(args, int)))
+                if (!doapr_outch(sbuffer, buffer, &currlen, maxlen,
+                                 va_arg(args, int)))
                     return 0;
                 break;
             case 's':
@@ -323,7 +323,7 @@ _dopr(char **sbuffer,
                 }
                 break;
             case '%':
-                if(!doapr_outch(sbuffer, buffer, &currlen, maxlen, ch))
+                if (!doapr_outch(sbuffer, buffer, &currlen, maxlen, ch))
                     return 0;
                 break;
             case 'w':
@@ -354,7 +354,7 @@ _dopr(char **sbuffer,
         if (*truncated)
             currlen = *maxlen - 1;
     }
-    if(!doapr_outch(sbuffer, buffer, &currlen, maxlen, '\0'))
+    if (!doapr_outch(sbuffer, buffer, &currlen, maxlen, '\0'))
         return 0;
     *retlen = currlen - 1;
     return 1;
@@ -392,19 +392,19 @@ fmtstr(char **sbuffer,
         padlen = -padlen;
 
     while ((padlen > 0) && (max < 0 || cnt < max)) {
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
             return 0;
         --padlen;
         ++cnt;
     }
     while (strln > 0 && (max < 0 || cnt < max)) {
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, *value++))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, *value++))
             return 0;
         --strln;
         ++cnt;
     }
     while ((padlen < 0) && (max < 0 || cnt < max)) {
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
             return 0;
         ++padlen;
         ++cnt;
@@ -472,19 +472,19 @@ fmtint(char **sbuffer,
 
     /* spaces */
     while (spadlen > 0) {
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, ' '))
             return 0;
         --spadlen;
     }
 
     /* sign */
     if (signvalue)
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, signvalue))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, signvalue))
             return 0;
 
     /* prefix */
     while (*prefix) {
-        if(!doapr_outch(sbuffer, buffer, currlen, maxlen, *prefix))
+        if (!doapr_outch(sbuffer, buffer, currlen, maxlen, *prefix))
             return 0;
         prefix++;
     }
@@ -492,7 +492,7 @@ fmtint(char **sbuffer,
     /* zeros */
     if (zpadlen > 0) {
         while (zpadlen > 0) {
-            if(!doapr_outch(sbuffer, buffer, currlen, maxlen, '0'))
+            if (!doapr_outch(sbuffer, buffer, currlen, maxlen, '0'))
                 return 0;
             --zpadlen;
         }
@@ -665,7 +665,7 @@ fmtfp(char **sbuffer,
         iconvert[iplace++] = "0123456789"[intpart % 10];
         intpart = (intpart / 10);
     } while (intpart && (iplace < (int)sizeof(iconvert)));
-    if (iplace == sizeof iconvert)
+    if (iplace == sizeof(iconvert))
         iplace--;
     iconvert[iplace] = 0;
 
@@ -683,7 +683,7 @@ fmtfp(char **sbuffer,
         fracpart = (fracpart / 10);
     }
 
-    if (fplace == sizeof fconvert)
+    if (fplace == sizeof(fconvert))
         fplace--;
     fconvert[fplace] = 0;
 
@@ -758,8 +758,8 @@ fmtfp(char **sbuffer,
             return 0;
 
         while (fplace > 0) {
-            if(!doapr_outch(sbuffer, buffer, currlen, maxlen,
-                            fconvert[--fplace]))
+            if (!doapr_outch(sbuffer, buffer, currlen, maxlen,
+                             fconvert[--fplace]))
                 return 0;
         }
     }
@@ -819,9 +819,10 @@ doapr_outch(char **sbuffer,
 
         *maxlen += BUFFER_INC;
         if (*buffer == NULL) {
-            *buffer = OPENSSL_malloc(*maxlen);
-            if (*buffer == NULL)
+            if ((*buffer = OPENSSL_malloc(*maxlen)) == NULL) {
+                BIOerr(BIO_F_DOAPR_OUTCH, ERR_R_MALLOC_FAILURE);
                 return 0;
+            }
             if (*currlen > 0) {
                 if (!ossl_assert(*sbuffer != NULL))
                     return 0;
@@ -859,7 +860,7 @@ int BIO_printf(BIO *bio, const char *format, ...)
     ret = BIO_vprintf(bio, format, args);
 
     va_end(args);
-    return (ret);
+    return ret;
 }
 
 int BIO_vprintf(BIO *bio, const char *format, va_list args)
@@ -886,7 +887,7 @@ int BIO_vprintf(BIO *bio, const char *format, va_list args)
     } else {
         ret = BIO_write(bio, hugebuf, (int)retlen);
     }
-    return (ret);
+    return ret;
 }
 
 /*
@@ -905,7 +906,7 @@ int BIO_snprintf(char *buf, size_t n, const char *format, ...)
     ret = BIO_vsnprintf(buf, n, format, args);
 
     va_end(args);
-    return (ret);
+    return ret;
 }
 
 int BIO_vsnprintf(char *buf, size_t n, const char *format, va_list args)
@@ -913,7 +914,7 @@ int BIO_vsnprintf(char *buf, size_t n, const char *format, va_list args)
     size_t retlen;
     int truncated;
 
-    if(!_dopr(&buf, NULL, &n, &retlen, &truncated, format, args))
+    if (!_dopr(&buf, NULL, &n, &retlen, &truncated, format, args))
         return -1;
 
     if (truncated)

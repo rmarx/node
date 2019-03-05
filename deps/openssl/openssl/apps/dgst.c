@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -234,6 +235,8 @@ int dgst_main(int argc, char **argv)
     }
 
     if (keyfile != NULL) {
+        int type;
+
         if (want_pub)
             sigkey = load_pubkey(keyfile, keyform, 0, NULL, e, "key file");
         else
@@ -242,6 +245,15 @@ int dgst_main(int argc, char **argv)
             /*
              * load_[pub]key() has already printed an appropriate message
              */
+            goto end;
+        }
+        type = EVP_PKEY_id(sigkey);
+        if (type == EVP_PKEY_ED25519 || type == EVP_PKEY_ED448) {
+            /*
+             * We implement PureEdDSA for these which doesn't have a separate
+             * digest, and only supports one shot.
+             */
+            BIO_printf(bio_err, "Key type not supported for this operation\n");
             goto end;
         }
     }
@@ -276,8 +288,8 @@ int dgst_main(int argc, char **argv)
     }
 
     if (hmac_key != NULL) {
-        sigkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, impl,
-                                      (unsigned char *)hmac_key, -1);
+        sigkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_HMAC, impl,
+                                              (unsigned char *)hmac_key, -1);
         if (sigkey == NULL)
             goto end;
     }
@@ -398,7 +410,7 @@ int dgst_main(int argc, char **argv)
     OPENSSL_free(sigbuf);
     BIO_free(bmd);
     release_engine(e);
-    return (ret);
+    return ret;
 }
 
 int do_fp(BIO *out, unsigned char *buf, BIO *bp, int sep, int binout,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -7,7 +7,6 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include "../e_os.h"
 #include <string.h>
 
 #include <openssl/e_os2.h>
@@ -16,6 +15,10 @@
 #include "internal/nelem.h"
 #include "ssl_test_ctx.h"
 #include "testutil.h"
+
+#ifdef OPENSSL_SYS_WINDOWS
+# define strcasecmp _stricmp
+#endif
 
 static const int default_app_data_size = 256;
 /* Default set to be as small as possible to exercise fragmentation. */
@@ -96,6 +99,7 @@ static const test_enum ssl_test_results[] = {
     {"ServerFail", SSL_TEST_SERVER_FAIL},
     {"ClientFail", SSL_TEST_CLIENT_FAIL},
     {"InternalError", SSL_TEST_INTERNAL_ERROR},
+    {"FirstHandshakeFailed", SSL_TEST_FIRST_HANDSHAKE_FAILED},
 };
 
 __owur static int parse_expected_result(SSL_TEST_CTX *test_ctx, const char *value)
@@ -122,6 +126,7 @@ static const test_enum ssl_alerts[] = {
     {"UnrecognizedName", SSL_AD_UNRECOGNIZED_NAME},
     {"BadCertificate", SSL_AD_BAD_CERTIFICATE},
     {"NoApplicationProtocol", SSL_AD_NO_APPLICATION_PROTOCOL},
+    {"CertificateRequired", SSL_AD_CERTIFICATE_REQUIRED},
 };
 
 __owur static int parse_alert(int *alert, const char *value)
@@ -357,6 +362,10 @@ IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_SERVER_CONF, server, srp_user)
 IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_CLIENT_CONF, client, srp_password)
 IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_SERVER_CONF, server, srp_password)
 
+/* Session Ticket App Data options */
+IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_CTX, test, expected_session_ticket_app_data)
+IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_SERVER_CONF, server, session_ticket_app_data)
+
 /* Handshake mode */
 
 static const test_enum ssl_handshake_modes[] = {
@@ -366,6 +375,7 @@ static const test_enum ssl_handshake_modes[] = {
     {"RenegotiateClient", SSL_TEST_HANDSHAKE_RENEG_CLIENT},
     {"KeyUpdateServer", SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER},
     {"KeyUpdateClient", SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT},
+    {"PostHandshakeAuth", SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH},
 };
 
 __owur static int parse_handshake_mode(SSL_TEST_CTX *test_ctx, const char *value)
@@ -471,6 +481,34 @@ IMPLEMENT_SSL_TEST_INT_OPTION(SSL_TEST_CTX, test, app_data_size)
 /* MaxFragmentSize */
 
 IMPLEMENT_SSL_TEST_INT_OPTION(SSL_TEST_CTX, test, max_fragment_size)
+
+/* Maximum-Fragment-Length TLS extension mode */
+static const test_enum ssl_max_fragment_len_mode[] = {
+    {"None", TLSEXT_max_fragment_length_DISABLED},
+    { "512", TLSEXT_max_fragment_length_512},
+    {"1024", TLSEXT_max_fragment_length_1024},
+    {"2048", TLSEXT_max_fragment_length_2048},
+    {"4096", TLSEXT_max_fragment_length_4096}
+};
+
+__owur static int parse_max_fragment_len_mode(SSL_TEST_CLIENT_CONF *client_conf,
+                                              const char *value)
+{
+    int ret_value;
+
+    if (!parse_enum(ssl_max_fragment_len_mode,
+                    OSSL_NELEM(ssl_max_fragment_len_mode), &ret_value, value)) {
+        return 0;
+    }
+    client_conf->max_fragment_len_mode = ret_value;
+    return 1;
+}
+
+const char *ssl_max_fragment_len_name(int MFL_mode)
+{
+    return enum_name(ssl_max_fragment_len_mode,
+                     OSSL_NELEM(ssl_max_fragment_len_mode), MFL_mode);
+}
 
 
 /* Expected key and signature types */
@@ -587,6 +625,15 @@ __owur static int parse_expected_client_ca_names(SSL_TEST_CTX *test_ctx,
     return parse_expected_ca_names(&test_ctx->expected_client_ca_names, value);
 }
 
+/* ExpectedCipher */
+
+IMPLEMENT_SSL_TEST_STRING_OPTION(SSL_TEST_CTX, test, expected_cipher)
+
+/* Client and Server PHA */
+
+IMPLEMENT_SSL_TEST_BOOL_OPTION(SSL_TEST_CLIENT_CONF, client, enable_pha)
+IMPLEMENT_SSL_TEST_BOOL_OPTION(SSL_TEST_SERVER_CONF, server, force_pha)
+
 /* Known test options and their corresponding parse methods. */
 
 /* Top-level options. */
@@ -622,6 +669,8 @@ static const ssl_test_ctx_option ssl_test_ctx_options[] = {
     { "ExpectedClientSignType", &parse_expected_client_sign_type },
     { "ExpectedClientCANames", &parse_expected_client_ca_names },
     { "UseSCTP", &parse_test_use_sctp },
+    { "ExpectedCipher", &parse_test_expected_cipher },
+    { "ExpectedSessionTicketAppData", &parse_test_expected_session_ticket_app_data },
 };
 
 /* Nested client options. */
@@ -639,6 +688,8 @@ static const ssl_test_client_option ssl_test_client_options[] = {
     { "RenegotiateCiphers", &parse_client_reneg_ciphers},
     { "SRPUser", &parse_client_srp_user },
     { "SRPPassword", &parse_client_srp_password },
+    { "MaxFragmentLenExt", &parse_max_fragment_len_mode },
+    { "EnablePHA", &parse_client_enable_pha },
 };
 
 /* Nested server options. */
@@ -655,9 +706,11 @@ static const ssl_test_server_option ssl_test_server_options[] = {
     { "CertStatus", &parse_certstatus },
     { "SRPUser", &parse_server_srp_user },
     { "SRPPassword", &parse_server_srp_password },
+    { "ForcePHA", &parse_server_force_pha },
+    { "SessionTicketAppData", &parse_server_session_ticket_app_data },
 };
 
-SSL_TEST_CTX *SSL_TEST_CTX_new()
+SSL_TEST_CTX *SSL_TEST_CTX_new(void)
 {
     SSL_TEST_CTX *ret;
 
@@ -684,6 +737,8 @@ static void ssl_test_extra_conf_free_data(SSL_TEST_EXTRA_CONF *conf)
     OPENSSL_free(conf->server2.srp_password);
     OPENSSL_free(conf->client.srp_user);
     OPENSSL_free(conf->client.srp_password);
+    OPENSSL_free(conf->server.session_ticket_app_data);
+    OPENSSL_free(conf->server2.session_ticket_app_data);
 }
 
 static void ssl_test_ctx_free_extra_data(SSL_TEST_CTX *ctx)
@@ -697,8 +752,10 @@ void SSL_TEST_CTX_free(SSL_TEST_CTX *ctx)
     ssl_test_ctx_free_extra_data(ctx);
     OPENSSL_free(ctx->expected_npn_protocol);
     OPENSSL_free(ctx->expected_alpn_protocol);
+    OPENSSL_free(ctx->expected_session_ticket_app_data);
     sk_X509_NAME_pop_free(ctx->expected_server_ca_names, X509_NAME_free);
     sk_X509_NAME_pop_free(ctx->expected_client_ca_names, X509_NAME_free);
+    OPENSSL_free(ctx->expected_cipher);
     OPENSSL_free(ctx);
 }
 

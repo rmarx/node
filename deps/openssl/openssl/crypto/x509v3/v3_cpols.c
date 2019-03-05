@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -102,8 +102,8 @@ static STACK_OF(POLICYINFO) *r2i_certpol(X509V3_EXT_METHOD *method,
         return NULL;
     }
 
-    pols = sk_POLICYINFO_new_null();
-    if (pols == NULL || !sk_POLICYINFO_reserve(pols, num)) {
+    pols = sk_POLICYINFO_new_reserve(NULL, num);
+    if (pols == NULL) {
         X509V3err(X509V3_F_R2I_CERTPOL, ERR_R_MALLOC_FAILURE);
         goto err;
     }
@@ -144,8 +144,8 @@ static STACK_OF(POLICYINFO) *r2i_certpol(X509V3_EXT_METHOD *method,
             }
             pol = POLICYINFO_new();
             if (pol == NULL) {
-                X509V3err(X509V3_F_R2I_CERTPOL, ERR_R_MALLOC_FAILURE);
                 ASN1_OBJECT_free(pobj);
+                X509V3err(X509V3_F_R2I_CERTPOL, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
             pol->policyid = pobj;

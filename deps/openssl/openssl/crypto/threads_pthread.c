@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -19,9 +19,12 @@
 CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void)
 {
 # ifdef USE_RWLOCK
-    CRYPTO_RWLOCK *lock = OPENSSL_zalloc(sizeof(pthread_rwlock_t));
-    if (lock == NULL)
+    CRYPTO_RWLOCK *lock;
+
+    if ((lock = OPENSSL_zalloc(sizeof(pthread_rwlock_t))) == NULL) {
+        /* Don't set error, to avoid recursion blowup. */
         return NULL;
+    }
 
     if (pthread_rwlock_init(lock, NULL) != 0) {
         OPENSSL_free(lock);
@@ -29,9 +32,12 @@ CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void)
     }
 # else
     pthread_mutexattr_t attr;
-    CRYPTO_RWLOCK *lock = OPENSSL_zalloc(sizeof(pthread_mutex_t));
-    if (lock == NULL)
+    CRYPTO_RWLOCK *lock;
+
+    if ((lock = OPENSSL_zalloc(sizeof(pthread_mutex_t))) == NULL) {
+        /* Don't set error, to avoid recursion blowup. */
         return NULL;
+    }
 
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -162,44 +168,6 @@ int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock)
 
     *val += amount;
     *ret  = *val;
-
-    if (!CRYPTO_THREAD_unlock(lock))
-        return 0;
-
-    return 1;
-}
-
-int CRYPTO_atomic_read(int *val, int *ret, CRYPTO_RWLOCK *lock)
-{
-# if defined(__GNUC__) && defined(__ATOMIC_ACQUIRE)
-    if (__atomic_is_lock_free(sizeof(*val), val)) {
-        __atomic_load(val, ret, __ATOMIC_ACQUIRE);
-        return 1;
-    }
-# endif
-    if (!CRYPTO_THREAD_read_lock(lock))
-        return 0;
-
-    *ret  = *val;
-
-    if (!CRYPTO_THREAD_unlock(lock))
-        return 0;
-
-    return 1;
-}
-
-int CRYPTO_atomic_write(int *val, int n, CRYPTO_RWLOCK *lock)
-{
-# if defined(__GNUC__) && defined(__ATOMIC_RELEASE)
-    if (__atomic_is_lock_free(sizeof(*val), val)) {
-        __atomic_store(val, &n, __ATOMIC_RELEASE);
-        return 1;
-    }
-# endif
-    if (!CRYPTO_THREAD_write_lock(lock))
-        return 0;
-
-    *val = n;
 
     if (!CRYPTO_THREAD_unlock(lock))
         return 0;

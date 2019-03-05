@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -15,7 +15,6 @@
 # include <openssl/safestack.h>
 # include <openssl/evp.h>
 # include <openssl/x509.h>
-# include <openssl/pem2.h>
 # include <openssl/pemerr.h>
 
 #ifdef  __cplusplus
@@ -281,7 +280,8 @@ int PEM_SignUpdate(EVP_MD_CTX *ctx, unsigned char *d, unsigned int cnt);
 int PEM_SignFinal(EVP_MD_CTX *ctx, unsigned char *sigret,
                   unsigned int *siglen, EVP_PKEY *pkey);
 
-int PEM_def_callback(char *buf, int num, int w, void *key);
+/* The default pem_password_cb that's used internally */
+int PEM_def_callback(char *buf, int num, int rwflag, void *userdata);
 void PEM_proc_type(char *buf, int type);
 void PEM_dek_info(char *buf, const char *type, int len, char *str);
 
@@ -372,7 +372,6 @@ int i2b_PVK_bio(BIO *out, EVP_PKEY *pk, int enclevel,
 #  endif
 # endif
 
-int ERR_load_PEM_strings(void);
 # ifdef  __cplusplus
 }
 # endif

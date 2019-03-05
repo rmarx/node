@@ -298,9 +298,9 @@ void TLSWrap::EncOut() {
   if (ssl_ == nullptr)
     return;
 
-  // No data to write
   if (BIO_pending(enc_out_) == 0) {
-    if (clear_in_->Length() == 0)
+    // second time we get in here, state_string is SSL_OK. First time is TWST and callbacks should NOT be called then!
+    if (clear_in_->Length() == 0 && !SSL_in_init(ssl_)) 
       InvokeQueued(0);
     return;
   }
@@ -432,6 +432,11 @@ void TLSWrap::ClearOut() {
   int read;
   for (;;) {
     read = SSL_read(ssl_, out, sizeof(out));
+
+    // when handshake data is found, SSL_read should be called again for possible application data in tls 1.3
+    if(read == -1 && BIO_should_retry(enc_in_)) {
+      read = SSL_read(ssl_, out, sizeof(out));
+    }
 
     if (read <= 0)
       break;

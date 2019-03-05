@@ -46,7 +46,6 @@ WORKDIR /node
 RUN \
 	./configure \
 	&& make -j2 \
-	&& make install \
-	&& make test
+	&& make install
 
 #CMD ["./rebuild.sh"]

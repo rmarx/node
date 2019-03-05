@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -170,8 +170,10 @@ int EVP_PBE_scrypt(const char *pass, size_t passlen,
     if (r == 0 || p == 0 || N < 2 || (N & (N - 1)))
         return 0;
     /* Check p * r < SCRYPT_PR_MAX avoiding overflow */
-    if (p > SCRYPT_PR_MAX / r)
+    if (p > SCRYPT_PR_MAX / r) {
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_MEMORY_LIMIT_EXCEEDED);
         return 0;
+    }
 
     /*
      * Need to check N: if 2^(128 * r / 8) overflows limit this is
@@ -179,8 +181,10 @@ int EVP_PBE_scrypt(const char *pass, size_t passlen,
      */
 
     if (16 * r <= LOG2_UINT64_MAX) {
-        if (N >= (((uint64_t)1) << (16 * r)))
+        if (N >= (((uint64_t)1) << (16 * r))) {
+            EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_MEMORY_LIMIT_EXCEEDED);
             return 0;
+        }
     }
 
     /* Memory checks: check total allocated buffer size fits in uint64_t */
@@ -191,19 +195,31 @@ int EVP_PBE_scrypt(const char *pass, size_t passlen,
      * p * r < SCRYPT_PR_MAX
      */
     Blen = p * 128 * r;
+    /*
+     * Yet we pass it as integer to PKCS5_PBKDF2_HMAC... [This would
+     * have to be revised when/if PKCS5_PBKDF2_HMAC accepts size_t.]
+     */
+    if (Blen > INT_MAX) {
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_MEMORY_LIMIT_EXCEEDED);
+        return 0;
+    }
 
     /*
      * Check 32 * r * (N + 2) * sizeof(uint32_t) fits in uint64_t
      * This is combined size V, X and T (section 4)
      */
     i = UINT64_MAX / (32 * sizeof(uint32_t));
-    if (N + 2 > i / r)
+    if (N + 2 > i / r) {
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_MEMORY_LIMIT_EXCEEDED);
         return 0;
+    }
     Vlen = 32 * r * (N + 2) * sizeof(uint32_t);
 
     /* check total allocated size fits in uint64_t */
-    if (Blen > UINT64_MAX - Vlen)
+    if (Blen > UINT64_MAX - Vlen) {
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_MEMORY_LIMIT_EXCEEDED);
         return 0;
+    }
 
     if (maxmem == 0)
         maxmem = SCRYPT_MAX_MEM;
@@ -221,25 +237,30 @@ int EVP_PBE_scrypt(const char *pass, size_t passlen,
     if (key == NULL)
         return 1;
 
-    B = OPENSSL_malloc(Blen + Vlen);
-    if (B == NULL)
+    B = OPENSSL_malloc((size_t)(Blen + Vlen));
+    if (B == NULL) {
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, ERR_R_MALLOC_FAILURE);
         return 0;
+    }
     X = (uint32_t *)(B + Blen);
     T = X + 32 * r;
     V = T + 32 * r;
     if (PKCS5_PBKDF2_HMAC(pass, passlen, salt, saltlen, 1, EVP_sha256(),
-                          Blen, B) == 0)
+                          (int)Blen, B) == 0)
         goto err;
 
     for (i = 0; i < p; i++)
         scryptROMix(B + 128 * r * i, r, N, X, T, V);
 
-    if (PKCS5_PBKDF2_HMAC(pass, passlen, B, Blen, 1, EVP_sha256(),
+    if (PKCS5_PBKDF2_HMAC(pass, passlen, B, (int)Blen, 1, EVP_sha256(),
                           keylen, key) == 0)
         goto err;
     rv = 1;
  err:
-    OPENSSL_clear_free(B, Blen + Vlen);
+    if (rv == 0)
+        EVPerr(EVP_F_EVP_PBE_SCRYPT, EVP_R_PBKDF2_ERROR);
+
+    OPENSSL_clear_free(B, (size_t)(Blen + Vlen));
     return rv;
 }
 #endif

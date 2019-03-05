@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -28,15 +28,16 @@ static int load_iv(char **fromp, unsigned char *to, int num);
 static int check_pem(const char *nm, const char *name);
 int pem_check_suffix(const char *pem_str, const char *suffix);
 
-int PEM_def_callback(char *buf, int num, int w, void *key)
+int PEM_def_callback(char *buf, int num, int rwflag, void *userdata)
 {
-    int i, j;
+    int i, min_len;
     const char *prompt;
 
-    if (key) {
-        i = strlen(key);
+    /* We assume that the user passes a default password as userdata */
+    if (userdata) {
+        i = strlen(userdata);
         i = (i > num) ? num : i;
-        memcpy(buf, key, i);
+        memcpy(buf, userdata, i);
         return i;
     }
 
@@ -44,28 +45,22 @@ int PEM_def_callback(char *buf, int num, int w, void *key)
     if (prompt == NULL)
         prompt = "Enter PEM pass phrase:";
 
-    for (;;) {
-        /*
-         * We assume that w == 0 means decryption,
-         * while w == 1 means encryption
-         */
-        int min_len = w ? MIN_LENGTH : 0;
+    /*
+     * rwflag == 0 means decryption
+     * rwflag == 1 means encryption
+     *
+     * We assume that for encryption, we want a minimum length, while for
+     * decryption, we cannot know any minimum length, so we assume zero.
+     */
+    min_len = rwflag ? MIN_LENGTH : 0;
 
-        i = EVP_read_pw_string_min(buf, min_len, num, prompt, w);
-        if (i != 0) {
-            PEMerr(PEM_F_PEM_DEF_CALLBACK, PEM_R_PROBLEMS_GETTING_PASSWORD);
-            memset(buf, 0, (unsigned int)num);
-            return -1;
-        }
-        j = strlen(buf);
-        if (min_len && j < min_len) {
-            fprintf(stderr,
-                    "phrase is too short, needs to be at least %d chars\n",
-                    min_len);
-        } else
-            break;
+    i = EVP_read_pw_string_min(buf, min_len, num, prompt, rwflag);
+    if (i != 0) {
+        PEMerr(PEM_F_PEM_DEF_CALLBACK, PEM_R_PROBLEMS_GETTING_PASSWORD);
+        memset(buf, 0, (unsigned int)num);
+        return -1;
     }
-    return j;
+    return strlen(buf);
 }
 
 void PEM_proc_type(char *buf, int type)
@@ -435,7 +430,7 @@ int PEM_do_header(EVP_CIPHER_INFO *cipher, unsigned char *data, long *plen,
         keylen = PEM_def_callback(buf, PEM_BUFSIZE, 0, u);
     else
         keylen = callback(buf, PEM_BUFSIZE, 0, u);
-    if (keylen <= 0) {
+    if (keylen < 0) {
         PEMerr(PEM_F_PEM_DO_HEADER, PEM_R_BAD_PASSWORD_READ);
         return 0;
     }
@@ -493,6 +488,7 @@ int PEM_get_EVP_CIPHER_INFO(char *header, EVP_CIPHER_INFO *cipher)
     char *dekinfostart, c;
 
     cipher->cipher = NULL;
+    memset(cipher->iv, 0, sizeof(cipher->iv));
     if ((header == NULL) || (*header == '\0') || (*header == '\n'))
         return 1;
 
@@ -610,6 +606,7 @@ int PEM_write_bio(BIO *bp, const char *name, const char *header,
     unsigned char *buf = NULL;
     EVP_ENCODE_CTX *ctx = EVP_ENCODE_CTX_new();
     int reason = ERR_R_BUF_LIB;
+    int retval = 0;
 
     if (ctx == NULL) {
         reason = ERR_R_MALLOC_FAILURE;
@@ -654,14 +651,14 @@ int PEM_write_bio(BIO *bp, const char *name, const char *header,
         (BIO_write(bp, name, nlen) != nlen) ||
         (BIO_write(bp, "-----\n", 6) != 6))
         goto err;
-    OPENSSL_clear_free(buf, PEM_BUFSIZE * 8);
-    EVP_ENCODE_CTX_free(ctx);
-    return i + outl;
+    retval = i + outl;
+
  err:
-    OPENSSL_clear_free(buf, PEM_BUFSIZE * 8);
+    if (retval == 0)
+        PEMerr(PEM_F_PEM_WRITE_BIO, reason);
     EVP_ENCODE_CTX_free(ctx);
-    PEMerr(PEM_F_PEM_WRITE_BIO, reason);
-    return 0;
+    OPENSSL_clear_free(buf, PEM_BUFSIZE * 8);
+    return retval;
 }
 
 #ifndef OPENSSL_NO_STDIO
@@ -722,14 +719,14 @@ static int sanitize_line(char *linebuf, int len, unsigned int flags)
 static const char beginstr[] = "-----BEGIN ";
 static const char endstr[] = "-----END ";
 static const char tailstr[] = "-----\n";
-#define BEGINLEN (sizeof(beginstr) - 1)
-#define ENDLEN (sizeof(endstr) - 1)
-#define TAILLEN (sizeof(tailstr) - 1)
+#define BEGINLEN ((int)(sizeof(beginstr) - 1))
+#define ENDLEN ((int)(sizeof(endstr) - 1))
+#define TAILLEN ((int)(sizeof(tailstr) - 1))
 static int get_name(BIO *bp, char **name, unsigned int flags)
 {
     char *linebuf;
     int ret = 0;
-    size_t len;
+    int len;
 
     /*
      * Need to hold trailing NUL (accounted for by BIO_gets() and the newline
@@ -883,8 +880,7 @@ err:
  * Read in PEM-formatted data from the given BIO.
  *
  * By nature of the PEM format, all content must be printable ASCII (except
- * for line endings).  Other characters, or lines that are longer than 80
- * characters, are malformed input and will be rejected.
+ * for line endings).  Other characters are malformed input and will be rejected.
  */
 int PEM_read_bio_ex(BIO *bp, char **name_out, char **header,
                     unsigned char **data, long *len_out, unsigned int flags)

@@ -85,10 +85,11 @@ void ClientHelloParser::ParseHeader(const uint8_t* data, size_t avail) {
   // (3,1) TLS v1.0
   // (3,2) TLS v1.1
   // (3,3) TLS v1.2
+  // (3,4) TLS v1.3
   //
   if (data[body_offset_ + 4] != 0x03 ||
       data[body_offset_ + 5] < 0x01 ||
-      data[body_offset_ + 5] > 0x03) {
+      data[body_offset_ + 5] > 0x04) {
     goto fail;
   }
 
@@ -169,6 +170,18 @@ void ClientHelloParser::ParseExtension(const uint16_t type,
     case kTLSSessionTicket:
       tls_ticket_size_ = len;
       tls_ticket_ = data + len;
+      break;
+    case kKeyShare:
+      {
+        // Code to retrieve key share from a client hello
+        // TODO: can be multiple key shares
+        uint16_t client_key_share_length = (data[0] << 8) + data[1];
+        if (client_key_share_length > 3) {
+          uint16_t group = (data[2] << 8) + data[3];
+          key_share_size_ = (data[4] << 8) + data[5];
+          key_share_ = data + 6;
+        }
+      }
       break;
     default:
       // Ignore

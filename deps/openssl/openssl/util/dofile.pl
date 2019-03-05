@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -40,7 +40,7 @@ package OpenSSL::Template;
 use File::Basename;
 use File::Spec::Functions;
 use lib "$FindBin::Bin/perl";
-use with_fallback qw(Text::Template);
+use with_fallback "Text::Template 1.46";
 
 #use parent qw/Text::Template/;
 use vars qw/@ISA/;
@@ -106,7 +106,7 @@ sub quotify1 {
 
 # quotify_l LIST
 # For each defined element in LIST (i.e. elements that aren't undef), have
-# it quotified with 'quotofy1'
+# it quotified with 'quotify1'
 sub quotify_l {
     map {
         if (!defined($_)) {

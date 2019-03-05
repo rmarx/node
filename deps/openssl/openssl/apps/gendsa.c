@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,6 +17,7 @@ NON_EMPTY_TRANSLATION_UNIT
 # include <sys/types.h>
 # include <sys/stat.h>
 # include "apps.h"
+# include "progs.h"
 # include <openssl/bio.h>
 # include <openssl/err.h>
 # include <openssl/bn.h>
@@ -116,6 +117,13 @@ int gendsa_main(int argc, char **argv)
         goto end2;
 
     DSA_get0_pqg(dsa, &p, NULL, NULL);
+
+    if (BN_num_bits(p) > OPENSSL_DSA_MAX_MODULUS_BITS)
+        BIO_printf(bio_err,
+                   "Warning: It is not recommended to use more than %d bit for DSA keys.\n"
+                   "         Your key size is %d! Larger key size may behave not as expected.\n",
+                   OPENSSL_DSA_MAX_MODULUS_BITS, BN_num_bits(p));
+
     BIO_printf(bio_err, "Generating DSA key, %d bits\n", BN_num_bits(p));
     if (!DSA_generate_key(dsa))
         goto end;
@@ -133,6 +141,6 @@ int gendsa_main(int argc, char **argv)
     DSA_free(dsa);
     release_engine(e);
     OPENSSL_free(passout);
-    return (ret);
+    return ret;
 }
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -7,15 +7,11 @@
  * https://www.openssl.org/source/license.html
  */
 
-/*
- * A nice addition from Dr Stephen Henson <steve@openssl.org> to add the
- * -strparse option which parses nested binary structures
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
@@ -43,7 +39,7 @@ const OPTIONS asn1parse_options[] = {
     {"dump", OPT_DUMP, 0, "unknown data in hex form"},
     {"dlimit", OPT_DLIMIT, 'p',
      "dump the first arg bytes of unknown data in hex form"},
-    {"strparse", OPT_STRPARSE, 's',
+    {"strparse", OPT_STRPARSE, 'p',
      "offset; a series of these can be used to 'dig'"},
     {OPT_MORE_STR, 0, 0, "into multiple ASN1 blob wrappings"},
     {"genstr", OPT_GENSTR, 's', "string to generate ASN1 structure from"},
@@ -117,13 +113,13 @@ int asn1parse_main(int argc, char **argv)
             offset = strtol(opt_arg(), NULL, 0);
             break;
         case OPT_LENGTH:
-            length = atoi(opt_arg());
+            length = strtol(opt_arg(), NULL, 0);
             break;
         case OPT_DUMP:
             dump = -1;
             break;
         case OPT_DLIMIT:
-            dump = atoi(opt_arg());
+            dump = strtol(opt_arg(), NULL, 0);
             break;
         case OPT_STRPARSE:
             sk_OPENSSL_STRING_push(osk, opt_arg());
@@ -209,7 +205,7 @@ int asn1parse_main(int argc, char **argv)
 
             num = 0;
             for (;;) {
-                if (!BUF_MEM_grow(buf, (int)num + BUFSIZ))
+                if (!BUF_MEM_grow(buf, num + BUFSIZ))
                     goto end;
                 i = BIO_read(in, &(buf->data[num]), BUFSIZ);
                 if (i <= 0)
@@ -229,9 +225,9 @@ int asn1parse_main(int argc, char **argv)
         for (i = 0; i < sk_OPENSSL_STRING_num(osk); i++) {
             ASN1_TYPE *atmp;
             int typ;
-            j = atoi(sk_OPENSSL_STRING_value(osk, i));
-            if (j == 0) {
-                BIO_printf(bio_err, "'%s' is an invalid number\n",
+            j = strtol(sk_OPENSSL_STRING_value(osk, i), NULL, 0);
+            if (j <= 0 || j >= tmplen) {
+                BIO_printf(bio_err, "'%s' is out of range\n",
                            sk_OPENSSL_STRING_value(osk, i));
                 continue;
             }
@@ -262,14 +258,14 @@ int asn1parse_main(int argc, char **argv)
         num = tmplen;
     }
 
-    if (offset >= num) {
-        BIO_printf(bio_err, "Error: offset too large\n");
+    if (offset < 0 || offset >= num) {
+        BIO_printf(bio_err, "Error: offset out of range\n");
         goto end;
     }
 
     num -= offset;
 
-    if ((length == 0) || ((long)length > num))
+    if (length == 0 || length > (unsigned int)num)
         length = (unsigned int)num;
     if (derout != NULL) {
         if (BIO_write(derout, str + offset, length) != (int)length) {
@@ -311,7 +307,7 @@ int asn1parse_main(int argc, char **argv)
         OPENSSL_free(str);
     ASN1_TYPE_free(at);
     sk_OPENSSL_STRING_free(osk);
-    return (ret);
+    return ret;
 }
 
 static int do_generate(char *genstr, const char *genconf, BUF_MEM *buf)

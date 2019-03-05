@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/asn1.h>
 #include <openssl/err.h>
@@ -129,7 +130,7 @@ const OPTIONS x509_options[] = {
     {"checkemail", OPT_CHECKEMAIL, 's', "Check certificate matches email"},
     {"checkip", OPT_CHECKIP, 's', "Check certificate matches ipaddr"},
     {"CAform", OPT_CAFORM, 'F', "CA format - default PEM"},
-    {"CAkeyform", OPT_CAKEYFORM, 'F', "CA key format - default PEM"},
+    {"CAkeyform", OPT_CAKEYFORM, 'f', "CA key format - default PEM"},
     {"sigopt", OPT_SIGOPT, 's', "Signature parameter in n:v form"},
     {"force_pubkey", OPT_FORCE_PUBKEY, '<', "Force the Key to put inside certificate"},
     {"next_serial", OPT_NEXT_SERIAL, '-', "Increment current certificate serial number"},
@@ -466,10 +467,6 @@ int x509_main(int argc, char **argv)
         goto opthelp;
     }
 
-    out = bio_open_default(outfile, 'w', outformat);
-    if (out == NULL)
-        goto end;
-
     if (!app_passwd(passinarg, NULL, &passin, NULL)) {
         BIO_printf(bio_err, "Error getting password\n");
         goto end;
@@ -595,10 +592,12 @@ int x509_main(int argc, char **argv)
             goto end;
     }
 
-    if (!noout || text || next_serial) {
-        OBJ_create("2.99999.3", "SET.ex3", "SET x509v3 extension 3");
+    out = bio_open_default(outfile, 'w', outformat);
+    if (out == NULL)
+        goto end;
 
-    }
+    if (!noout || text || next_serial)
+        OBJ_create("2.99999.3", "SET.ex3", "SET x509v3 extension 3");
 
     if (alias)
         X509_alias_set1(x, (unsigned char *)alias, -1);
@@ -917,7 +916,7 @@ static ASN1_INTEGER *x509_load_serial(const char *CAfile,
     BIGNUM *serial = NULL;
 
     if (serialfile == NULL) {
-        const char *p = strchr(CAfile, '.');
+        const char *p = strrchr(CAfile, '.');
         size_t len = p != NULL ? (size_t)(p - CAfile) : strlen(CAfile);
 
         buf = app_malloc(len + sizeof(POSTFIX), "serial# buffer");

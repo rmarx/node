@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2002-2018 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -51,7 +51,7 @@ void EC_KEY_free(EC_KEY *r)
         return;
     REF_ASSERT_ISNT(i < 0);
 
-    if (r->meth->finish != NULL)
+    if (r->meth != NULL && r->meth->finish != NULL)
         r->meth->finish(r);
 
 #ifndef OPENSSL_NO_ENGINE
@@ -341,9 +341,6 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     BIGNUM *tx, *ty;
     EC_POINT *point = NULL;
     int ok = 0;
-#ifndef OPENSSL_NO_EC2M
-    int tmp_nid, is_char_two = 0;
-#endif
 
     if (key == NULL || key->group == NULL || x == NULL || y == NULL) {
         ECerr(EC_F_EC_KEY_SET_PUBLIC_KEY_AFFINE_COORDINATES,
@@ -365,29 +362,11 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     if (ty == NULL)
         goto err;
 
-#ifndef OPENSSL_NO_EC2M
-    tmp_nid = EC_METHOD_get_field_type(EC_GROUP_method_of(key->group));
+    if (!EC_POINT_set_affine_coordinates(key->group, point, x, y, ctx))
+        goto err;
+    if (!EC_POINT_get_affine_coordinates(key->group, point, tx, ty, ctx))
+        goto err;
 
-    if (tmp_nid == NID_X9_62_characteristic_two_field)
-        is_char_two = 1;
-
-    if (is_char_two) {
-        if (!EC_POINT_set_affine_coordinates_GF2m(key->group, point,
-                                                  x, y, ctx))
-            goto err;
-        if (!EC_POINT_get_affine_coordinates_GF2m(key->group, point,
-                                                  tx, ty, ctx))
-            goto err;
-    } else
-#endif
-    {
-        if (!EC_POINT_set_affine_coordinates_GFp(key->group, point,
-                                                 x, y, ctx))
-            goto err;
-        if (!EC_POINT_get_affine_coordinates_GFp(key->group, point,
-                                                 tx, ty, ctx))
-            goto err;
-    }
     /*
      * Check if retrieved coordinates match originals and are less than field
      * order: if not values are out of range.
@@ -613,12 +592,14 @@ size_t EC_KEY_priv2buf(const EC_KEY *eckey, unsigned char **pbuf)
 {
     size_t len;
     unsigned char *buf;
+
     len = EC_KEY_priv2oct(eckey, NULL, 0);
     if (len == 0)
         return 0;
-    buf = OPENSSL_malloc(len);
-    if (buf == NULL)
+    if ((buf = OPENSSL_malloc(len)) == NULL) {
+        ECerr(EC_F_EC_KEY_PRIV2BUF, ERR_R_MALLOC_FAILURE);
         return 0;
+    }
     len = EC_KEY_priv2oct(eckey, buf, len);
     if (len == 0) {
         OPENSSL_free(buf);

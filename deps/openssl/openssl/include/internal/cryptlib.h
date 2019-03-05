@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -24,10 +24,6 @@
 # include <openssl/bio.h>
 # include <openssl/err.h>
 # include "internal/nelem.h"
-
-#ifdef  __cplusplus
-extern "C" {
-#endif
 
 #ifdef NDEBUG
 # define ossl_assert(x) ((x) != 0)
@@ -82,9 +78,10 @@ DEFINE_LHASH_OF(MEM);
 void OPENSSL_cpuid_setup(void);
 extern unsigned int OPENSSL_ia32cap_P[];
 void OPENSSL_showfatal(const char *fmta, ...);
-extern int OPENSSL_NONPIC_relocated;
 void crypto_cleanup_all_ex_data_int(void);
 int openssl_init_fork_handlers(void);
+
+char *ossl_safe_getenv(const char *name);
 
 extern CRYPTO_RWLOCK *memdbg_lock;
 int openssl_strerror_r(int errnum, char *buf, size_t buflen);
@@ -94,8 +91,6 @@ FILE *openssl_fopen(const char *filename, const char *mode);
 void *openssl_fopen(const char *filename, const char *mode);
 # endif
 
-#ifdef  __cplusplus
-}
-#endif
+uint32_t OPENSSL_rdtsc(void);
 
 #endif

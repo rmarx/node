@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,9 +12,6 @@
 int ssl3_do_change_cipher_spec(SSL *s)
 {
     int i;
-    size_t finish_md_len;
-    const char *sender;
-    size_t slen;
 
     if (s->server)
         i = SSL3_CHANGE_CIPHER_SERVER_READ;
@@ -25,36 +22,16 @@ int ssl3_do_change_cipher_spec(SSL *s)
         if (s->session == NULL || s->session->master_key_length == 0) {
             /* might happen if dtls1_read_bytes() calls this */
             SSLerr(SSL_F_SSL3_DO_CHANGE_CIPHER_SPEC, SSL_R_CCS_RECEIVED_EARLY);
-            return (0);
+            return 0;
         }
 
         s->session->cipher = s->s3->tmp.new_cipher;
         if (!s->method->ssl3_enc->setup_key_block(s))
-            return (0);
+            return 0;
     }
 
     if (!s->method->ssl3_enc->change_cipher_state(s, i))
-        return (0);
-
-    /*
-     * we have to record the message digest at this point so we can get it
-     * before we read the finished message
-     */
-    if (!s->server) {
-        sender = s->method->ssl3_enc->server_finished_label;
-        slen = s->method->ssl3_enc->server_finished_label_len;
-    } else {
-        sender = s->method->ssl3_enc->client_finished_label;
-        slen = s->method->ssl3_enc->client_finished_label_len;
-    }
-
-    finish_md_len = s->method->ssl3_enc->final_finish_mac(s, sender, slen,
-                                            s->s3->tmp.peer_finish_md);
-    if (finish_md_len == 0) {
-        SSLerr(SSL_F_SSL3_DO_CHANGE_CIPHER_SPEC, ERR_R_INTERNAL_ERROR);
         return 0;
-    }
-    s->s3->tmp.peer_finish_md_len = finish_md_len;
 
     return 1;
 }
@@ -97,9 +74,16 @@ int ssl3_dispatch_alert(SSL *s)
     size_t written;
 
     s->s3->alert_dispatch = 0;
-    alertlen = 2;
-    i = do_ssl3_write(s, SSL3_RT_ALERT, &s->s3->send_alert[0], &alertlen, 1, 0,
-                      &written);
+
+    if (!(s->mode & SSL_MODE_QUIC_HACK)) {
+        alertlen = 2;
+        i = do_ssl3_write(s, SSL3_RT_ALERT, &s->s3->send_alert[0], &alertlen, 1,
+                          0, &written);
+    } else {
+        s->rwstate = SSL_WRITING;
+        i = 1;
+    }
+
     if (i <= 0) {
         s->s3->alert_dispatch = 1;
     } else {

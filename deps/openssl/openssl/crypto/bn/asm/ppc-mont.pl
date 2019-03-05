@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2006-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -8,7 +8,7 @@
 
 
 # ====================================================================
-# Written by Andy Polyakov <appro@fy.chalmers.se> for the OpenSSL
+# Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
 # project. The module is, however, dual licensed under OpenSSL and
 # CRYPTOGAMS licenses depending on where you obtain it. For further
 # details see http://www.openssl.org/~appro/cryptogams/.
@@ -37,7 +37,7 @@
 # and squaring procedure operating on lengths divisible by 8. Length
 # is expressed in number of limbs. RSA private key operations are
 # ~35-50% faster (more for longer keys) on contemporary high-end POWER
-# processors in 64-bit builds, [mysterously enough] more in 32-bit
+# processors in 64-bit builds, [mysteriously enough] more in 32-bit
 # builds. On low-end 32-bit processors performance improvement turned
 # to be marginal...
 
@@ -314,15 +314,16 @@ Lsub:	$LDX	$tj,$tp,$j
 	li	$j,0
 	mtctr	$num
 	subfe	$ovf,$j,$ovf	; handle upmost overflow bit
-	and	$ap,$tp,$ovf
-	andc	$np,$rp,$ovf
-	or	$ap,$ap,$np	; ap=borrow?tp:rp
 
 .align	4
-Lcopy:				; copy or in-place refresh
-	$LDX	$tj,$ap,$j
-	$STX	$tj,$rp,$j
+Lcopy:				; conditional copy
+	$LDX	$tj,$tp,$j
+	$LDX	$aj,$rp,$j
+	and	$tj,$tj,$ovf
+	andc	$aj,$aj,$ovf
 	$STX	$j,$tp,$j	; zap at once
+	or	$aj,$aj,$tj
+	$STX	$aj,$rp,$j
 	addi	$j,$j,$BNSZ
 	bdnz	Lcopy
 

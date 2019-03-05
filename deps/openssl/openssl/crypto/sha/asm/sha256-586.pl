@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2007-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -18,7 +18,7 @@
 #
 # Performance improvement over compiler generated code varies from
 # 10% to 40% [see below]. Not very impressive on some µ-archs, but
-# it's 5 times smaller and optimizies amount of writes.
+# it's 5 times smaller and optimizes amount of writes.
 #
 # May 2012.
 #
@@ -96,7 +96,7 @@ if ($xmm && !$avx && $ARGV[0] eq "win32" &&
 	$avx = ($1>=10) + ($1>=11);
 }
 
-if ($xmm && !$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/) {
+if ($xmm && !$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|based on LLVM) ([3-9]\.[0-9]+)/) {
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 

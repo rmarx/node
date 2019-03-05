@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -22,10 +22,6 @@
 # endif
 
 # include "internal/bn_int.h"
-
-#ifdef  __cplusplus
-extern "C" {
-#endif
 
 /*
  * These preprocessor symbols control various aspects of the bignum headers
@@ -145,7 +141,16 @@ extern "C" {
  */
 
 # ifdef BN_DEBUG
-#  include <assert.h>
+/*
+ * The new BN_FLG_FIXED_TOP flag marks vectors that were not treated with
+ * bn_correct_top, in other words such vectors are permitted to have zeros
+ * in most significant limbs. Such vectors are used internally to achieve
+ * execution time invariance for critical operations with private keys.
+ * It's BN_DEBUG-only flag, because user application is not supposed to
+ * observe it anyway. Moreover, optimizing compiler would actually remove
+ * all operations manipulating the bit in question in non-BN_DEBUG build.
+ */
+#  define BN_FLG_FIXED_TOP 0x10000
 #  ifdef BN_DEBUG_RAND
 #   define bn_pollute(a) \
         do { \
@@ -169,8 +174,10 @@ extern "C" {
         do { \
                 const BIGNUM *_bnum2 = (a); \
                 if (_bnum2 != NULL) { \
-                        assert(((_bnum2->top == 0) && !_bnum2->neg) || \
-                               (_bnum2->top && (_bnum2->d[_bnum2->top - 1] != 0))); \
+                        int _top = _bnum2->top; \
+                        (void)ossl_assert((_top == 0 && !_bnum2->neg) || \
+                                  (_top && ((_bnum2->flags & BN_FLG_FIXED_TOP) \
+                                            || _bnum2->d[_top - 1] != 0))); \
                         bn_pollute(_bnum2); \
                 } \
         } while(0)
@@ -189,6 +196,7 @@ extern "C" {
 
 # else                          /* !BN_DEBUG */
 
+#  define BN_FLG_FIXED_TOP 0
 #  define bn_pollute(a)
 #  define bn_check_top(a)
 #  define bn_fix_top(a)           bn_correct_top(a)
@@ -220,7 +228,8 @@ struct bignum_st {
 /* Used for montgomery multiplication */
 struct bn_mont_ctx_st {
     int ri;                     /* number of bits in R */
-    BIGNUM RR;                  /* used to convert to montgomery form */
+    BIGNUM RR;                  /* used to convert to montgomery form,
+                                   possibly zero-padded */
     BIGNUM N;                   /* The modulus */
     BIGNUM Ni;                  /* R*(1/R mod N) - N*Ni = 1 (Ni is only
                                  * stored for bignum algorithm) */
@@ -349,29 +358,22 @@ struct bn_gencb_st {
 # if !defined(OPENSSL_NO_ASM) && !defined(OPENSSL_NO_INLINE_ASM) && !defined(PEDANTIC)
 /*
  * BN_UMULT_HIGH section.
- *
- * No, I'm not trying to overwhelm you when stating that the
- * product of N-bit numbers is 2*N bits wide:-) No, I don't expect
- * you to be impressed when I say that if the compiler doesn't
- * support 2*N integer type, then you have to replace every N*N
- * multiplication with 4 (N/2)*(N/2) accompanied by some shifts
- * and additions which unavoidably results in severe performance
- * penalties. Of course provided that the hardware is capable of
- * producing 2*N result... That's when you normally start
- * considering assembler implementation. However! It should be
- * pointed out that some CPUs (most notably Alpha, PowerPC and
- * upcoming IA-64 family:-) provide *separate* instruction
- * calculating the upper half of the product placing the result
- * into a general purpose register. Now *if* the compiler supports
- * inline assembler, then it's not impossible to implement the
- * "bignum" routines (and have the compiler optimize 'em)
- * exhibiting "native" performance in C. That's what BN_UMULT_HIGH
- * macro is about:-)
- *
- *                                      <appro@fy.chalmers.se>
+ * If the compiler doesn't support 2*N integer type, then you have to
+ * replace every N*N multiplication with 4 (N/2)*(N/2) accompanied by some
+ * shifts and additions which unavoidably results in severe performance
+ * penalties. Of course provided that the hardware is capable of producing
+ * 2*N result... That's when you normally start considering assembler
+ * implementation. However! It should be pointed out that some CPUs (e.g.,
+ * PowerPC, Alpha, and IA-64) provide *separate* instruction calculating
+ * the upper half of the product placing the result into a general
+ * purpose register. Now *if* the compiler supports inline assembler,
+ * then it's not impossible to implement the "bignum" routines (and have
+ * the compiler optimize 'em) exhibiting "native" performance in C. That's
+ * what BN_UMULT_HIGH macro is about:-) Note that more recent compilers do
+ * support 2*64 integer type, which is also used here.
  */
 #  if defined(__SIZEOF_INT128__) && __SIZEOF_INT128__==16 && \
-      (defined(SIXRY_FOUR_BIT) || defined(SIXTY_FOUR_BIT_LONG))
+      (defined(SIXTY_FOUR_BIT) || defined(SIXTY_FOUR_BIT_LONG))
 #   define BN_UMULT_HIGH(a,b)          (((__uint128_t)(a)*(b))>>64)
 #   define BN_UMULT_LOHI(low,high,a,b) ({       \
         __uint128_t ret=(__uint128_t)(a)*(b);   \
@@ -665,9 +667,5 @@ static ossl_inline BIGNUM *bn_expand(BIGNUM *a, int bits)
 
     return bn_expand2((a),(bits+BN_BITS2-1)/BN_BITS2);
 }
-
-#ifdef  __cplusplus
-}
-#endif
 
 #endif

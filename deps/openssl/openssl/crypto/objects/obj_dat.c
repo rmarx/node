@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -213,7 +213,7 @@ int OBJ_add_object(const ASN1_OBJECT *obj)
  err:
     for (i = ADDED_DATA; i <= ADDED_NID; i++)
         OPENSSL_free(ao[i]);
-    OPENSSL_free(o);
+    ASN1_OBJECT_free(o);
     return NID_undef;
 }
 
@@ -350,7 +350,7 @@ int OBJ_obj2nid(const ASN1_OBJECT *a)
 ASN1_OBJECT *OBJ_txt2obj(const char *s, int no_name)
 {
     int nid = NID_undef;
-    ASN1_OBJECT *op = NULL;
+    ASN1_OBJECT *op;
     unsigned char *buf;
     unsigned char *p;
     const unsigned char *cp;
@@ -376,8 +376,10 @@ ASN1_OBJECT *OBJ_txt2obj(const char *s, int no_name)
     if (j < 0)
         return NULL;
 
-    if ((buf = OPENSSL_malloc(j)) == NULL)
+    if ((buf = OPENSSL_malloc(j)) == NULL) {
+        OBJerr(OBJ_F_OBJ_TXT2OBJ, ERR_R_MALLOC_FAILURE);
         return NULL;
+    }
 
     p = buf;
     /* Write out tag+length */
@@ -632,6 +634,10 @@ const void *OBJ_bsearch_ex_(const void *key, const void *base_, int num,
     return p;
 }
 
+/*
+ * Parse a BIO sink to create some extra oid's objects.
+ * Line format:<OID:isdigit or '.']><isspace><SN><isspace><LN>
+ */
 int OBJ_create_objects(BIO *in)
 {
     char buf[512];
@@ -653,9 +659,9 @@ int OBJ_create_objects(BIO *in)
             *(s++) = '\0';
             while (ossl_isspace(*s))
                 s++;
-            if (*s == '\0')
+            if (*s == '\0') {
                 s = NULL;
-            else {
+            } else {
                 l = s;
                 while (*l != '\0' && !ossl_isspace(*l))
                     l++;
@@ -663,14 +669,17 @@ int OBJ_create_objects(BIO *in)
                     *(l++) = '\0';
                     while (ossl_isspace(*l))
                         l++;
-                    if (*l == '\0')
+                    if (*l == '\0') {
                         l = NULL;
-                } else
+                    }
+                } else {
                     l = NULL;
+                }
             }
-        } else
+        } else {
             s = NULL;
-        if ((o == NULL) || (*o == '\0'))
+        }
+        if (*o == '\0')
             return num;
         if (!OBJ_create(o, s, l))
             return num;

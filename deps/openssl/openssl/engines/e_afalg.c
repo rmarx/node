@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,13 +18,14 @@
 #include <openssl/engine.h>
 #include <openssl/async.h>
 #include <openssl/err.h>
+#include "internal/nelem.h"
 
 #include <sys/socket.h>
 #include <linux/version.h>
 #define K_MAJ   4
 #define K_MIN1  1
 #define K_MIN2  0
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(K_MAJ, K_MIN1, K_MIN2) || \
+#if LINUX_VERSION_CODE < KERNEL_VERSION(K_MAJ, K_MIN1, K_MIN2) || \
     !defined(AF_ALG)
 # ifndef PEDANTIC
 #  warning "AFALG ENGINE requires Kernel Headers >= 4.1.0"
@@ -78,7 +79,8 @@ static int afalg_create_sk(afalg_ctx *actx, const char *ciphertype,
 static int afalg_destroy(ENGINE *e);
 static int afalg_init(ENGINE *e);
 static int afalg_finish(ENGINE *e);
-const EVP_CIPHER *afalg_aes_128_cbc(void);
+static const EVP_CIPHER *afalg_aes_cbc(int nid);
+static cbc_handles *get_cipher_handle(int nid);
 static int afalg_ciphers(ENGINE *e, const EVP_CIPHER **cipher,
                          const int **nids, int nid);
 static int afalg_cipher_init(EVP_CIPHER_CTX *ctx, const unsigned char *key,
@@ -93,10 +95,14 @@ static const char *engine_afalg_id = "afalg";
 static const char *engine_afalg_name = "AFALG engine support";
 
 static int afalg_cipher_nids[] = {
-    NID_aes_128_cbc
+    NID_aes_128_cbc,
+    NID_aes_192_cbc,
+    NID_aes_256_cbc,
 };
 
-static EVP_CIPHER *_hidden_aes_128_cbc = NULL;
+static cbc_handles cbc_handle[] = {{AES_KEY_SIZE_128, NULL},
+                                    {AES_KEY_SIZE_192, NULL},
+                                    {AES_KEY_SIZE_256, NULL}};
 
 static ossl_inline int io_setup(unsigned n, aio_context_t *ctx)
 {
@@ -105,7 +111,7 @@ static ossl_inline int io_setup(unsigned n, aio_context_t *ctx)
 
 static ossl_inline int eventfd(int n)
 {
-    return syscall(__NR_eventfd, n);
+    return syscall(__NR_eventfd2, n, 0);
 }
 
 static ossl_inline int io_destroy(aio_context_t ctx)
@@ -142,10 +148,10 @@ static int afalg_setup_async_event_notification(afalg_aio *aio)
         /* Async mode */
         waitctx = ASYNC_get_wait_ctx(job);
         if (waitctx == NULL) {
-            ALG_WARN("%s: ASYNC_get_wait_ctx error", __func__);
+            ALG_WARN("%s(%d): ASYNC_get_wait_ctx error", __FILE__, __LINE__);
             return 0;
         }
-        /* Get waitfd from ASYNC_WAIT_CTX if it is alreday set */
+        /* Get waitfd from ASYNC_WAIT_CTX if it is already set */
         ret = ASYNC_WAIT_CTX_get_fd(waitctx, engine_afalg_id,
                                     &aio->efd, &custom);
         if (ret == 0) {
@@ -155,7 +161,8 @@ static int afalg_setup_async_event_notification(afalg_aio *aio)
              */
             aio->efd = eventfd(0);
             if (aio->efd == -1) {
-                ALG_PERR("%s: Failed to get eventfd : ", __func__);
+                ALG_PERR("%s(%d): Failed to get eventfd : ", __FILE__,
+                         __LINE__);
                 AFALGerr(AFALG_F_AFALG_SETUP_ASYNC_EVENT_NOTIFICATION,
                          AFALG_R_EVENTFD_FAILED);
                 return 0;
@@ -164,14 +171,14 @@ static int afalg_setup_async_event_notification(afalg_aio *aio)
                                              aio->efd, custom,
                                              afalg_waitfd_cleanup);
             if (ret == 0) {
-                ALG_WARN("%s: Failed to set wait fd", __func__);
+                ALG_WARN("%s(%d): Failed to set wait fd", __FILE__, __LINE__);
                 close(aio->efd);
                 return 0;
             }
             /* make fd non-blocking in async mode */
             if (fcntl(aio->efd, F_SETFL, O_NONBLOCK) != 0) {
-                ALG_WARN("%s: Failed to set event fd as NONBLOCKING",
-                         __func__);
+                ALG_WARN("%s(%d): Failed to set event fd as NONBLOCKING",
+                         __FILE__, __LINE__);
             }
         }
         aio->mode = MODE_ASYNC;
@@ -179,7 +186,7 @@ static int afalg_setup_async_event_notification(afalg_aio *aio)
         /* Sync mode */
         aio->efd = eventfd(0);
         if (aio->efd == -1) {
-            ALG_PERR("%s: Failed to get eventfd : ", __func__);
+            ALG_PERR("%s(%d): Failed to get eventfd : ", __FILE__, __LINE__);
             AFALGerr(AFALG_F_AFALG_SETUP_ASYNC_EVENT_NOTIFICATION,
                      AFALG_R_EVENTFD_FAILED);
             return 0;
@@ -189,7 +196,7 @@ static int afalg_setup_async_event_notification(afalg_aio *aio)
     return 1;
 }
 
-int afalg_init_aio(afalg_aio *aio)
+static int afalg_init_aio(afalg_aio *aio)
 {
     int r = -1;
 
@@ -197,7 +204,7 @@ int afalg_init_aio(afalg_aio *aio)
     aio->aio_ctx = 0;
     r = io_setup(MAX_INFLIGHTS, &aio->aio_ctx);
     if (r < 0) {
-        ALG_PERR("%s: io_setup error : ", __func__);
+        ALG_PERR("%s(%d): io_setup error : ", __FILE__, __LINE__);
         AFALGerr(AFALG_F_AFALG_INIT_AIO, AFALG_R_IO_SETUP_FAILED);
         return 0;
     }
@@ -209,8 +216,8 @@ int afalg_init_aio(afalg_aio *aio)
     return 1;
 }
 
-int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
-                         size_t len)
+static int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
+                                size_t len)
 {
     int r;
     int retry = 0;
@@ -251,7 +258,7 @@ int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
      */
     r = io_read(aio->aio_ctx, 1, &cb);
     if (r < 0) {
-        ALG_PWARN("%s: io_read failed : ", __func__);
+        ALG_PWARN("%s(%d): io_read failed : ", __FILE__, __LINE__);
         return 0;
     }
 
@@ -264,11 +271,11 @@ int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
         if (r < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
-            ALG_PERR("%s: read failed for event fd : ", __func__);
+            ALG_PERR("%s(%d): read failed for event fd : ", __FILE__, __LINE__);
             return 0;
         } else if (r == 0 || eval <= 0) {
-            ALG_WARN("%s: eventfd read %d bytes, eval = %lu\n", __func__, r,
-                     eval);
+            ALG_WARN("%s(%d): eventfd read %d bytes, eval = %lu\n", __FILE__,
+                     __LINE__, r, eval);
         }
         if (eval > 0) {
 
@@ -288,8 +295,8 @@ int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
                     if (events[0].res == -EBUSY && retry++ < 3) {
                         r = io_read(aio->aio_ctx, 1, &cb);
                         if (r < 0) {
-                            ALG_PERR("%s: retry %d for io_read failed : ",
-                                     __func__, retry);
+                            ALG_PERR("%s(%d): retry %d for io_read failed : ",
+                                     __FILE__, __LINE__, retry);
                             return 0;
                         }
                         continue;
@@ -299,18 +306,19 @@ int afalg_fin_cipher_aio(afalg_aio *aio, int sfd, unsigned char *buf,
                          * condition for this instance of operation.
                          */
                         ALG_WARN
-                            ("%s: Crypto Operation failed with code %lld\n",
-                             __func__, events[0].res);
+                            ("%s(%d): Crypto Operation failed with code %lld\n",
+                             __FILE__, __LINE__, events[0].res);
                         return 0;
                     }
                 }
                 /* Operation successful. */
                 done = 1;
             } else if (r < 0) {
-                ALG_PERR("%s: io_getevents failed : ", __func__);
+                ALG_PERR("%s(%d): io_getevents failed : ", __FILE__, __LINE__);
                 return 0;
             } else {
-                ALG_WARN("%s: io_geteventd read 0 bytes\n", __func__);
+                ALG_WARN("%s(%d): io_geteventd read 0 bytes\n", __FILE__,
+                         __LINE__);
             }
         }
     } while (!done);
@@ -346,11 +354,10 @@ static ossl_inline int afalg_set_key(afalg_ctx *actx, const unsigned char *key,
     int ret;
     ret = setsockopt(actx->bfd, SOL_ALG, ALG_SET_KEY, key, klen);
     if (ret < 0) {
-        ALG_PERR("%s: Failed to set socket option : ", __func__);
+        ALG_PERR("%s(%d): Failed to set socket option : ", __FILE__, __LINE__);
         AFALGerr(AFALG_F_AFALG_SET_KEY, AFALG_R_SOCKET_SET_KEY_FAILED);
         return 0;
     }
-
     return 1;
 }
 
@@ -371,21 +378,21 @@ static int afalg_create_sk(afalg_ctx *actx, const char *ciphertype,
 
     actx->bfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
     if (actx->bfd == -1) {
-        ALG_PERR("%s: Failed to open socket : ", __func__);
+        ALG_PERR("%s(%d): Failed to open socket : ", __FILE__, __LINE__);
         AFALGerr(AFALG_F_AFALG_CREATE_SK, AFALG_R_SOCKET_CREATE_FAILED);
         goto err;
     }
 
     r = bind(actx->bfd, (struct sockaddr *)&sa, sizeof(sa));
     if (r < 0) {
-        ALG_PERR("%s: Failed to bind socket : ", __func__);
+        ALG_PERR("%s(%d): Failed to bind socket : ", __FILE__, __LINE__);
         AFALGerr(AFALG_F_AFALG_CREATE_SK, AFALG_R_SOCKET_BIND_FAILED);
         goto err;
     }
 
     actx->sfd = accept(actx->bfd, NULL, 0);
     if (actx->sfd < 0) {
-        ALG_PERR("%s: Socket Accept Failed : ", __func__);
+        ALG_PERR("%s(%d): Socket Accept Failed : ", __FILE__, __LINE__);
         AFALGerr(AFALG_F_AFALG_CREATE_SK, AFALG_R_SOCKET_ACCEPT_FAILED);
         goto err;
     }
@@ -447,8 +454,8 @@ static int afalg_start_cipher_sk(afalg_ctx *actx, const unsigned char *in,
     /* Sendmsg() sends iv and cipher direction to the kernel */
     sbytes = sendmsg(actx->sfd, &msg, 0);
     if (sbytes < 0) {
-        ALG_PERR("%s: sendmsg failed for zero copy cipher operation : ",
-                 __func__);
+        ALG_PERR("%s(%d): sendmsg failed for zero copy cipher operation : ",
+                 __FILE__, __LINE__);
         return 0;
     }
 
@@ -458,13 +465,13 @@ static int afalg_start_cipher_sk(afalg_ctx *actx, const unsigned char *in,
      */
     ret = vmsplice(actx->zc_pipe[1], &iov, 1, SPLICE_F_GIFT);
     if (ret < 0) {
-        ALG_PERR("%s: vmsplice failed : ", __func__);
+        ALG_PERR("%s(%d): vmsplice failed : ", __FILE__, __LINE__);
         return 0;
     }
 
     ret = splice(actx->zc_pipe[0], NULL, actx->sfd, NULL, inl, 0);
     if (ret < 0) {
-        ALG_PERR("%s: splice failed : ", __func__);
+        ALG_PERR("%s(%d): splice failed : ", __FILE__, __LINE__);
         return 0;
     }
 # else
@@ -474,7 +481,8 @@ static int afalg_start_cipher_sk(afalg_ctx *actx, const unsigned char *in,
     /* Sendmsg() sends iv, cipher direction and input data to the kernel */
     sbytes = sendmsg(actx->sfd, &msg, 0);
     if (sbytes < 0) {
-        ALG_PERR("%s: sendmsg failed for cipher operation : ", __func__);
+        ALG_PERR("%s(%d): sendmsg failed for cipher operation : ", __FILE__,
+                 __LINE__);
         return 0;
     }
 
@@ -497,35 +505,38 @@ static int afalg_cipher_init(EVP_CIPHER_CTX *ctx, const unsigned char *key,
     char ciphername[ALG_MAX_SALG_NAME];
 
     if (ctx == NULL || key == NULL) {
-        ALG_WARN("%s: Null Parameter\n", __func__);
+        ALG_WARN("%s(%d): Null Parameter\n", __FILE__, __LINE__);
         return 0;
     }
 
     if (EVP_CIPHER_CTX_cipher(ctx) == NULL) {
-        ALG_WARN("%s: Cipher object NULL\n", __func__);
+        ALG_WARN("%s(%d): Cipher object NULL\n", __FILE__, __LINE__);
         return 0;
     }
 
     actx = EVP_CIPHER_CTX_get_cipher_data(ctx);
     if (actx == NULL) {
-        ALG_WARN("%s: Cipher data NULL\n", __func__);
+        ALG_WARN("%s(%d): Cipher data NULL\n", __FILE__, __LINE__);
         return 0;
     }
 
     ciphertype = EVP_CIPHER_CTX_nid(ctx);
     switch (ciphertype) {
     case NID_aes_128_cbc:
+    case NID_aes_192_cbc:
+    case NID_aes_256_cbc:
         strncpy(ciphername, "cbc(aes)", ALG_MAX_SALG_NAME);
         break;
     default:
-        ALG_WARN("%s: Unsupported Cipher type %d\n", __func__, ciphertype);
+        ALG_WARN("%s(%d): Unsupported Cipher type %d\n", __FILE__, __LINE__,
+                 ciphertype);
         return 0;
     }
     ciphername[ALG_MAX_SALG_NAME-1]='\0';
 
     if (ALG_AES_IV_LEN != EVP_CIPHER_CTX_iv_length(ctx)) {
-        ALG_WARN("%s: Unsupported IV length :%d\n", __func__,
-                EVP_CIPHER_CTX_iv_length(ctx));
+        ALG_WARN("%s(%d): Unsupported IV length :%d\n", __FILE__, __LINE__,
+                 EVP_CIPHER_CTX_iv_length(ctx));
         return 0;
     }
 
@@ -565,7 +576,8 @@ static int afalg_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
     char nxtiv[ALG_AES_IV_LEN] = { 0 };
 
     if (ctx == NULL || out == NULL || in == NULL) {
-        ALG_WARN("NULL parameter passed to function %s\n", __func__);
+        ALG_WARN("NULL parameter passed to function %s(%d)\n", __FILE__,
+                 __LINE__);
         return 0;
     }
 
@@ -612,7 +624,8 @@ static int afalg_cipher_cleanup(EVP_CIPHER_CTX *ctx)
     afalg_ctx *actx;
 
     if (ctx == NULL) {
-        ALG_WARN("NULL parameter passed to function %s\n", __func__);
+        ALG_WARN("NULL parameter passed to function %s(%d)\n", __FILE__,
+                 __LINE__);
         return 0;
     }
 
@@ -637,29 +650,45 @@ static int afalg_cipher_cleanup(EVP_CIPHER_CTX *ctx)
     return 1;
 }
 
-const EVP_CIPHER *afalg_aes_128_cbc(void)
+static cbc_handles *get_cipher_handle(int nid)
 {
-    if (_hidden_aes_128_cbc == NULL
-        && ((_hidden_aes_128_cbc =
-             EVP_CIPHER_meth_new(NID_aes_128_cbc,
-                                 AES_BLOCK_SIZE,
-                                 AES_KEY_SIZE_128)) == NULL
-            || !EVP_CIPHER_meth_set_iv_length(_hidden_aes_128_cbc, AES_IV_LEN)
-            || !EVP_CIPHER_meth_set_flags(_hidden_aes_128_cbc,
-                                          EVP_CIPH_CBC_MODE |
-                                          EVP_CIPH_FLAG_DEFAULT_ASN1)
-            || !EVP_CIPHER_meth_set_init(_hidden_aes_128_cbc,
-                                         afalg_cipher_init)
-            || !EVP_CIPHER_meth_set_do_cipher(_hidden_aes_128_cbc,
-                                              afalg_do_cipher)
-            || !EVP_CIPHER_meth_set_cleanup(_hidden_aes_128_cbc,
-                                            afalg_cipher_cleanup)
-            || !EVP_CIPHER_meth_set_impl_ctx_size(_hidden_aes_128_cbc,
-                                                  sizeof(afalg_ctx)))) {
-        EVP_CIPHER_meth_free(_hidden_aes_128_cbc);
-        _hidden_aes_128_cbc = NULL;
+    switch (nid) {
+    case NID_aes_128_cbc:
+        return &cbc_handle[AES_CBC_128];
+    case NID_aes_192_cbc:
+        return &cbc_handle[AES_CBC_192];
+    case NID_aes_256_cbc:
+        return &cbc_handle[AES_CBC_256];
+    default:
+        return NULL;
     }
-    return _hidden_aes_128_cbc;
+}
+
+static const EVP_CIPHER *afalg_aes_cbc(int nid)
+{
+    cbc_handles *cipher_handle = get_cipher_handle(nid);
+    if (cipher_handle->_hidden == NULL
+        && ((cipher_handle->_hidden =
+         EVP_CIPHER_meth_new(nid,
+                             AES_BLOCK_SIZE,
+                             cipher_handle->key_size)) == NULL
+        || !EVP_CIPHER_meth_set_iv_length(cipher_handle->_hidden,
+                                          AES_IV_LEN)
+        || !EVP_CIPHER_meth_set_flags(cipher_handle->_hidden,
+                                      EVP_CIPH_CBC_MODE |
+                                      EVP_CIPH_FLAG_DEFAULT_ASN1)
+        || !EVP_CIPHER_meth_set_init(cipher_handle->_hidden,
+                                     afalg_cipher_init)
+        || !EVP_CIPHER_meth_set_do_cipher(cipher_handle->_hidden,
+                                          afalg_do_cipher)
+        || !EVP_CIPHER_meth_set_cleanup(cipher_handle->_hidden,
+                                        afalg_cipher_cleanup)
+        || !EVP_CIPHER_meth_set_impl_ctx_size(cipher_handle->_hidden,
+                                              sizeof(afalg_ctx)))) {
+        EVP_CIPHER_meth_free(cipher_handle->_hidden);
+        cipher_handle->_hidden= NULL;
+    }
+    return cipher_handle->_hidden;
 }
 
 static int afalg_ciphers(ENGINE *e, const EVP_CIPHER **cipher,
@@ -674,19 +703,21 @@ static int afalg_ciphers(ENGINE *e, const EVP_CIPHER **cipher,
 
     switch (nid) {
     case NID_aes_128_cbc:
-        *cipher = afalg_aes_128_cbc();
+    case NID_aes_192_cbc:
+    case NID_aes_256_cbc:
+        *cipher = afalg_aes_cbc(nid);
         break;
     default:
         *cipher = NULL;
         r = 0;
     }
-
     return r;
 }
 
 static int bind_afalg(ENGINE *e)
 {
     /* Ensure the afalg error handling is set up */
+    unsigned short i;
     ERR_load_AFALG_strings();
 
     if (!ENGINE_set_id(e, engine_afalg_id)
@@ -699,13 +730,15 @@ static int bind_afalg(ENGINE *e)
     }
 
     /*
-     * Create _hidden_aes_128_cbc by calling afalg_aes_128_cbc
+     * Create _hidden_aes_xxx_cbc by calling afalg_aes_xxx_cbc
      * now, as bind_aflag can only be called by one thread at a
      * time.
      */
-    if (afalg_aes_128_cbc() == NULL) {
-        AFALGerr(AFALG_F_BIND_AFALG, AFALG_R_INIT_FAILED);
-        return 0;
+    for(i = 0; i < OSSL_NELEM(afalg_cipher_nids); i++) {
+        if (afalg_aes_cbc(afalg_cipher_nids[i]) == NULL) {
+            AFALGerr(AFALG_F_BIND_AFALG, AFALG_R_INIT_FAILED);
+            return 0;
+        }
     }
 
     if (!ENGINE_set_ciphers(e, afalg_ciphers)) {
@@ -817,11 +850,20 @@ static int afalg_finish(ENGINE *e)
     return 1;
 }
 
+static int free_cbc(void)
+{
+    short unsigned int i;
+    for(i = 0; i < OSSL_NELEM(afalg_cipher_nids); i++) {
+        EVP_CIPHER_meth_free(cbc_handle[i]._hidden);
+        cbc_handle[i]._hidden = NULL;
+    }
+    return 1;
+}
+
 static int afalg_destroy(ENGINE *e)
 {
     ERR_unload_AFALG_strings();
-    EVP_CIPHER_meth_free(_hidden_aes_128_cbc);
-    _hidden_aes_128_cbc = NULL;
+    free_cbc();
     return 1;
 }
 

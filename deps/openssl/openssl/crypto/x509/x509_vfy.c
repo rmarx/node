@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -366,6 +366,7 @@ static STACK_OF(X509) *lookup_certs_sk(X509_STORE_CTX *ctx, X509_NAME *nm)
     STACK_OF(X509) *sk = NULL;
     X509 *x;
     int i;
+
     for (i = 0; i < sk_X509_num(ctx->other_ctx); i++) {
         x = sk_X509_value(ctx->other_ctx, i);
         if (X509_NAME_cmp(nm, X509_get_subject_name(x)) == 0) {
@@ -373,6 +374,8 @@ static STACK_OF(X509) *lookup_certs_sk(X509_STORE_CTX *ctx, X509_NAME *nm)
                 sk = sk_X509_new_null();
             if (sk == NULL || sk_X509_push(sk, x) == 0) {
                 sk_X509_pop_free(sk, X509_free);
+                X509err(X509_F_LOOKUP_CERTS_SK, ERR_R_MALLOC_FAILURE);
+                ctx->error = X509_V_ERR_OUT_OF_MEM;
                 return NULL;
             }
             X509_up_ref(x);
@@ -557,6 +560,27 @@ static int check_chain_extensions(X509_STORE_CTX *ctx)
     return 1;
 }
 
+static int has_san_id(X509 *x, int gtype)
+{
+    int i;
+    int ret = 0;
+    GENERAL_NAMES *gs = X509_get_ext_d2i(x, NID_subject_alt_name, NULL, NULL);
+
+    if (gs == NULL)
+        return 0;
+
+    for (i = 0; i < sk_GENERAL_NAME_num(gs); i++) {
+        GENERAL_NAME *g = sk_GENERAL_NAME_value(gs, i);
+
+        if (g->type == gtype) {
+            ret = 1;
+            break;
+        }
+    }
+    GENERAL_NAMES_free(gs);
+    return ret;
+}
+
 static int check_name_constraints(X509_STORE_CTX *ctx)
 {
     int i;
@@ -655,7 +679,12 @@ static int check_name_constraints(X509_STORE_CTX *ctx)
                 int rv = NAME_CONSTRAINTS_check(x, nc);
 
                 /* If EE certificate check commonName too */
-                if (rv == X509_V_OK && i == 0)
+                if (rv == X509_V_OK && i == 0
+                    && (ctx->param->hostflags
+                        & X509_CHECK_FLAG_NEVER_CHECK_SUBJECT) == 0
+                    && ((ctx->param->hostflags
+                         & X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT) != 0
+                        || !has_san_id(x, GEN_DNS)))
                     rv = NAME_CONSTRAINTS_check_CN(x, nc);
 
                 switch (rv) {

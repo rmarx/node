@@ -1,4 +1,4 @@
-# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -20,8 +20,9 @@ $VERSION = "0.8";
                                    perlapp perltest subtest));
 @EXPORT_OK = (@Test::More::EXPORT_OK, qw(bldtop_dir bldtop_file
                                          srctop_dir srctop_file
-                                         data_file
-                                         pipe with cmdstr quotify));
+                                         data_file data_dir
+                                         pipe with cmdstr quotify
+                                         openssl_versions));
 
 =head1 NAME
 
@@ -93,7 +94,7 @@ my %hooks = (
     # exit_checker is used by run() directly after completion of a command.
     # it receives the exit code from that command and is expected to return
     # 1 (for success) or 0 (for failure).  This is the status value that run()
-    # will give back (through the |statusvar| referens and as returned value
+    # will give back (through the |statusvar| reference and as returned value
     # when capture => 1 doesn't apply).
     exit_checker => sub { return shift == 0 ? 1 : 0 },
 
@@ -476,7 +477,9 @@ sub run {
 	}
 	close $pipe;
     } else {
+	$ENV{HARNESS_OSSL_PREFIX} = "# ";
 	system("$prefix$cmd");
+	delete $ENV{HARNESS_OSSL_PREFIX};
     }
     $e = ($? & 0x7f) ? ($? & 0x7f)|0x80 : ($? >> 8);
     $r = $hooks{exit_checker}->($e);
@@ -604,6 +607,23 @@ sub srctop_file {
 
 =over 4
 
+=item B<data_dir LIST>
+
+LIST is a list of directories that make up a path from the data directory
+associated with the test (see L</DESCRIPTION> above).
+C<data_dir> returns the resulting directory as a string, adapted to the local
+operating system.
+
+=back
+
+=cut
+
+sub data_dir {
+    return __data_dir(@_);
+}
+
+=over 4
+
 =item B<data_file LIST, FILENAME>
 
 LIST is a list of directories that make up a path from the data directory
@@ -661,7 +681,7 @@ sub pipe {
 
 =item B<with HASHREF, CODEREF>
 
-C<with> will temporarly install hooks given by the HASHREF and then execute
+C<with> will temporarily install hooks given by the HASHREF and then execute
 the given CODEREF.  Hooks are usually expected to have a coderef as value.
 
 The currently available hoosk are:
@@ -707,7 +727,7 @@ sub with {
 C<cmdstr> takes a CODEREF from C<app> or C<test> and simply returns the
 command as a string.
 
-C<cmdstr> takes some additiona options OPTS that affect the string returned:
+C<cmdstr> takes some additional options OPTS that affect the string returned:
 
 =over 4
 
@@ -758,12 +778,13 @@ I<This must never ever be done on VMS.>
 sub quotify {
     # Unix setup (default if nothing else is mentioned)
     my $arg_formatter =
-	sub { $_ = shift; /\s|[\{\}\\\$\[\]\*\?\|\&:;<>]/ ? "'$_'" : $_ };
+	sub { $_ = shift;
+	      ($_ eq '' || /\s|[\{\}\\\$\[\]\*\?\|\&:;<>]/) ? "'$_'" : $_ };
 
     if ( $^O eq "VMS") {	# VMS setup
 	$arg_formatter = sub {
 	    $_ = shift;
-	    if (/\s|["[:upper:]]/) {
+	    if ($_ eq '' || /\s|["[:upper:]]/) {
 		s/"/""/g;
 		'"'.$_.'"';
 	    } else {
@@ -773,7 +794,7 @@ sub quotify {
     } elsif ( $^O eq "MSWin32") { # MSWin setup
 	$arg_formatter = sub {
 	    $_ = shift;
-	    if (/\s|["\|\&\*\;<>]/) {
+	    if ($_ eq '' || /\s|["\|\&\*\;<>]/) {
 		s/(["\\])/\\$1/g;
 		'"'.$_.'"';
 	    } else {
@@ -783,6 +804,32 @@ sub quotify {
     }
 
     return map { $arg_formatter->($_) } @_;
+}
+
+=over 4
+
+=item B<openssl_versions>
+
+Returns a list of two numbers, the first representing the build version,
+the second representing the library version.  See opensslv.h for more
+information on those numbers.
+
+= back
+
+=cut
+
+my @versions = ();
+sub openssl_versions {
+    unless (@versions) {
+        my %lines =
+            map { s/\R$//;
+                  /^(.*): (0x[[:xdigit:]]{8})$/;
+                  die "Weird line: $_" unless defined $1;
+                  $1 => hex($2) }
+            run(test(['versions']), capture => 1);
+        @versions = ( $lines{'Build version'}, $lines{'Library version'} );
+    }
+    return @versions;
 }
 
 ######################################################################
@@ -937,6 +984,12 @@ sub __data_file {
     return catfile($directories{SRCDATA},@_,$f);
 }
 
+sub __data_dir {
+    BAIL_OUT("Must run setup() first") if (! $test_name);
+
+    return catdir($directories{SRCDATA},@_);
+}
+
 sub __results_file {
     BAIL_OUT("Must run setup() first") if (! $test_name);
 
@@ -1015,7 +1068,7 @@ sub __cwd {
     }
 
     # We put back new values carefully.  Doing the obvious
-    # %directories = ( %tmp_irectories )
+    # %directories = ( %tmp_directories )
     # will clear out any value that happens to be an absolute path
     foreach (keys %tmp_directories) {
         $directories{$_} = $tmp_directories{$_};
@@ -1146,7 +1199,7 @@ L<Test::More>, L<Test::Harness>
 
 =head1 AUTHORS
 
-Richard Levitte E<lt>levitte@openssl.orgE<gt> with assitance and
+Richard Levitte E<lt>levitte@openssl.orgE<gt> with assistance and
 inspiration from Andy Polyakov E<lt>appro@openssl.org<gt>.
 
 =cut

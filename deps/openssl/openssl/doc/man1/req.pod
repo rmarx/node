@@ -2,6 +2,7 @@
 
 =head1 NAME
 
+openssl-req,
 req - PKCS#10 certificate request and certificate generating utility
 
 =head1 SYNOPSIS
@@ -36,6 +37,7 @@ B<openssl> B<req>
 [B<-days n>]
 [B<-set_serial n>]
 [B<-newhdr>]
+[B<-addext ext>]
 [B<-extensions section>]
 [B<-reqexts section>]
 [B<-precert>]
@@ -207,7 +209,7 @@ the configuration file.
 
 Some public key algorithms may override this choice. For instance, DSA
 signatures always use SHA1, GOST R 34.10 signatures always use
-GOST R 34.11-94 (B<-md_gost94>).
+GOST R 34.11-94 (B<-md_gost94>), Ed25519 and Ed448 never use any digest.
 
 =item B<-config filename>
 
@@ -219,8 +221,10 @@ see L<openssl(1)/COMMAND SUMMARY>.
 
 Sets subject name for new request or supersedes the subject name
 when processing a request.
-The arg must be formatted as I</type0=value0/type1=value1/type2=...>,
-characters may be escaped by \ (backslash), no spaces are skipped.
+The arg must be formatted as I</type0=value0/type1=value1/type2=...>.
+Keyword characters may be escaped by \ (backslash), and whitespace is retained.
+Empty values are permitted, but the corresponding type will not be included
+in the request.
 
 =item B<-multivalue-rdn>
 
@@ -246,12 +250,21 @@ to the self signed certificate otherwise new request is created.
 =item B<-days n>
 
 When the B<-x509> option is being used this specifies the number of
-days to certify the certificate for. The default is 30 days.
+days to certify the certificate for, otherwise it is ignored. B<n> should
+be a positive integer. The default is 30 days.
 
 =item B<-set_serial n>
 
 Serial number to use when outputting a self signed certificate. This
 may be specified as a decimal value or a hex value if preceded by B<0x>.
+
+=item B<-addext ext>
+
+Add a specific extension to the certificate (if the B<-x509> option is
+present) or certificate request.  The argument must have the form of
+a key=value pair as it would appear in a config file.
+
+This option can be given multiple times.
 
 =item B<-extensions section>
 
@@ -383,10 +396,10 @@ option. For compatibility B<encrypt_rsa_key> is an equivalent option.
 
 =item B<default_md>
 
-This option specifies the digest algorithm to use.
-Any digest supported by the OpenSSL B<dgst> command can be used.
-If not present then MD5 is used.
-This option can be overridden on the command line.
+This option specifies the digest algorithm to use. Any digest supported by the
+OpenSSL B<dgst> command can be used. This option can be overridden on the
+command line. Certain signing algorithms (i.e. Ed25519 and Ed448) will ignore
+any digest that has been set.
 
 =item B<string_mask>
 
@@ -589,6 +602,14 @@ Sample configuration containing all field values:
  [ req_attributes ]
  challengePassword              = A challenge password
 
+Example of giving the most common attributes (subject and extensions)
+on the command line:
+
+ openssl req -new -subj "/C=GB/CN=foo" \
+                  -addext "subjectAltName = DNS:foo.co.uk" \
+                  -addext "certificatePolicies = 1.2.3.4" \
+                  -newkey rsa:2048 -keyout key.pem -out req.pem
+
 
 =head1 NOTES
 
@@ -668,7 +689,7 @@ L<x509v3_config(5)>
 
 =head1 COPYRIGHT
 
-Copyright 2000-2017 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2000-2018 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the OpenSSL license (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

@@ -1,5 +1,5 @@
 /*
- * Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2001-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,7 +17,7 @@
 
 UI *UI_new(void)
 {
-    return (UI_new_method(NULL));
+    return UI_new_method(NULL);
 }
 
 UI *UI_new_method(const UI_METHOD *method)
@@ -374,9 +374,10 @@ char *UI_construct_prompt(UI *ui, const char *object_desc,
             len += sizeof(prompt2) - 1 + strlen(object_name);
         len += sizeof(prompt3) - 1;
 
-        prompt = OPENSSL_malloc(len + 1);
-        if (prompt == NULL)
+        if ((prompt = OPENSSL_malloc(len + 1)) == NULL) {
+            UIerr(UI_F_UI_CONSTRUCT_PROMPT, ERR_R_MALLOC_FAILURE);
             return NULL;
+        }
         OPENSSL_strlcpy(prompt, prompt1, len + 1);
         OPENSSL_strlcat(prompt, object_desc, len + 1);
         if (object_name != NULL) {
@@ -572,12 +573,12 @@ int UI_ctrl(UI *ui, int cmd, long i, void *p, void (*f) (void))
 
 int UI_set_ex_data(UI *r, int idx, void *arg)
 {
-    return (CRYPTO_set_ex_data(&r->ex_data, idx, arg));
+    return CRYPTO_set_ex_data(&r->ex_data, idx, arg);
 }
 
 void *UI_get_ex_data(UI *r, int idx)
 {
-    return (CRYPTO_get_ex_data(&r->ex_data, idx));
+    return CRYPTO_get_ex_data(&r->ex_data, idx);
 }
 
 const UI_METHOD *UI_get_method(UI *ui)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL licenses, (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ struct async_ctrs {
     unsigned int wctr;
 };
 
-static const BIO_METHOD *bio_f_async_filter()
+static const BIO_METHOD *bio_f_async_filter(void)
 {
     if (methods_async == NULL) {
         methods_async = BIO_meth_new(BIO_TYPE_ASYNC_FILTER, "Async filter");
@@ -146,7 +146,7 @@ static int async_write(BIO *bio, const char *in, int inl)
                 return -1;
 
             while (PACKET_remaining(&pkt) > 0) {
-                PACKET payload, wholebody;
+                PACKET payload, wholebody, sessionid, extensions;
                 unsigned int contenttype, versionhi, versionlo, data;
                 unsigned int msgtype = 0, negversion = 0;
 
@@ -164,11 +164,43 @@ static int async_write(BIO *bio, const char *in, int inl)
                         && !PACKET_get_1(&wholebody, &msgtype))
                     return -1;
 
-                if (msgtype == SSL3_MT_SERVER_HELLO
-                        && (!PACKET_forward(&wholebody,
+                if (msgtype == SSL3_MT_SERVER_HELLO) {
+                    if (!PACKET_forward(&wholebody,
                                             SSL3_HM_HEADER_LENGTH - 1)
-                            || !PACKET_get_net_2(&wholebody, &negversion)))
-                    return -1;
+                            || !PACKET_get_net_2(&wholebody, &negversion)
+                               /* Skip random (32 bytes) */
+                            || !PACKET_forward(&wholebody, 32)
+                               /* Skip session id */
+                            || !PACKET_get_length_prefixed_1(&wholebody,
+                                                             &sessionid)
+                               /*
+                                * Skip ciphersuite (2 bytes) and compression
+                                * method (1 byte)
+                                */
+                            || !PACKET_forward(&wholebody, 2 + 1)
+                            || !PACKET_get_length_prefixed_2(&wholebody,
+                                                             &extensions))
+                        return -1;
+
+                    /*
+                     * Find the negotiated version in supported_versions
+                     * extension, if present.
+                     */
+                    while (PACKET_remaining(&extensions)) {
+                        unsigned int type;
+                        PACKET extbody;
+
+                        if (!PACKET_get_net_2(&extensions, &type)
+                                || !PACKET_get_length_prefixed_2(&extensions,
+                                &extbody))
+                            return -1;
+
+                        if (type == TLSEXT_TYPE_supported_versions
+                                && (!PACKET_get_net_2(&extbody, &negversion)
+                                    || PACKET_remaining(&extbody) != 0))
+                            return -1;
+                    }
+                }
 
                 while (PACKET_get_1(&payload, &data)) {
                     /* Create a new one byte long record for each byte in the
@@ -195,11 +227,9 @@ static int async_write(BIO *bio, const char *in, int inl)
                 /*
                  * We can't fragment anything after the ServerHello (or CCS <=
                  * TLS1.2), otherwise we get a bad record MAC
-                 * TODO(TLS1.3): Change TLS1_3_VERSION_DRAFT to TLS1_3_VERSION
-                 * before release
                  */
                 if (contenttype == SSL3_RT_CHANGE_CIPHER_SPEC
-                        || (negversion == TLS1_3_VERSION_DRAFT
+                        || (negversion == TLS1_3_VERSION
                             && msgtype == SSL3_MT_SERVER_HELLO)) {
                     fragment = 0;
                     break;
@@ -267,7 +297,8 @@ static int test_asyncio(int test)
     char buf[sizeof(testdata)];
 
     if (!TEST_true(create_ssl_ctx_pair(TLS_server_method(), TLS_client_method(),
-                             &serverctx, &clientctx, cert, privkey)))
+                                       TLS1_VERSION, TLS_MAX_VERSION,
+                                       &serverctx, &clientctx, cert, privkey)))
         goto end;
 
     /*

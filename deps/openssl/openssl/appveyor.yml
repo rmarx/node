@@ -22,15 +22,16 @@ before_build:
         }
     - ps: >-
         If ($env:Configuration -Match "shared") {
-            $env:SHARED=""
+            $env:SHARED="no-makedepend"
         } Else {
-            $env:SHARED="no-shared"
+            $env:SHARED="no-shared no-makedepend"
         }
     - ps: $env:VSCOMNTOOLS=(Get-Content ("env:VS" + "$env:VSVER" + "0COMNTOOLS"))
     - call "%VSCOMNTOOLS%\..\..\VC\vcvarsall.bat" %VCVARS_PLATFORM%
     - mkdir _build
     - cd _build
     - perl ..\Configure %TARGET% %SHARED%
+    - perl configdata.pm --dump
     - cd ..
     - ps: >-
         if (-not $env:APPVEYOR_PULL_REQUEST_NUMBER`
@@ -42,7 +43,8 @@ build_script:
     - cd _build
     - ps: >-
         If ($env:Configuration -Match "shared" -or $env:EXTENDED_TESTS) {
-            cmd /c "nmake 2>&1"
+            cmd /c "nmake build_all_generated 2>&1"
+            cmd /c "nmake PERL=no-perl 2>&1"
         }
     - cd ..
 
@@ -59,6 +61,6 @@ test_script:
     - ps: >-
         if ($env:EXTENDED_TESTS) {
             mkdir ..\_install
-            cmd /c "nmake install install_docs DESTDIR=..\_install 2>&1"
+            cmd /c "nmake install DESTDIR=..\_install 2>&1"
         }
     - cd ..

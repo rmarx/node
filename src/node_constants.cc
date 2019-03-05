@@ -862,6 +862,10 @@ void DefineOpenSSLConstants(Local<Object> target) {
     NODE_DEFINE_CONSTANT(target, SSL_OP_NO_TLSv1_2);
 #endif
 
+#ifdef SSL_OP_NO_TLSv1_3
+NODE_DEFINE_CONSTANT(target, SSL_OP_NO_TLSv1_3);
+#endif
+
 #ifdef SSL_OP_PKCS1_CHECK_1
     NODE_DEFINE_CONSTANT(target, SSL_OP_PKCS1_CHECK_1);
 #endif

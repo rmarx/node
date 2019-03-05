@@ -41,7 +41,7 @@ OPENSSL_ia32_cpuid:
 .cfi_register	%rbx,%r8
 
 	xorl	%eax,%eax
-	movl	%eax,8(%rdi)
+	movq	%rax,8(%rdi)
 	cpuid
 	movl	%eax,%r11d
 
@@ -112,6 +112,7 @@ OPENSSL_ia32_cpuid:
 .Lnocacheinfo:
 	movl	$1,%eax
 	cpuid
+	movd	%eax,%xmm0
 	andl	$0xbfefffff,%edx
 	cmpl	$0,%r9d
 	jne	.Lnotintel
@@ -159,7 +160,15 @@ OPENSSL_ia32_cpuid:
 	jc	.Lnotknights
 	andl	$0xfff7ffff,%ebx
 .Lnotknights:
+	movd	%xmm0,%eax
+	andl	$0x0fff0ff0,%eax
+	cmpl	$0x00050650,%eax
+	jne	.Lnotskylakex
+	andl	$0xfffeffff,%ebx
+
+.Lnotskylakex:
 	movl	%ebx,8(%rdi)
+	movl	%ecx,12(%rdi)
 .Lno_extended_info:
 
 	btl	$27,%r9d
@@ -169,7 +178,8 @@ OPENSSL_ia32_cpuid:
 	andl	$0xe6,%eax
 	cmpl	$0xe6,%eax
 	je	.Ldone
-	andl	$0xfffeffff,8(%rdi)
+	andl	$0x3fdeffff,8(%rdi)
+
 
 
 
@@ -234,6 +244,18 @@ CRYPTO_memcmp:
 	xorq	%r10,%r10
 	cmpq	$0,%rdx
 	je	.Lno_data
+	cmpq	$16,%rdx
+	jne	.Loop_cmp
+	movq	(%rdi),%r10
+	movq	8(%rdi),%r11
+	movq	$1,%rdx
+	xorq	(%rsi),%r10
+	xorq	8(%rsi),%r11
+	orq	%r11,%r10
+	cmovnzq	%rdx,%rax
+	.byte	0xf3,0xc3
+
+.align	16
 .Loop_cmp:
 	movb	(%rdi),%r10b
 	leaq	1(%rdi),%rdi
@@ -357,21 +379,6 @@ OPENSSL_instrument_bus2:
 	subq	%rcx,%rax
 	.byte	0xf3,0xc3
 .size	OPENSSL_instrument_bus2,.-OPENSSL_instrument_bus2
-.globl	OPENSSL_ia32_rdrand
-.type	OPENSSL_ia32_rdrand,@function
-.align	16
-OPENSSL_ia32_rdrand:
-	movl	$8,%ecx
-.Loop_rdrand:
-.byte	72,15,199,240
-	jc	.Lbreak_rdrand
-	loop	.Loop_rdrand
-.Lbreak_rdrand:
-	cmpq	$0,%rax
-	cmoveq	%rcx,%rax
-	.byte	0xf3,0xc3
-.size	OPENSSL_ia32_rdrand,.-OPENSSL_ia32_rdrand
-
 .globl	OPENSSL_ia32_rdrand_bytes
 .type	OPENSSL_ia32_rdrand_bytes,@function
 .align	16
@@ -405,28 +412,14 @@ OPENSSL_ia32_rdrand_bytes:
 	movb	%r10b,(%rdi)
 	leaq	1(%rdi),%rdi
 	incq	%rax
-	shrq	$8,%r8
+	shrq	$8,%r10
 	decq	%rsi
 	jnz	.Ltail_rdrand_bytes
 
 .Ldone_rdrand_bytes:
+	xorq	%r10,%r10
 	.byte	0xf3,0xc3
 .size	OPENSSL_ia32_rdrand_bytes,.-OPENSSL_ia32_rdrand_bytes
-.globl	OPENSSL_ia32_rdseed
-.type	OPENSSL_ia32_rdseed,@function
-.align	16
-OPENSSL_ia32_rdseed:
-	movl	$8,%ecx
-.Loop_rdseed:
-.byte	72,15,199,248
-	jc	.Lbreak_rdseed
-	loop	.Loop_rdseed
-.Lbreak_rdseed:
-	cmpq	$0,%rax
-	cmoveq	%rcx,%rax
-	.byte	0xf3,0xc3
-.size	OPENSSL_ia32_rdseed,.-OPENSSL_ia32_rdseed
-
 .globl	OPENSSL_ia32_rdseed_bytes
 .type	OPENSSL_ia32_rdseed_bytes,@function
 .align	16
@@ -460,10 +453,11 @@ OPENSSL_ia32_rdseed_bytes:
 	movb	%r10b,(%rdi)
 	leaq	1(%rdi),%rdi
 	incq	%rax
-	shrq	$8,%r8
+	shrq	$8,%r10
 	decq	%rsi
 	jnz	.Ltail_rdseed_bytes
 
 .Ldone_rdseed_bytes:
+	xorq	%r10,%r10
 	.byte	0xf3,0xc3
 .size	OPENSSL_ia32_rdseed_bytes,.-OPENSSL_ia32_rdseed_bytes

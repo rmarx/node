@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -46,8 +46,10 @@ OPENSSL_STACK *OPENSSL_sk_dup(const OPENSSL_STACK *sk)
 {
     OPENSSL_STACK *ret;
 
-    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL)
+    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL) {
+        CRYPTOerr(CRYPTO_F_OPENSSL_SK_DUP, ERR_R_MALLOC_FAILURE);
         return NULL;
+    }
 
     /* direct structure assignment */
     *ret = *sk;
@@ -75,8 +77,10 @@ OPENSSL_STACK *OPENSSL_sk_deep_copy(const OPENSSL_STACK *sk,
     OPENSSL_STACK *ret;
     int i;
 
-    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL)
+    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL) {
+        CRYPTOerr(CRYPTO_F_OPENSSL_SK_DEEP_COPY, ERR_R_MALLOC_FAILURE);
         return NULL;
+    }
 
     /* direct structure assignment */
     *ret = *sk;
@@ -111,16 +115,12 @@ OPENSSL_STACK *OPENSSL_sk_deep_copy(const OPENSSL_STACK *sk,
 
 OPENSSL_STACK *OPENSSL_sk_new_null(void)
 {
-    return OPENSSL_zalloc(sizeof(OPENSSL_STACK));
+    return OPENSSL_sk_new_reserve(NULL, 0);
 }
 
 OPENSSL_STACK *OPENSSL_sk_new(OPENSSL_sk_compfunc c)
 {
-    OPENSSL_STACK *ret = OPENSSL_sk_new_null();
-
-    if (ret != NULL)
-        ret->comp = c;
-    return ret;
+    return OPENSSL_sk_new_reserve(c, 0);
 }
 
 /*
@@ -177,9 +177,10 @@ static int sk_reserve(OPENSSL_STACK *st, int n, int exact)
          * At this point, |st->num_alloc| and |st->num| are 0;
          * so |num_alloc| value is |n| or |min_nodes| if greater than |n|.
          */
-        st->data = OPENSSL_zalloc(sizeof(void *) * num_alloc);
-        if (st->data == NULL)
+        if ((st->data = OPENSSL_zalloc(sizeof(void *) * num_alloc)) == NULL) {
+            CRYPTOerr(CRYPTO_F_SK_RESERVE, ERR_R_MALLOC_FAILURE);
             return 0;
+        }
         st->num_alloc = num_alloc;
         return 1;
     }
@@ -201,6 +202,26 @@ static int sk_reserve(OPENSSL_STACK *st, int n, int exact)
     st->data = tmpdata;
     st->num_alloc = num_alloc;
     return 1;
+}
+
+OPENSSL_STACK *OPENSSL_sk_new_reserve(OPENSSL_sk_compfunc c, int n)
+{
+    OPENSSL_STACK *st = OPENSSL_zalloc(sizeof(OPENSSL_STACK));
+
+    if (st == NULL)
+        return NULL;
+
+    st->comp = c;
+
+    if (n <= 0)
+        return st;
+
+    if (!sk_reserve(st, n, 1)) {
+        OPENSSL_sk_free(st);
+        return NULL;
+    }
+
+    return st;
 }
 
 int OPENSSL_sk_reserve(OPENSSL_STACK *st, int n)

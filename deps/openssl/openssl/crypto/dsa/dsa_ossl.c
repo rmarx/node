@@ -1,13 +1,11 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
  */
-
-/* Original version from Steven Schoch <schoch@sheba.arc.nasa.gov> */
 
 #include <stdio.h>
 #include "internal/cryptlib.h"
@@ -61,19 +59,13 @@ const DSA_METHOD *DSA_OpenSSL(void)
 static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
 {
     BIGNUM *kinv = NULL;
-    BIGNUM *m;
-    BIGNUM *xr;
+    BIGNUM *m, *blind, *blindm, *tmp;
     BN_CTX *ctx = NULL;
     int reason = ERR_R_BN_LIB;
     DSA_SIG *ret = NULL;
     int rv = 0;
 
-    m = BN_new();
-    xr = BN_new();
-    if (m == NULL || xr == NULL)
-        goto err;
-
-    if (!dsa->p || !dsa->q || !dsa->g) {
+    if (dsa->p == NULL || dsa->q == NULL || dsa->g == NULL) {
         reason = DSA_R_MISSING_PARAMETERS;
         goto err;
     }
@@ -89,6 +81,13 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     ctx = BN_CTX_new();
     if (ctx == NULL)
         goto err;
+    m = BN_CTX_get(ctx);
+    blind = BN_CTX_get(ctx);
+    blindm = BN_CTX_get(ctx);
+    tmp = BN_CTX_get(ctx);
+    if (tmp == NULL)
+        goto err;
+
  redo:
     if (!dsa_sign_setup(dsa, ctx, &kinv, &ret->r, dgst, dlen))
         goto err;
@@ -103,15 +102,48 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     if (BN_bin2bn(dgst, dlen, m) == NULL)
         goto err;
 
-    /* Compute  s = inv(k) (m + xr) mod q */
-    if (!BN_mod_mul(xr, dsa->priv_key, ret->r, dsa->q, ctx))
-        goto err;               /* s = xr */
-    if (!BN_add(ret->s, xr, m))
-        goto err;               /* s = m + xr */
-    if (BN_cmp(ret->s, dsa->q) > 0)
-        if (!BN_sub(ret->s, ret->s, dsa->q))
+    /*
+     * The normal signature calculation is:
+     *
+     *   s := k^-1 * (m + r * priv_key) mod q
+     *
+     * We will blind this to protect against side channel attacks
+     *
+     *   s := blind^-1 * k^-1 * (blind * m + blind * r * priv_key) mod q
+     */
+
+    /* Generate a blinding value */
+    do {
+        if (!BN_priv_rand(blind, BN_num_bits(dsa->q) - 1,
+                          BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY))
             goto err;
+    } while (BN_is_zero(blind));
+    BN_set_flags(blind, BN_FLG_CONSTTIME);
+    BN_set_flags(blindm, BN_FLG_CONSTTIME);
+    BN_set_flags(tmp, BN_FLG_CONSTTIME);
+
+    /* tmp := blind * priv_key * r mod q */
+    if (!BN_mod_mul(tmp, blind, dsa->priv_key, dsa->q, ctx))
+        goto err;
+    if (!BN_mod_mul(tmp, tmp, ret->r, dsa->q, ctx))
+        goto err;
+
+    /* blindm := blind * m mod q */
+    if (!BN_mod_mul(blindm, blind, m, dsa->q, ctx))
+        goto err;
+
+    /* s : = (blind * priv_key * r) + (blind * m) mod q */
+    if (!BN_mod_add_quick(ret->s, tmp, blindm, dsa->q))
+        goto err;
+
+    /* s := s * k^-1 mod q */
     if (!BN_mod_mul(ret->s, ret->s, kinv, dsa->q, ctx))
+        goto err;
+
+    /* s:= s * blind^-1 mod q */
+    if (BN_mod_inverse(blind, blind, dsa->q, ctx) == NULL)
+        goto err;
+    if (!BN_mod_mul(ret->s, ret->s, blind, dsa->q, ctx))
         goto err;
 
     /*
@@ -130,8 +162,6 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
         ret = NULL;
     }
     BN_CTX_free(ctx);
-    BN_clear_free(m);
-    BN_clear_free(xr);
     BN_clear_free(kinv);
     return ret;
 }
@@ -148,7 +178,9 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
 {
     BN_CTX *ctx = NULL;
     BIGNUM *k, *kinv = NULL, *r = *rp;
+    BIGNUM *l, *m;
     int ret = 0;
+    int q_bits;
 
     if (!dsa->p || !dsa->q || !dsa->g) {
         DSAerr(DSA_F_DSA_SIGN_SETUP, DSA_R_MISSING_PARAMETERS);
@@ -156,7 +188,9 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
     }
 
     k = BN_new();
-    if (k == NULL)
+    l = BN_new();
+    m = BN_new();
+    if (k == NULL || l == NULL || m == NULL)
         goto err;
 
     if (ctx_in == NULL) {
@@ -164,6 +198,13 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
             goto err;
     } else
         ctx = ctx_in;
+
+    /* Preallocate space */
+    q_bits = BN_num_bits(dsa->q);
+    if (!BN_set_bit(k, q_bits)
+        || !BN_set_bit(l, q_bits)
+        || !BN_set_bit(m, q_bits))
+        goto err;
 
     /* Get random k */
     do {
@@ -191,17 +232,19 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
 
     /*
      * We do not want timing information to leak the length of k, so we
-     * compute g^k using an equivalent exponent of fixed length. (This
-     * is a kludge that we need because the BN_mod_exp_mont() does not
-     * let us specify the desired timing behaviour.)
+     * compute G^k using an equivalent scalar of fixed bit-length.
+     *
+     * We unconditionally perform both of these additions to prevent a
+     * small timing information leakage.  We then choose the sum that is
+     * one bit longer than the modulus.
+     *
+     * TODO: revisit the BN_copy aiming for a memory access agnostic
+     * conditional copy.
      */
-
-    if (!BN_add(k, k, dsa->q))
+    if (!BN_add(l, k, dsa->q)
+        || !BN_add(m, l, dsa->q)
+        || !BN_copy(k, BN_num_bits(l) > q_bits ? l : m))
         goto err;
-    if (BN_num_bits(k) <= BN_num_bits(dsa->q)) {
-        if (!BN_add(k, k, dsa->q))
-            goto err;
-    }
 
     if ((dsa)->meth->bn_mod_exp != NULL) {
             if (!dsa->meth->bn_mod_exp(dsa, r, dsa->g, k, dsa->p, ctx,
@@ -229,6 +272,8 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
     if (ctx != ctx_in)
         BN_CTX_free(ctx);
     BN_clear_free(k);
+    BN_clear_free(l);
+    BN_clear_free(m);
     return ret;
 }
 
@@ -334,7 +379,7 @@ static int dsa_do_verify(const unsigned char *dgst, int dgst_len,
     BN_free(u1);
     BN_free(u2);
     BN_free(t1);
-    return (ret);
+    return ret;
 }
 
 static int dsa_init(DSA *dsa)
