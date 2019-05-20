@@ -3,7 +3,7 @@
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
- * Licensed under the OpenSSL license (the "License").  You may not use
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
@@ -34,6 +34,7 @@
 # include "internal/dane.h"
 # include "internal/refcount.h"
 # include "internal/tsan_assist.h"
+# include "internal/bio.h"
 
 # ifdef OPENSSL_BUILD_SHLIBSSL
 #  undef OPENSSL_EXTERN
@@ -129,6 +130,9 @@
 # define l2n3(l,c)       (((c)[0]=(unsigned char)(((l)>>16)&0xff), \
                            (c)[1]=(unsigned char)(((l)>> 8)&0xff), \
                            (c)[2]=(unsigned char)(((l)    )&0xff)),(c)+=3)
+
+# define TLS_MAX_VERSION_INTERNAL TLS1_3_VERSION
+# define DTLS_MAX_VERSION_INTERNAL DTLS1_2_VERSION
 
 /*
  * DTLS version numbers are strange because they're inverted. Except for
@@ -854,9 +858,11 @@ struct ssl_ctx_st {
     /*
      * What we put in certificate_authorities extension for TLS 1.3
      * (ClientHello and CertificateRequest) or just client cert requests for
-     * earlier versions.
+     * earlier versions. If client_ca_names is populated then it is only used
+     * for client cert requests, and in preference to ca_names.
      */
     STACK_OF(X509_NAME) *ca_names;
+    STACK_OF(X509_NAME) *client_ca_names;
 
     /*
      * Default values to use in SSL structures follow (these are copied by
@@ -1070,6 +1076,10 @@ struct ssl_ctx_st {
 
     /* Do we advertise Post-handshake auth support? */
     int pha_enabled;
+
+    /* Callback for SSL async handling */
+    SSL_async_callback_fn async_cb;
+    void *async_cb_arg;
 };
 
 struct ssl_st {
@@ -1132,9 +1142,7 @@ struct ssl_st {
                           const void *buf, size_t len, SSL *ssl, void *arg);
     void *msg_callback_arg;
     int (*key_callback)(SSL *ssl, int name, const unsigned char *secret,
-                        size_t secretlen, const unsigned char *key,
-                        size_t keylen, const unsigned char *iv, size_t ivlen,
-                        void *arg);
+                        size_t secretlen, void *arg);
     void *key_callback_arg;
     int hit;                    /* reusing a previous session */
     X509_VERIFY_PARAM *param;
@@ -1173,8 +1181,6 @@ struct ssl_st {
     EVP_CIPHER_CTX *enc_write_ctx; /* cryptographic state */
     unsigned char write_iv[EVP_MAX_IV_LENGTH]; /* TLSv1.3 static write IV */
     EVP_MD_CTX *write_hash;     /* used for mac generation */
-    /* Count of how many KeyUpdate messages we have received */
-    unsigned int key_update_count;
     /* session info */
     /* client cert? */
     /* This is used to hold the server certificate used */
@@ -1238,8 +1244,14 @@ struct ssl_st {
     long verify_result;
     /* extra application data */
     CRYPTO_EX_DATA ex_data;
-    /* for server side, keep the list of CA_dn we can use */
+    /*
+     * What we put in certificate_authorities extension for TLS 1.3
+     * (ClientHello and CertificateRequest) or just client cert requests for
+     * earlier versions. If client_ca_names is populated then it is only used
+     * for client cert requests, and in preference to ca_names.
+     */
     STACK_OF(X509_NAME) *ca_names;
+    STACK_OF(X509_NAME) *client_ca_names;
     CRYPTO_REF_COUNT references;
     /* protocol behaviour */
     uint32_t options;
@@ -1464,6 +1476,10 @@ struct ssl_st {
     /* Callback to determine if early_data is acceptable or not */
     SSL_allow_early_data_cb_fn allow_early_data_cb;
     void *allow_early_data_cb_data;
+
+    /* Callback for SSL async handling */
+    SSL_async_callback_fn async_cb;
+    void *async_cb_arg;
 };
 
 /*
@@ -2458,7 +2474,7 @@ __owur int tls13_hkdf_expand(SSL *s, const EVP_MD *md,
                              const unsigned char *secret,
                              const unsigned char *label, size_t labellen,
                              const unsigned char *data, size_t datalen,
-                             unsigned char *out, size_t outlen);
+                             unsigned char *out, size_t outlen, int fatal);
 __owur int tls13_derive_key(SSL *s, const EVP_MD *md,
                             const unsigned char *secret, unsigned char *key,
                             size_t keylen);
@@ -2569,6 +2585,9 @@ __owur int tls1_process_sigalgs(SSL *s);
 __owur int tls1_set_peer_legacy_sigalg(SSL *s, const EVP_PKEY *pkey);
 __owur int tls1_lookup_md(const SIGALG_LOOKUP *lu, const EVP_MD **pmd);
 __owur size_t tls12_get_psigalgs(SSL *s, int sent, const uint16_t **psigs);
+#  ifndef OPENSSL_NO_EC
+__owur int tls_check_sigalg_curve(const SSL *s, int curve);
+#  endif
 __owur int tls12_check_peer_sigalg(SSL *s, uint16_t, EVP_PKEY *pkey);
 __owur int ssl_set_client_disabled(SSL *s);
 __owur int ssl_cipher_disabled(SSL *s, const SSL_CIPHER *c, int op, int echde);

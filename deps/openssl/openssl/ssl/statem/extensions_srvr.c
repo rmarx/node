@@ -1,7 +1,7 @@
 /*
  * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
- * Licensed under the OpenSSL license (the "License").  You may not use
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
@@ -988,6 +988,9 @@ int tls_parse_ctos_ems(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
                  SSL_F_TLS_PARSE_CTOS_EMS, SSL_R_BAD_EXTENSION);
         return 0;
     }
+
+    if (s->options & SSL_OP_NO_EXTENDED_MASTER_SECRET)
+        return 1;
 
     s->s3->flags |= TLS1_FLAGS_RECEIVED_EXTMS;
 

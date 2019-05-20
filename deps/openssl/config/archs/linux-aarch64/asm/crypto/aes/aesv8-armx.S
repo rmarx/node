@@ -1,8 +1,8 @@
 #include "arm_arch.h"
 
 #if __ARM_MAX_ARCH__>=7
-.text
 .arch	armv8-a+crypto
+.text
 .align	5
 .Lrcon:
 .long	0x01,0x01,0x01,0x01
@@ -180,6 +180,7 @@ aes_v8_set_encrypt_key:
 .type	aes_v8_set_decrypt_key,%function
 .align	5
 aes_v8_set_decrypt_key:
+.inst	0xd503233f		// paciasp
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 	bl	.Lenc_key
@@ -213,6 +214,7 @@ aes_v8_set_decrypt_key:
 	eor	x0,x0,x0		// return value
 .Ldec_key_abort:
 	ldp	x29,x30,[sp],#16
+.inst	0xd50323bf		// autiasp
 	ret
 .size	aes_v8_set_decrypt_key,.-aes_v8_set_decrypt_key
 .globl	aes_v8_encrypt

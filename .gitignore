@@ -121,5 +121,7 @@ deps/openssl/openssl_old
 deps/openssl/openssl_old2_draft28
 deps/openssl/openssl_old_draft13
 deps/openssl/config_old_draft13
-
+deps/openssl/openssl_old_draft15/
+deps/openssl/openssl_old_draft15_predraft20upgrade/
+out_predraft20
 

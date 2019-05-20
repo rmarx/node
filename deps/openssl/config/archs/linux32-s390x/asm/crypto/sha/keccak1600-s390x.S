@@ -351,9 +351,9 @@ SHA3_absorb:
 	lrvg	%r0,0(%r3)
 	la	%r3,8(%r3)
 	xg	%r0,0(%r1)
-	la	%r1,8(%r1)
 	ahi	%r4,-8
-	stg	%r0,-8(%r1)
+	stg	%r0,0(%r1)
+	la	%r1,8(%r1)
 	brct	%r5,.Lblock_absorb
 
 	stm	%r3,%r4,296+3*4(%r15)

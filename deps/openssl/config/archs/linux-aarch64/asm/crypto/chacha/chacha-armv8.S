@@ -9,12 +9,6 @@
 .quad	0x3320646e61707865,0x6b20657479622d32		// endian-neutral
 .Lone:
 .long	1,0,0,0
-.LOPENSSL_armcap_P:
-#ifdef	__ILP32__
-.long	OPENSSL_armcap_P-.
-#else
-.quad	OPENSSL_armcap_P-.
-#endif
 .byte	67,104,97,67,104,97,50,48,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2
 
@@ -23,19 +17,16 @@
 .align	5
 ChaCha20_ctr32:
 	cbz	x2,.Labort
-	adr	x5,.LOPENSSL_armcap_P
 	cmp	x2,#192
 	b.lo	.Lshort
-#ifdef	__ILP32__
-	ldrsw	x6,[x5]
-#else
-	ldr	x6,[x5]
-#endif
-	ldr	w17,[x6,x5]
+
+	adrp	x17,OPENSSL_armcap_P
+	ldr	w17,[x17,#:lo12:OPENSSL_armcap_P]
 	tst	w17,#ARMV7_NEON
-	b.ne	ChaCha20_neon
+	b.ne	.LChaCha20_neon
 
 .Lshort:
+.inst	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-96]!
 	add	x29,sp,#0
 
@@ -247,6 +238,7 @@ ChaCha20_ctr32:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#96
+.inst	0xd50323bf			// autiasp
 .Labort:
 	ret
 
@@ -303,12 +295,15 @@ ChaCha20_ctr32:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#96
+.inst	0xd50323bf			// autiasp
 	ret
 .size	ChaCha20_ctr32,.-ChaCha20_ctr32
 
 .type	ChaCha20_neon,%function
 .align	5
 ChaCha20_neon:
+.LChaCha20_neon:
+.inst	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-96]!
 	add	x29,sp,#0
 
@@ -688,6 +683,7 @@ ChaCha20_neon:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#96
+.inst	0xd50323bf			// autiasp
 	ret
 
 .Ltail_neon:
@@ -797,11 +793,13 @@ ChaCha20_neon:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#96
+.inst	0xd50323bf			// autiasp
 	ret
 .size	ChaCha20_neon,.-ChaCha20_neon
 .type	ChaCha20_512_neon,%function
 .align	5
 ChaCha20_512_neon:
+.inst	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-96]!
 	add	x29,sp,#0
 
@@ -1964,5 +1962,6 @@ ChaCha20_512_neon:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#96
+.inst	0xd50323bf			// autiasp
 	ret
 .size	ChaCha20_512_neon,.-ChaCha20_512_neon

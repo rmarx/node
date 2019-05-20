@@ -1,7 +1,7 @@
 /*
  * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
- * Licensed under the OpenSSL license (the "License").  You may not use
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
@@ -94,6 +94,8 @@ typedef struct err_state_st {
 # define ERR_LIB_ASYNC           51
 # define ERR_LIB_KDF             52
 # define ERR_LIB_SM2             53
+# define ERR_LIB_ESS             54
+# define ERR_LIB_PROP            55
 
 # define ERR_LIB_USER            128
 
@@ -133,6 +135,8 @@ typedef struct err_state_st {
 # define ASYNCerr(f,r) ERR_PUT_error(ERR_LIB_ASYNC,(f),(r),OPENSSL_FILE,OPENSSL_LINE)
 # define KDFerr(f,r) ERR_PUT_error(ERR_LIB_KDF,(f),(r),OPENSSL_FILE,OPENSSL_LINE)
 # define SM2err(f,r) ERR_PUT_error(ERR_LIB_SM2,(f),(r),OPENSSL_FILE,OPENSSL_LINE)
+# define ESSerr(f,r) ERR_PUT_error(ERR_LIB_ESS,(f),(r),OPENSSL_FILE,OPENSSL_LINE)
+# define PROPerr(f,r) ERR_PUT_error(ERR_LIB_PROP,(f),(r),OPENSSL_FILE,OPENSSL_LINE)
 
 # define ERR_PACK(l,f,r) ( \
         (((unsigned int)(l) & 0x0FF) << 24L) | \
@@ -250,7 +254,7 @@ int ERR_load_strings_const(const ERR_STRING_DATA *str);
 int ERR_unload_strings(int lib, ERR_STRING_DATA *str);
 int ERR_load_ERR_strings(void);
 
-#if OPENSSL_API_COMPAT < 0x10100000L
+#if !OPENSSL_API_1_1_0
 # define ERR_load_crypto_strings() \
     OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL)
 # define ERR_free_strings() while(0) continue

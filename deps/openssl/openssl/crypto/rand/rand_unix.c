@@ -1,7 +1,7 @@
 /*
  * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
- * Licensed under the OpenSSL license (the "License").  You may not use
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
@@ -91,6 +91,27 @@ static uint64_t get_timer_bits(void);
 #if (defined(OPENSSL_SYS_VXWORKS) || defined(OPENSSL_SYS_UEFI)) && \
         !defined(OPENSSL_RAND_SEED_NONE)
 # error "UEFI and VXWorks only support seeding NONE"
+#endif
+
+#if defined(OPENSSL_SYS_VXWORKS)
+/* empty implementation */
+int rand_pool_init(void)
+{
+    return 1;
+}
+
+void rand_pool_cleanup(void)
+{
+}
+
+void rand_pool_keep_random_devices_open(int keep)
+{
+}
+
+size_t rand_pool_acquire_entropy(RAND_POOL *pool)
+{
+    return rand_pool_entropy_available(pool);
+}
 #endif
 
 #if !(defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_WIN32) \
@@ -264,7 +285,7 @@ static ssize_t syscall_random(void *buf, size_t buflen)
      * Note: 'buflen' equals the size of the buffer which is used by the
      * get_entropy() callback of the RAND_DRBG. It is roughly bounded by
      *
-     *   2 * DRBG_MINMAX_FACTOR * (RAND_DRBG_STRENGTH / 8) = 2^13
+     *   2 * RAND_POOL_FACTOR * (RAND_DRBG_STRENGTH / 8) = 2^14
      *
      * which is way below the OSSL_SSIZE_MAX limit. Therefore sign conversion
      * between size_t and ssize_t is safe even without a range check.
@@ -386,21 +407,13 @@ static void close_random_device(size_t n)
     rd->fd = -1;
 }
 
-static void open_random_devices(void)
-{
-    size_t i;
-
-    for (i = 0; i < OSSL_NELEM(random_devices); i++)
-        (void)get_random_device(i);
-}
-
 int rand_pool_init(void)
 {
     size_t i;
 
     for (i = 0; i < OSSL_NELEM(random_devices); i++)
         random_devices[i].fd = -1;
-    open_random_devices();
+
     return 1;
 }
 
@@ -414,10 +427,9 @@ void rand_pool_cleanup(void)
 
 void rand_pool_keep_random_devices_open(int keep)
 {
-    if (keep)
-        open_random_devices();
-    else
+    if (!keep)
         rand_pool_cleanup();
+
     keep_random_devices_open = keep;
 }
 
