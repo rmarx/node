@@ -376,7 +376,7 @@ void QTLSWrap::InitSSL()
   // TriggerClientInitial(client_transport_params) ((write_early_data) + do_handshake) -> leads to OnNewTLSMessage(CRYPTO) callback 
   // ProcessReceivedCryptoData(CRYPTO) (BIO + (read_early_data) + do_handshake + read_ssl_ex) -> leads to OnNewTLSMessage(CRYPTO) callback 
 
-  SSL_set_key_callback(ssl_, SSLKeyCallback, NULL); // last argument is used to pass around app state, but we use SSL_get_app_data to pass around our SSL* object 
+  SSL_set_key_callback(ssl_, SSLKeyCallback, NULL); // -- last argument is used to pass around app state, but we use SSL_get_app_data to pass around our SSL* object 
   SSL_set_msg_callback(ssl_, SSLMessageCallback);
 }
 
@@ -479,12 +479,9 @@ void QTLSWrap::SSLInfoCallback(const SSL *ssl_, int where, int ret)
   }
 }
 
-// draft-13 via tatsuhiro openssl 
-int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
-                                     const unsigned char *secret,
-                                     size_t secretlen, const unsigned char *key,
-                                     size_t keylen, const unsigned char *iv,
-                                     size_t ivlen, void *arg){
+// draft-18 via tatsuhiro openssl 
+int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name, const unsigned char *secret, size_t secretlen,
+                             void *arg){
   SSL *ssl = const_cast<SSL *>(ssl_);
   QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
   Environment *env = wrap->env();
@@ -498,10 +495,10 @@ int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
         Integer::New(env->isolate(), name),
         Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(secret)), secretlen).ToLocalChecked(),
         Integer::New(env->isolate(), (int) secretlen),
-        Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(key)), keylen).ToLocalChecked(),
-        Integer::New(env->isolate(), (int) keylen),
-        Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(iv)), ivlen).ToLocalChecked(),
-        Integer::New(env->isolate(), (int) ivlen),
+        //Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(key)), keylen).ToLocalChecked(),
+        //Integer::New(env->isolate(), (int) keylen),
+        //Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(iv)), ivlen).ToLocalChecked(),
+        //Integer::New(env->isolate(), (int) ivlen),
         Integer::New(env->isolate(), 666) // "arg" is currently not used, pass a generic integer (in JS-land, it's all JS objects anyway, so can change this later trivially here 
     };
 
@@ -509,6 +506,37 @@ int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
 
   return 1;
 }
+
+// // draft-13 via tatsuhiro openssl 
+// int QTLSWrap::SSLKeyCallback(SSL *ssl_, int name,
+//                                      const unsigned char *secret,
+//                                      size_t secretlen, const unsigned char *key,
+//                                      size_t keylen, const unsigned char *iv,
+//                                      size_t ivlen, void *arg){
+//   SSL *ssl = const_cast<SSL *>(ssl_);
+//   QTLSWrap *wrap = static_cast<QTLSWrap *>(SSL_get_app_data(ssl));
+//   Environment *env = wrap->env();
+
+//   wrap->Log("SSLKeyCallback");
+
+//     // TODO: see if these are actually the best ways to pass data back to JS-land
+//     // current code is based on node_crypto.cc::NewSessionCallback 
+//     // for JS-land interface, see lib/qtls_wrap.js:onnewkey
+//     Local<Value> argv[] = {
+//         Integer::New(env->isolate(), name),
+//         Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(secret)), secretlen).ToLocalChecked(),
+//         Integer::New(env->isolate(), (int) secretlen),
+//         Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(key)), keylen).ToLocalChecked(),
+//         Integer::New(env->isolate(), (int) keylen),
+//         Buffer::Copy(env, const_cast<char*>(reinterpret_cast<const char*>(iv)), ivlen).ToLocalChecked(),
+//         Integer::New(env->isolate(), (int) ivlen),
+//         Integer::New(env->isolate(), 666) // "arg" is currently not used, pass a generic integer (in JS-land, it's all JS objects anyway, so can change this later trivially here 
+//     };
+
+//     wrap->MakeCallback(env->onnewkey_string(), arraysize(argv), argv); 
+
+//   return 1;
+// }
 
 void QTLSWrap::SSLMessageCallback(	int write_p, 
 					int version, 

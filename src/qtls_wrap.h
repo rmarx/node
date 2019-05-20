@@ -56,12 +56,17 @@ public:
                            void *parse_arg);
   static void SSLInfoCallback(const SSL *ssl_, int where, int ret);
 
-  // draft-13 via tatsuhiro openssl
+  // draft-18 via tatsuhiro openssl
   static int SSLKeyCallback(SSL *ssl_, int name,
                                      const unsigned char *secret,
-                                     size_t secretlen, const unsigned char *key,
-                                     size_t keylen, const unsigned char *iv,
-                                     size_t ivlen, void *arg);
+                                     size_t secretlen, void *arg);
+
+//   // draft-13 via tatsuhiro openssl
+//   static int SSLKeyCallback(SSL *ssl_, int name,
+//                                      const unsigned char *secret,
+//                                      size_t secretlen, const unsigned char *key,
+//                                      size_t keylen, const unsigned char *iv,
+//                                      size_t ivlen, void *arg);
 
   static void SSLMessageCallback(	int write_p, 
 					int version, 
