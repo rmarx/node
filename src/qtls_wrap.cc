@@ -185,11 +185,15 @@ SecureContext* QTLSWrap::PrepareContext(SecureContext *sc, Kind kind)
   SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<QTLSWrap>::GetSessionCallback);
   SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<QTLSWrap>::NewSessionCallback);
 
-  SSL_CTX_set_mode(sc->ctx_, SSL_MODE_RELEASE_BUFFERS);
-
   // draft-13 via tatsuhiro openssl hack
   // TODO: remove in favor of real openssl implementation later
-  SSL_CTX_set_mode(sc->ctx_, SSL_MODE_QUIC_HACK);
+  SSL_CTX_set_mode(sc->ctx_, SSL_MODE_RELEASE_BUFFERS | SSL_MODE_QUIC_HACK);
+
+  if (SSL_CTX_set1_groups_list(sc->ctx_, "P-256:X25519:P-384:P-521") != 1) {
+    std::cerr << "////////////////////////////////////////////////////////" << std::endl;
+    std::cerr << "PrepareContext : ERROR : SSL_CTX_set1_groups_list failed" << std::endl;
+    std::cerr << "////////////////////////////////////////////////////////" << std::endl;
+  }
 
   // This makes OpenSSL client not send CCS after an initial ClientHello.
   // not 100% sure we need this, but seen in https://github.com/ngtcp2/ngtcp2/commit/5e8ee244a0ed0ed406cb761914d8aa767c77be73
